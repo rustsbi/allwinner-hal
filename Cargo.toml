@@ -4,7 +4,7 @@ version = "0.0.0"
 edition = "2021"
 description = "Minimal RISC-V's SBI implementation library in Rust"
 authors = [
-    "Luo Jia <me@luojia.cc>",
+    "Luo Jia <luojia@hust.edu.cn>",
     "Gao Chengbo <electricpower_gao@163.com>",
 ]
 repository = "https://gitee.com/rustsbi/aw-soc"
