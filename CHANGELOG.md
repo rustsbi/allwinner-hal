@@ -17,7 +17,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### 添加
 
-- entry宏
+- 用于从main函数生成闪存头的entry宏
+- 包装main函数，添加D1芯片启动所需的配置代码
+- DRAM内存初始化函数
+- 从aw-soc库提供基本的外设和时钟配置
 
-[Unreleased]: https://github.com/rustsbi/rustsbi/compare/v0.0.0...HEAD
-[0.0.0]: https://gitee.com/rustsbi/aw-soc/releases/tag/v0.0.0
+[Unreleased]: https://github.com/rustsbi/d1-rom-rt/compare/v0.0.0...HEAD
+[0.0.0]: https://gitee.com/rustsbi/d1-rom-rt/releases/tag/v0.0.0
