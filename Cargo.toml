@@ -2,13 +2,13 @@
 name = "aw-soc"
 version = "0.0.0"
 edition = "2021"
-description = "Minimal RISC-V's SBI implementation library in Rust"
+description = "Allwinner SoC driver support"
 authors = [
     "Luo Jia <luojia@hust.edu.cn>",
     "Gao Chengbo <electricpower_gao@163.com>",
 ]
 repository = "https://gitee.com/rustsbi/aw-soc"
-documentation = "https://docs.rs/rustsbi"
+documentation = "https://docs.rs/aw-soc"
 license = "MulanPSL-2.0 OR MIT"
 readme = "README.md"
 keywords = ["hal", "allwinner"]
