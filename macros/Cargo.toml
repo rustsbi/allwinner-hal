@@ -10,7 +10,7 @@ authors = [
 repository = "https://gitee.com/rustsbi/d1-rom-rt"
 documentation = "https://docs.rs/d1-rom-rt-macros"
 license = "MulanPSL-2.0 OR MIT"
-readme = "README.md"
+readme = "../README.md"
 keywords = ["allwinner"]
 categories = ["embedded", "hardware-support", "no-std"]
 
