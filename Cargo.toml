@@ -1,0 +1,29 @@
+[package]
+name = "d1-rom-rt"
+description = "ROM runtime for Allwinner D1 chip"
+version = "0.0.0"
+edition = "2021"
+authors = [
+    "Luo Jia <luojia@hust.edu.cn>",
+    "Gao Chengbo <electricpower_gao@163.com>",
+]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+d1-rom-rt-macros = { path = "macros" }
+base-address = "0.0.0"
+embedded-hal = "1.0.0-alpha.9"
+nb = "1.1.0"
+spin = { version = "0.9.5", optional = true }
+ufmt = { version = "0.2.0", optional = true }
+aw-soc = { version = "0.0.0", features = ["d1"] }
+
+[features]
+default = ["nezha"]
+log = ["dep:spin", "dep:ufmt"]
+nezha = []
+lichee = []
+
+[workspace]
+members = ["macros"]
