@@ -7,6 +7,12 @@ authors = [
     "Luo Jia <luojia@hust.edu.cn>",
     "Gao Chengbo <electricpower_gao@163.com>",
 ]
+repository = "https://gitee.com/rustsbi/d1-rom-rt"
+documentation = "https://docs.rs/d1-rom-rt"
+license = "MulanPSL-2.0 OR MIT"
+readme = "README.md"
+keywords = ["allwinner"]
+categories = ["embedded", "hardware-support", "no-std"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
