@@ -52,46 +52,46 @@ mod uart_bgr {
     impl UART_BGR {
         /// Write settings to UART bus gating register.
         #[inline]
-        pub fn write(&self, val: UartBgr) {
+        pub fn write(&self, val: UartBusGating) {
             unsafe { self.0.get().write_volatile(val.0) }
         }
 
         /// Read settings from UART bus gating register.
         #[inline]
-        pub fn read(&self) -> UartBgr {
-            UartBgr(unsafe { self.0.get().read_volatile() })
+        pub fn read(&self) -> UartBusGating {
+            UartBusGating(unsafe { self.0.get().read_volatile() })
         }
     }
 
     /// Structure representation of UART bus gating register.
     #[repr(transparent)]
-    pub struct UartBgr(u32);
+    pub struct UartBusGating(u32);
 
-    impl UartBgr {
+    impl UartBusGating {
         /// Disable clock gate for UART `I`.
         #[inline]
-        pub fn gate_mask<const I: usize>(self) -> Self {
+        pub const fn gate_mask<const I: usize>(self) -> Self {
             Self(self.0 & !(1 << I))
         }
         /// Enable clock gate for UART `I`.
         #[inline]
-        pub fn gate_pass<const I: usize>(self) -> Self {
+        pub const fn gate_pass<const I: usize>(self) -> Self {
             Self(self.0 | (1 << I))
         }
         /// Assert reset signal for UART `I`.
         #[inline]
-        pub fn assert_reset<const I: usize>(self) -> Self {
+        pub const fn assert_reset<const I: usize>(self) -> Self {
             Self(self.0 & !(1 << (I + 16)))
         }
         /// Deassert reset signal for UART `I`.
         #[inline]
-        pub fn deassert_reset<const I: usize>(self) -> Self {
+        pub const fn deassert_reset<const I: usize>(self) -> Self {
             Self(self.0 | (1 << (I + 16)))
         }
     }
 }
 
-pub use uart_bgr::UartBgr;
+pub use uart_bgr::UartBusGating;
 
 /// SPI Clock Register.
 #[repr(C)]
@@ -104,22 +104,22 @@ mod spi_clk {
     impl SPI_CLK {
         /// Write settings to SPI clock register.
         #[inline]
-        pub fn write(&self, val: SpiClk) {
+        pub fn write(&self, val: SpiClock) {
             unsafe { self.0.get().write_volatile(val.0) }
         }
 
         /// Read settings from SPI clock register.
         #[inline]
-        pub fn read(&self) -> SpiClk {
-            SpiClk(unsafe { self.0.get().read_volatile() })
+        pub fn read(&self) -> SpiClock {
+            SpiClock(unsafe { self.0.get().read_volatile() })
         }
     }
 
     /// Structure representation of SPI clock register.
     #[repr(transparent)]
-    pub struct SpiClk(u32);
+    pub struct SpiClock(u32);
 
-    impl SpiClk {
+    impl SpiClock {
         const CLK_SRC_SEL: u32 = 0x7 << 24;
         const FACTOR_N: u32 = 0x3 << 8;
         const FACTOR_M: u32 = 0xf << 0;
@@ -198,7 +198,7 @@ mod spi_clk {
     }
 }
 
-pub use spi_clk::{ClockSource as SpiClockSource, SpiClk};
+pub use spi_clk::{ClockSource as SpiClockSource, SpiClock};
 
 /// SPI Bus Gating Reset register.
 #[allow(non_camel_case_types)]
@@ -211,46 +211,46 @@ mod spi_bgr {
     impl SPI_BGR {
         /// Write settings to SPI bus gating register.
         #[inline]
-        pub fn write(&self, val: SpiBgr) {
+        pub fn write(&self, val: SpiBusGating) {
             unsafe { self.0.get().write_volatile(val.0) }
         }
 
         /// Read settings from SPI bus gating register.
         #[inline]
-        pub fn read(&self) -> SpiBgr {
-            SpiBgr(unsafe { self.0.get().read_volatile() })
+        pub fn read(&self) -> SpiBusGating {
+            SpiBusGating(unsafe { self.0.get().read_volatile() })
         }
     }
 
     /// Structure representation of SPI bus gating register.
     #[repr(transparent)]
-    pub struct SpiBgr(u32);
+    pub struct SpiBusGating(u32);
 
-    impl SpiBgr {
+    impl SpiBusGating {
         /// Disable clock gate for SPI `I`.
         #[inline]
-        pub fn gate_mask<const I: usize>(self) -> Self {
+        pub const fn gate_mask<const I: usize>(self) -> Self {
             Self(self.0 & !(1 << I))
         }
         /// Enable clock gate for SPI `I`.
         #[inline]
-        pub fn gate_pass<const I: usize>(self) -> Self {
+        pub const fn gate_pass<const I: usize>(self) -> Self {
             Self(self.0 | (1 << I))
         }
         /// Assert reset signal for SPI `I`.
         #[inline]
-        pub fn assert_reset<const I: usize>(self) -> Self {
+        pub const fn assert_reset<const I: usize>(self) -> Self {
             Self(self.0 & !(1 << (I + 16)))
         }
         /// Deassert reset signal for SPI `I`.
         #[inline]
-        pub fn deassert_reset<const I: usize>(self) -> Self {
+        pub const fn deassert_reset<const I: usize>(self) -> Self {
             Self(self.0 | (1 << (I + 16)))
         }
     }
 }
 
-pub use spi_bgr::SpiBgr;
+pub use spi_bgr::SpiBusGating;
 
 impl<const B: usize> CCU<Static<B>> {
     /// Create a peripheral instance from statically known address.
