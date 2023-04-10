@@ -173,14 +173,14 @@ impl<A: base_address::BaseAddress> $Trait for $crate::gpio::Pin<A, $p, $i, $m> {
 }
 
 mod wafer {
-    #[cfg(feature = "d1")]
+    #[cfg(any(feature = "d1", test))]
     mod d1;
     pub mod pins {
-        #[cfg(feature = "d1")]
+        #[cfg(any(feature = "d1", test))]
         pub use super::d1::Pins;
     }
     pub mod interrupt {
-        #[cfg(feature = "d1")]
+        #[cfg(any(feature = "d1", test))]
         pub use super::d1::{Interrupt, Machine, Supevisor};
     }
 }
