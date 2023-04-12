@@ -9,19 +9,26 @@ use super::GPIO;
 #[repr(C)]
 pub struct RegisterBlock {
     _reserved0: [u32; 12],
+    /// Gpio port register group.
     pub port: [Port; 6],
     _reserved1: [u32; 52],
+    /// External interrupt register group.
     pub eint: [Eint; 6],
     _reserved2: [u32; 24],
+    /// Input/output power register group.
     pub pio_pow: PioPow,
 }
 
 /// Gpio port register group.
 #[repr(C)]
 pub struct Port {
+    /// Mode configuration register
     pub cfg: [RW<u32>; 4],
+    /// Data register.
     pub dat: RW<u32>,
+    /// Drive strength register.
     pub drv: [RW<u32>; 4],
+    /// Pull direction register.
     pub pull: [RW<u32>; 2],
     _reserved0: [u32; 1],
 }
@@ -29,9 +36,13 @@ pub struct Port {
 /// External interrupt register group.
 #[repr(C)]
 pub struct Eint {
+    /// Interrupt mode configuration.
     pub cfg: [RW<u32>; 4],
+    /// Enable or disable interrupt.
     pub ctl: RW<u32>,
+    /// Status register.
     pub status: RW<u32>,
+    /// Debounce register.
     pub deb: RW<u32>,
     _reserved0: [u32; 1],
 }
