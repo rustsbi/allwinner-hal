@@ -13,125 +13,9 @@ pub mod com;
 #[macro_use]
 pub mod gpio;
 pub mod phy;
-pub mod plic;
 pub mod spi;
 #[macro_use]
 pub mod uart;
-
-use base_address::BaseAddress;
-use core::ops;
-
-/// Clock control unit.
-pub struct CCU<A: BaseAddress> {
-    base: A,
-}
-
-unsafe impl<A: BaseAddress> Send for CCU<A> {}
-
-impl<A: BaseAddress> ops::Deref for CCU<A> {
-    type Target = ccu::RegisterBlock;
-
-    #[inline(always)]
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*(self.base.ptr() as *const _) }
-    }
-}
-
-/// Common control peripheral of DDR SDRAM.
-pub struct COM<A: BaseAddress> {
-    base: A,
-}
-
-unsafe impl<A: BaseAddress> Send for COM<A> {}
-
-impl<A: BaseAddress> ops::Deref for COM<A> {
-    type Target = com::RegisterBlock;
-
-    #[inline(always)]
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*(self.base.ptr() as *const _) }
-    }
-}
-
-/// Generic Purpose Input/Output peripheral.
-pub struct GPIO<A: BaseAddress> {
-    base: A,
-}
-
-unsafe impl<A: BaseAddress> Send for GPIO<A> {}
-
-impl<A: BaseAddress> ops::Deref for GPIO<A> {
-    type Target = gpio::RegisterBlock;
-
-    #[inline(always)]
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*(self.base.ptr() as *const _) }
-    }
-}
-
-/// Physical layer peripheral of DDR SDRAM.
-pub struct PHY<A: BaseAddress> {
-    base: A,
-}
-
-unsafe impl<A: BaseAddress> Send for PHY<A> {}
-
-impl<A: BaseAddress> ops::Deref for PHY<A> {
-    type Target = phy::RegisterBlock;
-
-    #[inline(always)]
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*(self.base.ptr() as *const _) }
-    }
-}
-
-/// Platform-Level Interrupt Controller.
-pub struct PLIC<A: BaseAddress> {
-    base: A,
-}
-
-unsafe impl<A: BaseAddress> Send for PLIC<A> {}
-
-impl<A: BaseAddress> ops::Deref for PLIC<A> {
-    type Target = crate::plic::Plic;
-
-    #[inline(always)]
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*(self.base.ptr() as *const _) }
-    }
-}
-
-/// Serial Peripheral Interface bus.
-pub struct SPI<A: BaseAddress> {
-    base: A,
-}
-
-unsafe impl<A: BaseAddress> Send for SPI<A> {}
-
-impl<A: BaseAddress> ops::Deref for SPI<A> {
-    type Target = spi::RegisterBlock;
-
-    #[inline(always)]
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*(self.base.ptr() as *const _) }
-    }
-}
-
-/// Universal Asynchronous Receiver-Transmitter.
-pub struct UART<A: BaseAddress> {
-    base: A,
-}
-
-unsafe impl<A: BaseAddress> Send for UART<A> {}
-
-impl<A: BaseAddress> ops::Deref for UART<A> {
-    type Target = uart::RegisterBlock;
-
-    #[inline(always)]
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*(self.base.ptr() as *const _) }
-    }
-}
 
 /// Time constants and traits.
 pub mod time {
@@ -167,7 +51,7 @@ pub mod time {
 macro_rules! impl_pins_trait {
     ($(($p: expr, $i: expr, $m: ty): $Trait: ty;)+) => {
         $(
-impl<A: base_address::BaseAddress> $Trait for $crate::gpio::Pin<A, $p, $i, $m> {}
+impl<GPIO> $Trait for $crate::gpio::Pin<GPIO, $p, $i, $m> {}
         )+
     };
 }

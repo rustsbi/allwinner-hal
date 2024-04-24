@@ -1,12 +1,9 @@
 //! Serial Peripheral Interface bus.
 
-use super::SPI;
 use crate::{
     ccu::{self, ClockConfig, ClockGate, Clocks, FactorN, SpiClockSource},
     time::Hz,
-    CCU,
 };
-use base_address::{BaseAddress, Dynamic, Static};
 use core::cell::UnsafeCell;
 use embedded_hal::spi::Mode;
 use volatile_register::RW;
@@ -40,32 +37,6 @@ pub struct RegisterBlock {
     pub txd: TXD,
     _reserved7: [u32; 63],
     pub rxd: RXD,
-}
-
-impl<const B: usize> SPI<Static<B>> {
-    /// Create a peripheral instance from statically known address.
-    ///
-    /// This function is unsafe for it forces to seize ownership from possible
-    /// wrapped peripheral group types. Users should normally retrieve ownership
-    /// from wrapped types.
-    #[inline]
-    pub const unsafe fn steal_static() -> SPI<Static<B>> {
-        SPI { base: Static::<B> }
-    }
-}
-
-impl SPI<Dynamic> {
-    /// Create a peripheral instance from dynamically known address.
-    ///
-    /// This function is unsafe for it forces to seize ownership from possible
-    /// wrapped peripheral group types. Users should normally retrieve ownership
-    /// from wrapped types.
-    #[inline]
-    pub unsafe fn steal_dynamic(base: *const ()) -> SPI<Dynamic> {
-        SPI {
-            base: Dynamic::new(base as usize),
-        }
-    }
 }
 
 /// Global control register.
@@ -407,21 +378,21 @@ impl RXD {
 }
 
 /// Managed SPI structure with peripheral and pins.
-pub struct Spi<A: BaseAddress, const I: usize, PINS: Pins<I>> {
-    spi: SPI<A>,
+pub struct Spi<SPI, const I: usize, PINS: Pins<I>> {
+    spi: SPI,
     pins: PINS,
 }
 
 // Ref: rustsbi-d1 project
-impl<A: BaseAddress, const I: usize, PINS: Pins<I>> Spi<A, I, PINS> {
+impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> Spi<SPI, I, PINS> {
     /// Create an SPI instance.
-    pub fn new<A1: BaseAddress>(
-        spi: SPI<A>,
+    pub fn new(
+        spi: SPI,
         pins: PINS,
         mode: impl Into<Mode>,
         freq: Hz,
         clocks: &Clocks,
-        ccu: &CCU<A1>,
+        ccu: impl AsRef<ccu::RegisterBlock>,
     ) -> Self {
         // 1. unwrap parameters
         let (Hz(freq), Hz(psi)) = (freq, clocks.psi);
@@ -449,31 +420,32 @@ impl<A: BaseAddress, const I: usize, PINS: Pins<I>> Spi<A, I, PINS> {
         };
         // 2. init peripheral clocks
         // clock and divider
-        unsafe { PINS::Clock::config(SpiClockSource::PllPeri1x, factor_m, factor_n, ccu) };
+        unsafe { PINS::Clock::config(SpiClockSource::PllPeri1x, factor_m, factor_n, &ccu) };
         // de-assert reset
-        unsafe { PINS::Clock::reset(ccu) };
+        unsafe { PINS::Clock::reset(&ccu) };
         // 3. global configuration and soft reset
-        spi.gcr.write(
+        spi.as_ref().gcr.write(
             GlobalControl::default()
                 .set_enabled(true)
                 .set_master_mode()
                 .set_transmit_pause_enable(true)
                 .software_reset(),
         );
-        while spi.gcr.read().is_software_reset_finished() {
+        while spi.as_ref().gcr.read().is_software_reset_finished() {
             core::hint::spin_loop();
         }
         // 4. configure work mode
-        spi.tcr
+        spi.as_ref()
+            .tcr
             .write(TransferControl::default().set_work_mode(mode.into()));
         // Finally, return ownership of this structure.
         Spi { spi, pins }
     }
     /// Close SPI and release peripheral.
     #[inline]
-    pub fn free<A1: BaseAddress>(self, ccu: &CCU<A1>) -> (SPI<A>, PINS) {
+    pub fn free(self, ccu: impl AsRef<ccu::RegisterBlock>) -> (SPI, PINS) {
         // clock is closed for self.clock_gate is dropped
-        unsafe { PINS::Clock::free(&ccu) };
+        unsafe { PINS::Clock::free(ccu) };
         (self.spi, self.pins)
     }
 }
@@ -501,133 +473,128 @@ where
     type Clock = ccu::SPI<I>;
 }
 
-impl<A: BaseAddress, const I: usize, PINS: Pins<I>> embedded_hal::spi::SpiBus for Spi<A, I, PINS> {
+impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi::SpiBus
+    for Spi<SPI, I, PINS>
+{
     fn transfer(&mut self, read: &mut [u8], write: &[u8]) -> Result<(), Self::Error> {
         assert!(read.len() + write.len() <= u32::MAX as usize);
-        self.spi.mbc.write((read.len() + write.len()) as u32);
-        self.spi.mtc.write(write.len() as u32);
-        let bcc = self
-            .spi
+        let spi = self.spi.as_ref();
+        spi.mbc.write((read.len() + write.len()) as u32);
+        spi.mtc.write(write.len() as u32);
+        let bcc = spi
             .bcc
             .read()
             .set_master_dummy_burst_counter(0)
             .set_master_single_mode_transmit_counter(write.len() as u32);
-        self.spi.bcc.write(bcc);
-        self.spi
-            .tcr
-            .write(self.spi.tcr.read().start_burst_exchange());
+        spi.bcc.write(bcc);
+        spi.tcr.write(spi.tcr.read().start_burst_exchange());
         for &word in write {
-            while self.spi.fsr.read().transmit_fifo_counter() > 63 {
+            while spi.fsr.read().transmit_fifo_counter() > 63 {
                 core::hint::spin_loop();
             }
-            self.spi.txd.write_u8(word)
+            spi.txd.write_u8(word)
         }
         for word in read {
-            while self.spi.fsr.read().receive_fifo_counter() == 0 {
+            while spi.fsr.read().receive_fifo_counter() == 0 {
                 core::hint::spin_loop();
             }
-            *word = self.spi.rxd.read_u8()
+            *word = spi.rxd.read_u8()
         }
         Ok(())
     }
 
     fn transfer_in_place(&mut self, words: &mut [u8]) -> Result<(), Self::Error> {
         assert!(words.len() * 2 <= u32::MAX as usize);
-        self.spi.mbc.write((words.len() * 2) as u32);
-        self.spi.mtc.write(words.len() as u32);
-        let bcc = self
-            .spi
+        let spi = self.spi.as_ref();
+        spi.mbc.write((words.len() * 2) as u32);
+        spi.mtc.write(words.len() as u32);
+        let bcc = spi
             .bcc
             .read()
             .set_master_dummy_burst_counter(0)
             .set_master_single_mode_transmit_counter(words.len() as u32);
-        self.spi.bcc.write(bcc);
-        self.spi
-            .tcr
-            .write(self.spi.tcr.read().start_burst_exchange());
+        spi.bcc.write(bcc);
+        spi.tcr.write(spi.tcr.read().start_burst_exchange());
         for &word in words.iter() {
-            while self.spi.fsr.read().transmit_fifo_counter() > 63 {
+            while spi.fsr.read().transmit_fifo_counter() > 63 {
                 core::hint::spin_loop();
             }
-            self.spi.txd.write_u8(word)
+            spi.txd.write_u8(word)
         }
         for word in words {
-            while self.spi.fsr.read().receive_fifo_counter() == 0 {
+            while spi.fsr.read().receive_fifo_counter() == 0 {
                 core::hint::spin_loop();
             }
-            *word = self.spi.rxd.read_u8()
+            *word = spi.rxd.read_u8()
         }
         Ok(())
     }
 }
 
-impl<A: BaseAddress, const I: usize, PINS: Pins<I>> embedded_hal::spi::SpiBusRead
-    for Spi<A, I, PINS>
+impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi::SpiBusRead
+    for Spi<SPI, I, PINS>
 {
     fn read(&mut self, words: &mut [u8]) -> Result<(), Self::Error> {
         assert!(words.len() <= u32::MAX as usize);
-        self.spi.mbc.write(words.len() as u32);
-        self.spi.mtc.write(0);
-        let bcc = self
-            .spi
+        let spi = self.spi.as_ref();
+        spi.mbc.write(words.len() as u32);
+        spi.mtc.write(0);
+        let bcc = spi
             .bcc
             .read()
             .set_master_dummy_burst_counter(0)
             .set_master_single_mode_transmit_counter(0);
-        self.spi.bcc.write(bcc);
-        self.spi
-            .tcr
-            .write(self.spi.tcr.read().start_burst_exchange());
+        spi.bcc.write(bcc);
+        spi.tcr.write(spi.tcr.read().start_burst_exchange());
         for word in words {
-            while self.spi.fsr.read().receive_fifo_counter() == 0 {
+            while spi.fsr.read().receive_fifo_counter() == 0 {
                 core::hint::spin_loop();
             }
-            *word = self.spi.rxd.read_u8()
+            *word = spi.rxd.read_u8()
         }
         Ok(())
     }
 }
 
-impl<A: BaseAddress, const I: usize, PINS: Pins<I>> embedded_hal::spi::SpiBusWrite<u8>
-    for Spi<A, I, PINS>
+impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi::SpiBusWrite<u8>
+    for Spi<SPI, I, PINS>
 {
     fn write(&mut self, words: &[u8]) -> Result<(), Self::Error> {
         assert!(words.len() <= u32::MAX as usize);
-        self.spi.mbc.write(words.len() as u32);
-        self.spi.mtc.write(words.len() as u32);
-        let bcc = self
-            .spi
+        let spi = self.spi.as_ref();
+        spi.mbc.write(words.len() as u32);
+        spi.mtc.write(words.len() as u32);
+        let bcc = spi
             .bcc
             .read()
             .set_master_dummy_burst_counter(0)
             .set_master_single_mode_transmit_counter(words.len() as u32);
-        self.spi.bcc.write(bcc);
-        self.spi
-            .tcr
-            .write(self.spi.tcr.read().start_burst_exchange());
+        spi.bcc.write(bcc);
+        spi.tcr.write(spi.tcr.read().start_burst_exchange());
         for &word in words {
-            while self.spi.fsr.read().transmit_fifo_counter() > 63 {
+            while spi.fsr.read().transmit_fifo_counter() > 63 {
                 core::hint::spin_loop();
             }
-            self.spi.txd.write_u8(word)
+            spi.txd.write_u8(word)
         }
         Ok(())
     }
 }
 
-impl<A: BaseAddress, const I: usize, PINS: Pins<I>> embedded_hal::spi::SpiBusFlush
-    for Spi<A, I, PINS>
+impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi::SpiBusFlush
+    for Spi<SPI, I, PINS>
 {
     fn flush(&mut self) -> Result<(), Self::Error> {
-        while !self.spi.tcr.read().burst_finished() {
+        let spi = self.spi.as_ref();
+        while !spi.tcr.read().burst_finished() {
             core::hint::spin_loop();
         }
         Ok(())
     }
 }
 
-impl<A: BaseAddress, const I: usize, PINS: Pins<I>> embedded_hal::spi::ErrorType
-    for Spi<A, I, PINS>
+impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi::ErrorType
+    for Spi<SPI, I, PINS>
 {
     type Error = embedded_hal::spi::ErrorKind;
 }

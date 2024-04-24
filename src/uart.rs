@@ -2,15 +2,12 @@
 
 use core::cell::UnsafeCell;
 
-use super::UART;
 #[allow(unused)]
 use crate::gpio::{Function, Pin};
 use crate::{
     ccu::{self, ClockGate, Clocks},
     time::Bps,
-    CCU,
 };
-use base_address::{BaseAddress, Dynamic, Static};
 use uart16550::{CharLen, Register, Uart16550, PARITY};
 
 /// Universal Asynchronous Receiver-Transmitter registers.
@@ -63,32 +60,6 @@ pub enum StopBits {
     Two,
 }
 
-impl<const B: usize> UART<Static<B>> {
-    /// Create a peripheral instance from statically known address.
-    ///
-    /// This function is unsafe for it forces to seize ownership from possible
-    /// wrapped peripheral group types. Users should normally retrieve ownership
-    /// from wrapped types.
-    #[inline]
-    pub const unsafe fn steal_static() -> UART<Static<B>> {
-        UART { base: Static::<B> }
-    }
-}
-
-impl UART<Dynamic> {
-    /// Create a peripheral instance from dynamically known address.
-    ///
-    /// This function is unsafe for it forces to seize ownership from possible
-    /// wrapped peripheral group types. Users should normally retrieve ownership
-    /// from wrapped types.
-    #[inline]
-    pub unsafe fn steal_dynamic(base: *const ()) -> UART<Dynamic> {
-        UART {
-            base: Dynamic::new(base as usize),
-        }
-    }
-}
-
 impl core::ops::Deref for RegisterBlock {
     type Target = Uart16550<u32>;
 
@@ -98,20 +69,20 @@ impl core::ops::Deref for RegisterBlock {
 }
 
 /// Managed serial structure with peripheral and pins.
-pub struct Serial<A: BaseAddress, const I: usize, PINS: Pins<I>> {
-    uart: UART<A>,
+pub struct Serial<UART, const I: usize, PINS: Pins<I>> {
+    uart: UART,
     pins: PINS,
 }
 
-impl<A: BaseAddress, const I: usize, PINS: Pins<I>> Serial<A, I, PINS> {
+impl<UART: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> Serial<UART, I, PINS> {
     /// Create a serial instance.
     #[inline]
-    pub fn new<A1: BaseAddress>(
-        uart: UART<A>,
+    pub fn new(
+        uart: UART,
         pins: PINS,
         config: impl Into<Config>,
         clocks: &Clocks,
-        ccu: &CCU<A1>,
+        ccu: impl AsRef<ccu::RegisterBlock>,
     ) -> Self {
         // 1. unwrap parameters
         let Config {
@@ -126,8 +97,8 @@ impl<A: BaseAddress, const I: usize, PINS: Pins<I>> Serial<A, I, PINS> {
         unsafe { PINS::ClockGate::reset(&ccu) };
         // 3. set interrupt configuration
         // on BT0 stage we disable all uart interrupts
-        let interrupt_types = uart.ier().read();
-        uart.ier().write(
+        let interrupt_types = uart.as_ref().ier().read();
+        uart.as_ref().ier().write(
             interrupt_types
                 .disable_ms()
                 .disable_rda()
@@ -136,7 +107,7 @@ impl<A: BaseAddress, const I: usize, PINS: Pins<I>> Serial<A, I, PINS> {
         );
         // 4. calculate and set baudrate
         let uart_clk = (clocks.apb1.0 + 8 * bps) / (16 * bps);
-        uart.write_divisor(uart_clk as u16);
+        uart.as_ref().write_divisor(uart_clk as u16);
         // 5. additional configurations
         let char_len = match wordlength {
             WordLength::Five => CharLen::FIVE,
@@ -150,8 +121,8 @@ impl<A: BaseAddress, const I: usize, PINS: Pins<I>> Serial<A, I, PINS> {
             Parity::Odd => PARITY::ODD,
             Parity::Even => PARITY::EVEN,
         };
-        let lcr = uart.lcr().read();
-        uart.lcr().write(
+        let lcr = uart.as_ref().lcr().read();
+        uart.as_ref().lcr().write(
             lcr.set_char_len(char_len)
                 .set_one_stop_bit(one_stop_bit)
                 .set_parity(parity),
@@ -161,9 +132,9 @@ impl<A: BaseAddress, const I: usize, PINS: Pins<I>> Serial<A, I, PINS> {
     }
     /// Close uart and release peripheral.
     #[inline]
-    pub fn free<A1: BaseAddress>(self, ccu: &CCU<A1>) -> (UART<A>, PINS) {
+    pub fn free(self, ccu: impl AsRef<ccu::RegisterBlock>) -> (UART, PINS) {
         // clock is closed for self.clock_gate is dropped
-        unsafe { PINS::ClockGate::free(&ccu) };
+        unsafe { PINS::ClockGate::free(ccu) };
         (self.uart, self.pins)
     }
 }
@@ -187,52 +158,56 @@ where
     type ClockGate = ccu::UART<I>;
 }
 
-impl<A: BaseAddress, const I: usize, PINS: Pins<I>> embedded_hal::serial::ErrorType
-    for Serial<A, I, PINS>
+impl<UART: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::serial::ErrorType
+    for Serial<UART, I, PINS>
 {
     type Error = embedded_hal::serial::ErrorKind;
 }
 
-impl<A: BaseAddress, const I: usize, PINS: Pins<I>> embedded_hal::serial::Write
-    for Serial<A, I, PINS>
+impl<UART: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::serial::Write
+    for Serial<UART, I, PINS>
 {
     #[inline]
     fn write(&mut self, buffer: &[u8]) -> Result<(), Self::Error> {
+        let uart = self.uart.as_ref();
         for c in buffer {
             // FIXME: should be transmit_fifo_not_full
-            while self.uart.usr.read().busy() {
+            while uart.usr.read().busy() {
                 core::hint::spin_loop()
             }
-            self.uart.rbr_thr().tx_data(*c);
+            uart.rbr_thr().tx_data(*c);
         }
         Ok(())
     }
 
     #[inline]
     fn flush(&mut self) -> Result<(), Self::Error> {
-        while !self.uart.usr.read().transmit_fifo_empty() {
+        let uart = self.uart.as_ref();
+        while !uart.usr.read().transmit_fifo_empty() {
             core::hint::spin_loop()
         }
         Ok(())
     }
 }
 
-impl<A: BaseAddress, const I: usize, PINS: Pins<I>> embedded_hal_nb::serial::Write<u8>
-    for Serial<A, I, PINS>
+impl<UART: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal_nb::serial::Write<u8>
+    for Serial<UART, I, PINS>
 {
     #[inline]
     fn write(&mut self, word: u8) -> nb::Result<(), Self::Error> {
+        let uart = self.uart.as_ref();
         // FIXME: should be transmit_fifo_not_full
-        if self.uart.usr.read().busy() {
+        if uart.usr.read().busy() {
             return Err(nb::Error::WouldBlock);
         }
-        self.uart.rbr_thr().tx_data(word);
+        uart.rbr_thr().tx_data(word);
         Ok(())
     }
 
     #[inline]
     fn flush(&mut self) -> nb::Result<(), Self::Error> {
-        if !self.uart.usr.read().transmit_fifo_empty() {
+        let uart = self.uart.as_ref();
+        if !uart.usr.read().transmit_fifo_empty() {
             return Err(nb::Error::WouldBlock);
         }
         Ok(())

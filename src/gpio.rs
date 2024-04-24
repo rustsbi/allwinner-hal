@@ -1,9 +1,6 @@
 //! Allwinner GPIO controller.
-use base_address::{BaseAddress, Dynamic, Static};
 use core::marker::PhantomData;
 use volatile_register::RW;
-
-use super::GPIO;
 
 /// Generic Purpose Input/Output registers.
 #[repr(C)]
@@ -57,57 +54,28 @@ pub struct PioPow {
     pub vol_sel_ctl: RW<u32>,
 }
 
-impl<const B: usize> GPIO<Static<B>> {
-    /// Create a peripheral instance from statically known address.
-    ///
-    /// This function is unsafe for it forces to seize ownership from possible
-    /// wrapped peripheral group types. Users should normally retrieve ownership
-    /// from wrapped types.
-    #[inline]
-    pub const unsafe fn steal_static() -> GPIO<Static<B>> {
-        GPIO { base: Static::<B> }
-    }
-}
-
-impl GPIO<Dynamic> {
-    /// Create a peripheral instance from dynamically known address.
-    ///
-    /// This function is unsafe for it forces to seize ownership from possible
-    /// wrapped peripheral group types. Users should normally retrieve ownership
-    /// from wrapped types.
-    #[inline]
-    pub unsafe fn steal_dynamic(base: *const ()) -> GPIO<Dynamic> {
-        GPIO {
-            base: Dynamic::new(base as usize),
-        }
-    }
-}
-
-impl<A: BaseAddress> GPIO<A> {
-    /// Set GPIO pin mode.
-    #[inline]
-    pub fn set_mode<const P: char, const N: u8, OldM, NewM>(
-        &self,
-        pin: Pin<A, P, N, OldM>,
-    ) -> Pin<A, P, N, NewM>
-    where
-        OldM: PinMode,
-        NewM: PinMode,
-    {
-        // take ownership of Pin
-        let Pin { base, .. } = pin;
-        // calculate mask and value
-        let (port_idx, cfg_reg_idx, cfg_field_idx) = port_cfg_index(P, N);
-        let mask = !(0xF << cfg_field_idx);
-        let value = (NewM::VALUE as u32) << cfg_field_idx;
-        // apply configuration
-        let cfg_reg = &self.port[port_idx].cfg[cfg_reg_idx];
-        unsafe { cfg_reg.modify(|cfg| (cfg & mask) | value) };
-        // return ownership of Pin
-        Pin {
-            base,
-            _mode: PhantomData,
-        }
+/// Set GPIO pin mode.
+#[inline]
+fn set_mode<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8, OldM, NewM>(
+    pin: Pin<GPIO, P, N, OldM>,
+) -> Pin<GPIO, P, N, NewM>
+where
+    OldM: PinMode,
+    NewM: PinMode,
+{
+    // take ownership of Pin
+    let Pin { gpio, .. } = pin;
+    // calculate mask and value
+    let (port_idx, cfg_reg_idx, cfg_field_idx) = port_cfg_index(P, N);
+    let mask = !(0xF << cfg_field_idx);
+    let value = (NewM::VALUE as u32) << cfg_field_idx;
+    // apply configuration
+    let cfg_reg = &gpio.as_ref().port[port_idx].cfg[cfg_reg_idx];
+    unsafe { cfg_reg.modify(|cfg| (cfg & mask) | value) };
+    // return ownership of Pin
+    Pin {
+        gpio,
+        _mode: PhantomData,
     }
 }
 
@@ -121,41 +89,36 @@ const fn port_cfg_index(p: char, n: u8) -> (usize, usize, u8) {
 }
 
 /// Individual GPIO pin.
-pub struct Pin<A: BaseAddress, const P: char, const N: u8, M> {
-    base: A,
+pub struct Pin<GPIO, const P: char, const N: u8, M> {
+    gpio: GPIO,
     _mode: PhantomData<M>,
 }
 
-impl<A: BaseAddress, const P: char, const N: u8, M: PinMode> Pin<A, P, N, M> {
+impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8, M: PinMode> Pin<GPIO, P, N, M> {
     /// Disables the pin.
     #[inline]
-    pub fn into_disabled(self) -> Pin<A, P, N, Disabled> {
-        unsafe { &*self.gpio() }.set_mode(self)
+    pub fn into_disabled(self) -> Pin<GPIO, P, N, Disabled> {
+        set_mode(self)
     }
     /// Configures the pin to operate as an input pin.
     #[inline]
-    pub fn into_input(self) -> Pin<A, P, N, Input> {
-        unsafe { &*self.gpio() }.set_mode(self)
+    pub fn into_input(self) -> Pin<GPIO, P, N, Input> {
+        set_mode(self)
     }
     /// Configures the pin to operate as an output pin.
     #[inline]
-    pub fn into_output(self) -> Pin<A, P, N, Output> {
-        unsafe { &*self.gpio() }.set_mode(self)
+    pub fn into_output(self) -> Pin<GPIO, P, N, Output> {
+        set_mode(self)
     }
     /// Configures the pin to operate as an external interrupt.
     #[inline]
-    pub fn into_eint(self) -> Pin<A, P, N, EintMode> {
-        unsafe { &*self.gpio() }.set_mode(self)
+    pub fn into_eint(self) -> Pin<GPIO, P, N, EintMode> {
+        set_mode(self)
     }
     /// Configures the pin to operate as an alternate function.
     #[inline]
-    pub fn into_function<const F: u8>(self) -> Pin<A, P, N, Function<F>> {
-        unsafe { &*self.gpio() }.set_mode(self)
-    }
-
-    #[inline(always)]
-    fn gpio(&self) -> *const GPIO<A> {
-        self.base.ptr() as *const GPIO<A>
+    pub fn into_function<const F: u8>(self) -> Pin<GPIO, P, N, Function<F>> {
+        set_mode(self)
     }
 }
 
@@ -181,7 +144,7 @@ pub trait EintPin {
     fn check_interrupt(&mut self) -> bool;
 }
 
-impl<A: BaseAddress, const P: char, const N: u8> EintPin for Pin<A, P, N, EintMode> {
+impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> EintPin for Pin<GPIO, P, N, EintMode> {
     #[inline]
     fn listen(&mut self, event: Event) {
         let event_id = match event {
@@ -194,13 +157,13 @@ impl<A: BaseAddress, const P: char, const N: u8> EintPin for Pin<A, P, N, EintMo
         let (port_idx, cfg_reg_idx, cfg_field_idx) = port_cfg_index(P, N);
         let mask = !(0xF << cfg_field_idx);
         let value = event_id << cfg_field_idx;
-        let cfg_reg = &unsafe { &*self.gpio() }.eint[port_idx].cfg[cfg_reg_idx];
+        let cfg_reg = &self.gpio.as_ref().eint[port_idx].cfg[cfg_reg_idx];
         unsafe { cfg_reg.modify(|cfg| (cfg & mask) | value) };
     }
     #[inline]
     fn enable_interrupt(&mut self) {
         unsafe {
-            (&*self.gpio()).eint[port_index(P)]
+            self.gpio.as_ref().eint[port_index(P)]
                 .ctl
                 .modify(|value| value | (1 << N))
         }
@@ -208,18 +171,18 @@ impl<A: BaseAddress, const P: char, const N: u8> EintPin for Pin<A, P, N, EintMo
     #[inline]
     fn disable_interrupt(&mut self) {
         unsafe {
-            (&*self.gpio()).eint[port_index(P)]
+            self.gpio.as_ref().eint[port_index(P)]
                 .ctl
                 .modify(|value| value & !(1 << N))
         }
     }
     #[inline]
     fn clear_interrupt_pending_bit(&mut self) {
-        unsafe { (&*self.gpio()).eint[port_index(P)].status.write(1 << N) }
+        unsafe { self.gpio.as_ref().eint[port_index(P)].status.write(1 << N) }
     }
     #[inline]
     fn check_interrupt(&mut self) -> bool {
-        unsafe { &*self.gpio() }.eint[port_index(P)].status.read() & (1 << N) != 0
+        self.gpio.as_ref().eint[port_index(P)].status.read() & (1 << N) != 0
     }
 }
 
@@ -227,46 +190,46 @@ impl<A: BaseAddress, const P: char, const N: u8> EintPin for Pin<A, P, N, EintMo
 macro_rules! impl_gpio_pins {
     ($($px: ident:($P: expr, $N: expr, $M: ty);)+) => {
 /// GPIO pins in current platform.
-pub struct Pins<A: base_address::BaseAddress> {
+pub struct Pins<GPIO> {
     $(
-    pub $px: $crate::gpio::Pin<A, $P, $N, $M>,
+    pub $px: $crate::gpio::Pin<GPIO, $P, $N, $M>,
     )+
 }
     };
 }
 
-impl<A: BaseAddress, const P: char, const N: u8> embedded_hal::digital::ErrorType
-    for Pin<A, P, N, Input>
+impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> embedded_hal::digital::ErrorType
+    for Pin<GPIO, P, N, Input>
 {
     type Error = core::convert::Infallible;
 }
 
-impl<A: BaseAddress, const P: char, const N: u8> embedded_hal::digital::InputPin
-    for Pin<A, P, N, Input>
+impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> embedded_hal::digital::InputPin
+    for Pin<GPIO, P, N, Input>
 {
     #[inline]
     fn is_high(&self) -> Result<bool, Self::Error> {
-        Ok(unsafe { &*self.gpio() }.port[port_index(P)].dat.read() & (1 << N) != 0)
+        Ok(self.gpio.as_ref().port[port_index(P)].dat.read() & (1 << N) != 0)
     }
     #[inline]
     fn is_low(&self) -> Result<bool, Self::Error> {
-        Ok(unsafe { &*self.gpio() }.port[port_index(P)].dat.read() & (1 << N) == 0)
+        Ok(self.gpio.as_ref().port[port_index(P)].dat.read() & (1 << N) == 0)
     }
 }
 
-impl<A: BaseAddress, const P: char, const N: u8> embedded_hal::digital::ErrorType
-    for Pin<A, P, N, Output>
+impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> embedded_hal::digital::ErrorType
+    for Pin<GPIO, P, N, Output>
 {
     type Error = core::convert::Infallible;
 }
 
-impl<A: BaseAddress, const P: char, const N: u8> embedded_hal::digital::OutputPin
-    for Pin<A, P, N, Output>
+impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> embedded_hal::digital::OutputPin
+    for Pin<GPIO, P, N, Output>
 {
     #[inline]
     fn set_low(&mut self) -> Result<(), Self::Error> {
         unsafe {
-            (&*self.gpio()).port[port_index(P)]
+            self.gpio.as_ref().port[port_index(P)]
                 .dat
                 .modify(|value| value & !(1 << N))
         };
@@ -275,7 +238,7 @@ impl<A: BaseAddress, const P: char, const N: u8> embedded_hal::digital::OutputPi
     #[inline]
     fn set_high(&mut self) -> Result<(), Self::Error> {
         unsafe {
-            (&*self.gpio()).port[port_index(P)]
+            self.gpio.as_ref().port[port_index(P)]
                 .dat
                 .modify(|value| value | (1 << N))
         };
@@ -283,16 +246,16 @@ impl<A: BaseAddress, const P: char, const N: u8> embedded_hal::digital::OutputPi
     }
 }
 
-impl<A: BaseAddress, const P: char, const N: u8> embedded_hal::digital::StatefulOutputPin
-    for Pin<A, P, N, Output>
+impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8>
+    embedded_hal::digital::StatefulOutputPin for Pin<GPIO, P, N, Output>
 {
     #[inline]
     fn is_set_high(&self) -> Result<bool, Self::Error> {
-        Ok(unsafe { &*self.gpio() }.port[port_index(P)].dat.read() & (1 << N) != 0)
+        Ok(self.gpio.as_ref().port[port_index(P)].dat.read() & (1 << N) != 0)
     }
     #[inline]
     fn is_set_low(&self) -> Result<bool, Self::Error> {
-        Ok(unsafe { &*self.gpio() }.port[port_index(P)].dat.read() & (1 << N) == 0)
+        Ok(self.gpio.as_ref().port[port_index(P)].dat.read() & (1 << N) == 0)
     }
 }
 

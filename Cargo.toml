@@ -18,7 +18,6 @@ categories = ["os", "embedded", "hardware-support", "no-std"]
 
 [dependencies]
 volatile-register = "0.2.1"
-base-address = "0.0.0"
 embedded-hal = "1.0.0-alpha.9"
 embedded-hal-nb = "1.0.0-alpha.1"
 nb = "1"
@@ -29,5 +28,6 @@ plic = "0.0.2"
 memoffset = "0.8"
 
 [features]
+default = ["d1"]
 # D1-like chips: D1-H, D1s, F133.
 d1 = []

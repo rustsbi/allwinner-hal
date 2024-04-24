@@ -1,8 +1,7 @@
 //! Clock control unit.
 
-use super::CCU;
+use crate::ccu;
 use crate::time::Hz;
-use base_address::{BaseAddress, Dynamic, Static};
 use core::cell::UnsafeCell;
 
 /// Clock configuration on current SoC.
@@ -252,38 +251,12 @@ mod spi_bgr {
 
 pub use spi_bgr::SpiBusGating;
 
-impl<const B: usize> CCU<Static<B>> {
-    /// Create a peripheral instance from statically known address.
-    ///
-    /// This function is unsafe for it forces to seize ownership from possible
-    /// wrapped peripheral group types. Users should normally retrieve ownership
-    /// from wrapped types.
-    #[inline]
-    pub const unsafe fn steal_static() -> CCU<Static<B>> {
-        CCU { base: Static::<B> }
-    }
-}
-
-impl CCU<Dynamic> {
-    /// Create a peripheral instance from dynamically known address.
-    ///
-    /// This function is unsafe for it forces to seize ownership from possible
-    /// wrapped peripheral group types. Users should normally retrieve ownership
-    /// from wrapped types.
-    #[inline]
-    pub unsafe fn steal_dynamic(base: *const ()) -> CCU<Dynamic> {
-        CCU {
-            base: Dynamic::new(base as usize),
-        }
-    }
-}
-
 /// Peripheral that can be clock gated by CCU.
 pub trait ClockGate {
     /// Reset this peripheral by provided `ccu`.
-    unsafe fn reset<A: BaseAddress>(ccu: &CCU<A>);
+    unsafe fn reset(ccu: impl AsRef<ccu::RegisterBlock>);
     /// Free this peripheral by provided `ccu`.
-    unsafe fn free<A: BaseAddress>(ccu: &CCU<A>);
+    unsafe fn free(ccu: impl AsRef<ccu::RegisterBlock>);
 }
 
 /// Peripheral whose clock can be configurated by CCU.
@@ -293,11 +266,11 @@ pub trait ClockConfig {
     /// Configure peripheral clock.
     ///
     /// Value `factor_m` should be in 0 ..= 15.
-    unsafe fn config<A: BaseAddress>(
+    unsafe fn config(
         source: Self::Source,
         factor_m: u8,
         factor_n: FactorN,
-        ccu: &CCU<A>,
+        ccu: impl AsRef<ccu::RegisterBlock>,
     );
 }
 
@@ -308,7 +281,8 @@ pub struct UART<const IDX: usize>;
 
 impl<const I: usize> ClockGate for UART<I> {
     #[inline]
-    unsafe fn reset<A: BaseAddress>(ccu: &CCU<A>) {
+    unsafe fn reset(ccu: impl AsRef<ccu::RegisterBlock>) {
+        let ccu = ccu.as_ref();
         let uart_bgr = ccu.uart_bgr.read();
         ccu.uart_bgr
             .write(uart_bgr.gate_mask::<I>().assert_reset::<I>());
@@ -318,7 +292,8 @@ impl<const I: usize> ClockGate for UART<I> {
     }
 
     #[inline]
-    unsafe fn free<A: BaseAddress>(ccu: &CCU<A>) {
+    unsafe fn free(ccu: impl AsRef<ccu::RegisterBlock>) {
+        let ccu = ccu.as_ref();
         let uart_bgr = ccu.uart_bgr.read();
         ccu.uart_bgr
             .write(uart_bgr.gate_mask::<I>().assert_reset::<I>());
@@ -330,7 +305,8 @@ pub struct SPI<const IDX: usize>;
 
 impl<const I: usize> ClockGate for SPI<I> {
     #[inline]
-    unsafe fn reset<A: BaseAddress>(ccu: &CCU<A>) {
+    unsafe fn reset(ccu: impl AsRef<ccu::RegisterBlock>) {
+        let ccu = ccu.as_ref();
         let spi_bgr = ccu.spi_bgr.read();
         ccu.spi_bgr
             .write(spi_bgr.gate_mask::<I>().assert_reset::<I>());
@@ -340,7 +316,8 @@ impl<const I: usize> ClockGate for SPI<I> {
     }
 
     #[inline]
-    unsafe fn free<A: BaseAddress>(ccu: &CCU<A>) {
+    unsafe fn free(ccu: impl AsRef<ccu::RegisterBlock>) {
+        let ccu = ccu.as_ref();
         let spi_bgr = ccu.spi_bgr.read();
         ccu.spi_bgr
             .write(spi_bgr.gate_mask::<I>().assert_reset::<I>());
@@ -350,12 +327,13 @@ impl<const I: usize> ClockGate for SPI<I> {
 impl<const I: usize> ClockConfig for SPI<I> {
     type Source = SpiClockSource;
 
-    unsafe fn config<A: BaseAddress>(
+    unsafe fn config(
         source: Self::Source,
         factor_m: u8,
         factor_n: FactorN,
-        ccu: &CCU<A>,
+        ccu: impl AsRef<ccu::RegisterBlock>,
     ) {
+        let ccu = ccu.as_ref();
         let spi_clk = ccu.spi_clk[I].read();
         ccu.spi_clk[I].write(
             spi_clk

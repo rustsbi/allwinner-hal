@@ -1,9 +1,5 @@
 //! Physical layer peripheral of DDR SDRAM.
-
-use base_address::{BaseAddress, Dynamic, Static};
 use volatile_register::{RO, RW};
-
-use super::PHY;
 
 /// Physical layer peripheral.
 // Ref: https://github.com/Moxa-Linux/BIOS-UC-8200_source_code/blob/master/arch/arm/include/asm/arch-sunxi/dram_sun8i_h3.h
@@ -97,33 +93,7 @@ pub enum DqWidth {
     X16,
 }
 
-impl<const B: usize> PHY<Static<B>> {
-    /// Create a peripheral instance from statically known address.
-    ///
-    /// This function is unsafe for it forces to seize ownership from possible
-    /// wrapped peripheral group types. Users should normally retrieve ownership
-    /// from wrapped types.
-    #[inline]
-    pub const unsafe fn steal_static() -> PHY<Static<B>> {
-        PHY { base: Static::<B> }
-    }
-}
-
-impl PHY<Dynamic> {
-    /// Create a peripheral instance from dynamically known address.
-    ///
-    /// This function is unsafe for it forces to seize ownership from possible
-    /// wrapped peripheral group types. Users should normally retrieve ownership
-    /// from wrapped types.
-    #[inline]
-    pub unsafe fn steal_dynamic(base: *const ()) -> PHY<Dynamic> {
-        PHY {
-            base: Dynamic::new(base as usize),
-        }
-    }
-}
-
-impl<A: BaseAddress> PHY<A> {
+impl RegisterBlock {
     /// ?
     #[inline]
     pub fn dqs_gate_detect(&self) {
