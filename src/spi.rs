@@ -6,26 +6,34 @@ use crate::{
 };
 use core::cell::UnsafeCell;
 use embedded_hal::spi::Mode;
-use volatile_register::RW;
+use volatile_register::{RO, RW};
 
 /// Serial Peripheral Interface registers.
 #[repr(C)]
 pub struct RegisterBlock {
     _reserved0: u32,
-    pub gcr: GCR,
-    pub tcr: TCR,
+    pub gcr: RW<GlobalControl>,
+    pub tcr: RW<TransferControl>,
     _reserved1: u32,
     pub ier: RW<u32>,
     pub isr: RW<u32>,
     pub fcr: RW<u32>,
-    pub fsr: FSR,
+    /// FIFO status register.
+    pub fsr: RO<FifoStatus>,
     pub wcr: RW<u32>,
     _reserved2: u32,
     pub samp_dl: RW<u32>,
     _reserved3: u32,
-    pub mbc: MBC,
-    pub mtc: MTC,
-    pub bcc: BCC,
+    /// Master burst counter register.
+    ///
+    /// In master mode, this field specifies the total burst number.
+    /// The totcal transfer data include transmit, receive parts and
+    /// dummy burst.
+    pub mbc: RW<u32>,
+    /// Master transmit counter register.
+    pub mtc: RW<u32>,
+    /// Burst control counter register.
+    pub bcc: RW<BurstControl>,
     _reserved4: u32,
     pub batcr: RW<u32>,
     pub ba_ccr: RW<u32>,
@@ -40,23 +48,6 @@ pub struct RegisterBlock {
 }
 
 /// Global control register.
-#[repr(transparent)]
-pub struct GCR(UnsafeCell<u32>);
-
-impl GCR {
-    /// Read global control.
-    #[inline]
-    pub fn read(&self) -> GlobalControl {
-        GlobalControl(unsafe { self.0.get().read_volatile() })
-    }
-    /// Write global control.
-    #[inline]
-    pub fn write(&self, val: GlobalControl) {
-        unsafe { self.0.get().write_volatile(val.0) }
-    }
-}
-
-/// Global control for current peripheral.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[repr(transparent)]
 pub struct GlobalControl(u32);
@@ -123,23 +114,6 @@ impl GlobalControl {
 }
 
 /// Transfer control register.
-#[repr(transparent)]
-pub struct TCR(UnsafeCell<u32>);
-
-impl TCR {
-    /// Read transfer control.
-    #[inline]
-    pub fn read(&self) -> TransferControl {
-        TransferControl(unsafe { self.0.get().read_volatile() })
-    }
-    /// Write transfer control.
-    #[inline]
-    pub fn write(&self, val: TransferControl) {
-        unsafe { self.0.get().write_volatile(val.0) }
-    }
-}
-
-/// Transfer control for current peripheral.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[repr(transparent)]
 pub struct TransferControl(u32);
@@ -172,18 +146,6 @@ impl TransferControl {
             Phase::CaptureOnSecondTransition => bits |= Self::CPHA,
         }
         Self(bits)
-    }
-}
-
-/// FIFO status register.
-#[repr(transparent)]
-pub struct FSR(UnsafeCell<u32>);
-
-impl FSR {
-    /// Read FIFO status.
-    #[inline]
-    pub fn read(&self) -> FifoStatus {
-        FifoStatus(unsafe { self.0.get().read_volatile() })
     }
 }
 
@@ -228,61 +190,6 @@ impl FifoStatus {
     #[inline]
     pub const fn receive_fifo_counter(self) -> u8 {
         (self.0 & Self::RF_CNT) as u8
-    }
-}
-
-/// Master burst counter register.
-///
-/// In master mode, this field specifies the total burst number.
-/// The totcal transfer data include transmit, receive parts and
-/// dummy burst.
-#[repr(transparent)]
-pub struct MBC(UnsafeCell<u32>);
-
-impl MBC {
-    /// Read master burst counter.
-    #[inline]
-    pub fn read(&self) -> u32 {
-        unsafe { self.0.get().read_volatile() }
-    }
-    /// Write master burst counter.
-    #[inline]
-    pub fn write(&self, val: u32) {
-        unsafe { self.0.get().write_volatile(val) }
-    }
-}
-
-/// Master transmit counter register.
-#[repr(transparent)]
-pub struct MTC(UnsafeCell<u32>);
-
-impl MTC {
-    /// Read master transmit counter.
-    #[inline]
-    pub fn read(&self) -> u32 {
-        unsafe { self.0.get().read_volatile() }
-    }
-    /// Write master transmit counter.
-    #[inline]
-    pub fn write(&self, val: u32) {
-        unsafe { self.0.get().write_volatile(val) }
-    }
-}
-
-/// Burst control counter register.
-#[repr(transparent)]
-pub struct BCC(UnsafeCell<u32>);
-
-impl BCC {
-    /// Read burst control counter.
-    #[inline]
-    pub fn read(&self) -> BurstControl {
-        BurstControl(unsafe { self.0.get().read_volatile() })
-    }
-    /// Write burst control counter.
-    #[inline]
-    pub fn write(&self, val: BurstControl) {
-        unsafe { self.0.get().write_volatile(val.0) }
     }
 }
 
@@ -424,20 +331,24 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> Spi<SPI, I, PINS>
         // de-assert reset
         unsafe { PINS::Clock::reset(&ccu) };
         // 3. global configuration and soft reset
-        spi.as_ref().gcr.write(
-            GlobalControl::default()
-                .set_enabled(true)
-                .set_master_mode()
-                .set_transmit_pause_enable(true)
-                .software_reset(),
-        );
+        unsafe {
+            spi.as_ref().gcr.write(
+                GlobalControl::default()
+                    .set_enabled(true)
+                    .set_master_mode()
+                    .set_transmit_pause_enable(true)
+                    .software_reset(),
+            )
+        };
         while spi.as_ref().gcr.read().is_software_reset_finished() {
             core::hint::spin_loop();
         }
         // 4. configure work mode
-        spi.as_ref()
-            .tcr
-            .write(TransferControl::default().set_work_mode(mode.into()));
+        unsafe {
+            spi.as_ref()
+                .tcr
+                .write(TransferControl::default().set_work_mode(mode.into()))
+        };
         // Finally, return ownership of this structure.
         Spi { spi, pins }
     }
@@ -479,15 +390,15 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi
     fn transfer(&mut self, read: &mut [u8], write: &[u8]) -> Result<(), Self::Error> {
         assert!(read.len() + write.len() <= u32::MAX as usize);
         let spi = self.spi.as_ref();
-        spi.mbc.write((read.len() + write.len()) as u32);
-        spi.mtc.write(write.len() as u32);
+        unsafe { spi.mbc.write((read.len() + write.len()) as u32) };
+        unsafe { spi.mtc.write(write.len() as u32) };
         let bcc = spi
             .bcc
             .read()
             .set_master_dummy_burst_counter(0)
             .set_master_single_mode_transmit_counter(write.len() as u32);
-        spi.bcc.write(bcc);
-        spi.tcr.write(spi.tcr.read().start_burst_exchange());
+        unsafe { spi.bcc.write(bcc) };
+        unsafe { spi.tcr.write(spi.tcr.read().start_burst_exchange()) };
         for &word in write {
             while spi.fsr.read().transmit_fifo_counter() > 63 {
                 core::hint::spin_loop();
@@ -506,15 +417,15 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi
     fn transfer_in_place(&mut self, words: &mut [u8]) -> Result<(), Self::Error> {
         assert!(words.len() * 2 <= u32::MAX as usize);
         let spi = self.spi.as_ref();
-        spi.mbc.write((words.len() * 2) as u32);
-        spi.mtc.write(words.len() as u32);
+        unsafe { spi.mbc.write((words.len() * 2) as u32) };
+        unsafe { spi.mtc.write(words.len() as u32) };
         let bcc = spi
             .bcc
             .read()
             .set_master_dummy_burst_counter(0)
             .set_master_single_mode_transmit_counter(words.len() as u32);
-        spi.bcc.write(bcc);
-        spi.tcr.write(spi.tcr.read().start_burst_exchange());
+        unsafe { spi.bcc.write(bcc) };
+        unsafe { spi.tcr.write(spi.tcr.read().start_burst_exchange()) };
         for &word in words.iter() {
             while spi.fsr.read().transmit_fifo_counter() > 63 {
                 core::hint::spin_loop();
@@ -533,15 +444,15 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi
     fn read(&mut self, words: &mut [u8]) -> Result<(), Self::Error> {
         assert!(words.len() <= u32::MAX as usize);
         let spi = self.spi.as_ref();
-        spi.mbc.write(words.len() as u32);
-        spi.mtc.write(0);
+        unsafe { spi.mbc.write(words.len() as u32) };
+        unsafe { spi.mtc.write(0) };
         let bcc = spi
             .bcc
             .read()
             .set_master_dummy_burst_counter(0)
             .set_master_single_mode_transmit_counter(0);
-        spi.bcc.write(bcc);
-        spi.tcr.write(spi.tcr.read().start_burst_exchange());
+        unsafe { spi.bcc.write(bcc) };
+        unsafe { spi.tcr.write(spi.tcr.read().start_burst_exchange()) };
         for word in words {
             while spi.fsr.read().receive_fifo_counter() == 0 {
                 core::hint::spin_loop();
@@ -554,15 +465,15 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi
     fn write(&mut self, words: &[u8]) -> Result<(), Self::Error> {
         assert!(words.len() <= u32::MAX as usize);
         let spi = self.spi.as_ref();
-        spi.mbc.write(words.len() as u32);
-        spi.mtc.write(words.len() as u32);
+        unsafe { spi.mbc.write(words.len() as u32) };
+        unsafe { spi.mtc.write(words.len() as u32) };
         let bcc = spi
             .bcc
             .read()
             .set_master_dummy_burst_counter(0)
             .set_master_single_mode_transmit_counter(words.len() as u32);
-        spi.bcc.write(bcc);
-        spi.tcr.write(spi.tcr.read().start_burst_exchange());
+        unsafe { spi.bcc.write(bcc) };
+        unsafe { spi.tcr.write(spi.tcr.read().start_burst_exchange()) };
         for &word in words {
             while spi.fsr.read().transmit_fifo_counter() > 63 {
                 core::hint::spin_loop();
