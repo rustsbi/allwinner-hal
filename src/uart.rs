@@ -158,17 +158,17 @@ where
     type ClockGate = ccu::UART<I>;
 }
 
-impl<UART: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::serial::ErrorType
+impl<UART: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_io::ErrorType
     for Serial<UART, I, PINS>
 {
-    type Error = embedded_hal::serial::ErrorKind;
+    type Error = core::convert::Infallible;
 }
 
-impl<UART: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::serial::Write
+impl<UART: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_io::Write
     for Serial<UART, I, PINS>
 {
     #[inline]
-    fn write(&mut self, buffer: &[u8]) -> Result<(), Self::Error> {
+    fn write(&mut self, buffer: &[u8]) -> Result<usize, Self::Error> {
         let uart = self.uart.as_ref();
         for c in buffer {
             // FIXME: should be transmit_fifo_not_full
@@ -177,7 +177,7 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::se
             }
             uart.rbr_thr().tx_data(*c);
         }
-        Ok(())
+        Ok(buffer.len())
     }
 
     #[inline]
@@ -185,30 +185,6 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::se
         let uart = self.uart.as_ref();
         while !uart.usr.read().transmit_fifo_empty() {
             core::hint::spin_loop()
-        }
-        Ok(())
-    }
-}
-
-impl<UART: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal_nb::serial::Write<u8>
-    for Serial<UART, I, PINS>
-{
-    #[inline]
-    fn write(&mut self, word: u8) -> nb::Result<(), Self::Error> {
-        let uart = self.uart.as_ref();
-        // FIXME: should be transmit_fifo_not_full
-        if uart.usr.read().busy() {
-            return Err(nb::Error::WouldBlock);
-        }
-        uart.rbr_thr().tx_data(word);
-        Ok(())
-    }
-
-    #[inline]
-    fn flush(&mut self) -> nb::Result<(), Self::Error> {
-        let uart = self.uart.as_ref();
-        if !uart.usr.read().transmit_fifo_empty() {
-            return Err(nb::Error::WouldBlock);
         }
         Ok(())
     }

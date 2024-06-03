@@ -208,11 +208,11 @@ impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> embedded_hal::digit
     for Pin<GPIO, P, N, Input>
 {
     #[inline]
-    fn is_high(&self) -> Result<bool, Self::Error> {
+    fn is_high(&mut self) -> Result<bool, Self::Error> {
         Ok(self.gpio.as_ref().port[port_index(P)].dat.read() & (1 << N) != 0)
     }
     #[inline]
-    fn is_low(&self) -> Result<bool, Self::Error> {
+    fn is_low(&mut self) -> Result<bool, Self::Error> {
         Ok(self.gpio.as_ref().port[port_index(P)].dat.read() & (1 << N) == 0)
     }
 }
@@ -250,11 +250,11 @@ impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8>
     embedded_hal::digital::StatefulOutputPin for Pin<GPIO, P, N, Output>
 {
     #[inline]
-    fn is_set_high(&self) -> Result<bool, Self::Error> {
+    fn is_set_high(&mut self) -> Result<bool, Self::Error> {
         Ok(self.gpio.as_ref().port[port_index(P)].dat.read() & (1 << N) != 0)
     }
     #[inline]
-    fn is_set_low(&self) -> Result<bool, Self::Error> {
+    fn is_set_low(&mut self) -> Result<bool, Self::Error> {
         Ok(self.gpio.as_ref().port[port_index(P)].dat.read() & (1 << N) == 0)
     }
 }

@@ -64,6 +64,7 @@ mod wafer {
         pub use super::d1::Pins;
     }
     pub mod interrupt {
+        #[allow(unused)] // TODO
         #[cfg(any(feature = "d1", test))]
         pub use super::d1::{Interrupt, Machine, Supevisor};
     }

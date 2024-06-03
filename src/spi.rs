@@ -529,11 +529,7 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi
         }
         Ok(())
     }
-}
 
-impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi::SpiBusRead
-    for Spi<SPI, I, PINS>
-{
     fn read(&mut self, words: &mut [u8]) -> Result<(), Self::Error> {
         assert!(words.len() <= u32::MAX as usize);
         let spi = self.spi.as_ref();
@@ -554,11 +550,7 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi
         }
         Ok(())
     }
-}
 
-impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi::SpiBusWrite<u8>
-    for Spi<SPI, I, PINS>
-{
     fn write(&mut self, words: &[u8]) -> Result<(), Self::Error> {
         assert!(words.len() <= u32::MAX as usize);
         let spi = self.spi.as_ref();
@@ -579,11 +571,7 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi
         }
         Ok(())
     }
-}
 
-impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi::SpiBusFlush
-    for Spi<SPI, I, PINS>
-{
     fn flush(&mut self) -> Result<(), Self::Error> {
         let spi = self.spi.as_ref();
         while !spi.tcr.read().burst_finished() {
