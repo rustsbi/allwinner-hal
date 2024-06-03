@@ -3,7 +3,7 @@
 use core::cell::UnsafeCell;
 
 #[allow(unused)]
-use crate::gpio::{Function, Pin};
+use crate::gpio::{Function, Pad};
 use crate::{
     ccu::{self, ClockGate, Clocks},
     time::Bps,

@@ -1,9 +1,11 @@
-use allwinner_hal::Pins;
+//! D1-H, D1s, F133, F133A/B chip platforms.
+
+use allwinner_hal::Pads;
 
 /// ROM runtime peripheral ownership and configurations.
 pub struct Peripherals {
     /// General Purpose Input/Output peripheral.
-    pub gpio: Pins<GPIO>,
+    pub gpio: Pads<GPIO>,
     /// Universal Asynchronous Receiver/Transmitter 0.
     pub uart0: UART0,
     /// Serial Peripheral Interface peripheral 0.

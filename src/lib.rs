@@ -51,7 +51,7 @@ pub mod time {
 macro_rules! impl_pins_trait {
     ($(($p: expr, $i: expr, $m: ty): $Trait: ty;)+) => {
         $(
-impl<GPIO> $Trait for $crate::gpio::Pin<GPIO, $p, $i, $m> {}
+impl<GPIO> $Trait for $crate::gpio::Pad<GPIO, $p, $i, $m> {}
         )+
     };
 }
@@ -61,7 +61,7 @@ mod wafer {
     mod d1;
     pub mod pins {
         #[cfg(any(feature = "d1", test))]
-        pub use super::d1::Pins;
+        pub use super::d1::Pads;
     }
     pub mod interrupt {
         #[allow(unused)] // TODO

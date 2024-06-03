@@ -57,14 +57,14 @@ pub struct PioPow {
 /// Set GPIO pin mode.
 #[inline]
 fn set_mode<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8, OldM, NewM>(
-    pin: Pin<GPIO, P, N, OldM>,
-) -> Pin<GPIO, P, N, NewM>
+    pin: Pad<GPIO, P, N, OldM>,
+) -> Pad<GPIO, P, N, NewM>
 where
     OldM: PinMode,
     NewM: PinMode,
 {
     // take ownership of Pin
-    let Pin { gpio, .. } = pin;
+    let Pad { gpio, .. } = pin;
     // calculate mask and value
     let (port_idx, cfg_reg_idx, cfg_field_idx) = port_cfg_index(P, N);
     let mask = !(0xF << cfg_field_idx);
@@ -72,8 +72,8 @@ where
     // apply configuration
     let cfg_reg = &gpio.as_ref().port[port_idx].cfg[cfg_reg_idx];
     unsafe { cfg_reg.modify(|cfg| (cfg & mask) | value) };
-    // return ownership of Pin
-    Pin {
+    // return ownership of Pad
+    Pad {
         gpio,
         _mode: PhantomData,
     }
@@ -89,35 +89,35 @@ const fn port_cfg_index(p: char, n: u8) -> (usize, usize, u8) {
 }
 
 /// Individual GPIO pin.
-pub struct Pin<GPIO, const P: char, const N: u8, M> {
+pub struct Pad<GPIO, const P: char, const N: u8, M> {
     gpio: GPIO,
     _mode: PhantomData<M>,
 }
 
-impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8, M: PinMode> Pin<GPIO, P, N, M> {
+impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8, M: PinMode> Pad<GPIO, P, N, M> {
     /// Disables the pin.
     #[inline]
-    pub fn into_disabled(self) -> Pin<GPIO, P, N, Disabled> {
+    pub fn into_disabled(self) -> Pad<GPIO, P, N, Disabled> {
         set_mode(self)
     }
     /// Configures the pin to operate as an input pin.
     #[inline]
-    pub fn into_input(self) -> Pin<GPIO, P, N, Input> {
+    pub fn into_input(self) -> Pad<GPIO, P, N, Input> {
         set_mode(self)
     }
     /// Configures the pin to operate as an output pin.
     #[inline]
-    pub fn into_output(self) -> Pin<GPIO, P, N, Output> {
+    pub fn into_output(self) -> Pad<GPIO, P, N, Output> {
         set_mode(self)
     }
     /// Configures the pin to operate as an external interrupt.
     #[inline]
-    pub fn into_eint(self) -> Pin<GPIO, P, N, EintMode> {
+    pub fn into_eint(self) -> Pad<GPIO, P, N, EintMode> {
         set_mode(self)
     }
     /// Configures the pin to operate as an alternate function.
     #[inline]
-    pub fn into_function<const F: u8>(self) -> Pin<GPIO, P, N, Function<F>> {
+    pub fn into_function<const F: u8>(self) -> Pad<GPIO, P, N, Function<F>> {
         set_mode(self)
     }
 }
@@ -144,7 +144,7 @@ pub trait EintPin {
     fn check_interrupt(&mut self) -> bool;
 }
 
-impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> EintPin for Pin<GPIO, P, N, EintMode> {
+impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> EintPin for Pad<GPIO, P, N, EintMode> {
     #[inline]
     fn listen(&mut self, event: Event) {
         let event_id = match event {
@@ -189,23 +189,23 @@ impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> EintPin for Pin<GPI
 #[allow(unused)]
 macro_rules! impl_gpio_pins {
     ($($px: ident:($P: expr, $N: expr, $M: ty);)+) => {
-/// GPIO pins in current platform.
-pub struct Pins<GPIO> {
+/// GPIO pads in current platform.
+pub struct Pads<GPIO> {
     $(
-    pub $px: $crate::gpio::Pin<GPIO, $P, $N, $M>,
+    pub $px: $crate::gpio::Pad<GPIO, $P, $N, $M>,
     )+
 }
     };
 }
 
 impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> embedded_hal::digital::ErrorType
-    for Pin<GPIO, P, N, Input>
+    for Pad<GPIO, P, N, Input>
 {
     type Error = core::convert::Infallible;
 }
 
 impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> embedded_hal::digital::InputPin
-    for Pin<GPIO, P, N, Input>
+    for Pad<GPIO, P, N, Input>
 {
     #[inline]
     fn is_high(&mut self) -> Result<bool, Self::Error> {
@@ -218,13 +218,13 @@ impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> embedded_hal::digit
 }
 
 impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> embedded_hal::digital::ErrorType
-    for Pin<GPIO, P, N, Output>
+    for Pad<GPIO, P, N, Output>
 {
     type Error = core::convert::Infallible;
 }
 
 impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> embedded_hal::digital::OutputPin
-    for Pin<GPIO, P, N, Output>
+    for Pad<GPIO, P, N, Output>
 {
     #[inline]
     fn set_low(&mut self) -> Result<(), Self::Error> {
@@ -247,7 +247,7 @@ impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> embedded_hal::digit
 }
 
 impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8>
-    embedded_hal::digital::StatefulOutputPin for Pin<GPIO, P, N, Output>
+    embedded_hal::digital::StatefulOutputPin for Pad<GPIO, P, N, Output>
 {
     #[inline]
     fn is_set_high(&mut self) -> Result<bool, Self::Error> {
