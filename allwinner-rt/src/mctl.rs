@@ -1,11 +1,11 @@
 // Ref: https://github.com/oreboot/oreboot/blob/51d40caebc814fdfc7c772111344acb04b86d3a9/src/mainboard/sunxi/nezha/bt0/build.rs
 
-#[cfg(feature = "log")]
-use super::println;
+// #[cfg(feature = "log")]
+// use super::println;
 use core::ptr::{read_volatile, write_volatile};
 
-// for verbose prints
-const VERBOSE: bool = false;
+// // for verbose prints
+// const VERBOSE: bool = false;
 
 pub const RAM_BASE: usize = 0x40000000;
 
@@ -41,7 +41,7 @@ const RES_CAL_CTRL_REG: usize = SYS_CFG + 0x0160;
 const RES240_CTRL_REG: usize = SYS_CFG + 0x0168;
 // const RES_CAL_STATUS_REG: usize = SYS_CFG + 0x016c;
 // const ZQ_INTERNAL: usize = SYS_CFG + 0x016e;
-const ZQ_VALUE: usize = SYS_CFG + 0x0172;
+// const ZQ_VALUE: usize = SYS_CFG + 0x0172;
 
 const BAR_BASE: usize = 0x0700_0000; // TODO: What do we call this?
 const SOME_STATUS: usize = BAR_BASE + 0x05d4; // 0x70005d4
@@ -1517,10 +1517,10 @@ fn auto_scan_dram_size(para: &mut dram_parameters) -> Result<(), &'static str> {
         while readl(mc_work_mode) != rval {}
         let i = scan_for_addr_wrap();
 
-        if VERBOSE {
-            #[cfg(feature = "log")]
-            println!("rank {} row = {}", rank, i).ok();
-        }
+        // if VERBOSE {
+        //     #[cfg(feature = "log")]
+        //     println!("rank {} row = {}", rank, i).ok();
+        // }
 
         // Store rows in para 1
         let shft = 4 + offs;
@@ -1558,13 +1558,13 @@ fn auto_scan_dram_size(para: &mut dram_parameters) -> Result<(), &'static str> {
                 break;
             }
         }
-        let banks = (j + 1) << 2; // 4 or 8
-        if VERBOSE {
-            #[cfg(feature = "log")]
-            println!("rank {} bank = {}", rank, banks).ok();
-            #[cfg(not(feature = "log"))]
-            let _ = banks;
-        }
+        // let banks = (j + 1) << 2; // 4 or 8
+        // if VERBOSE {
+        //     #[cfg(feature = "log")]
+        //     println!("rank {} bank = {}", rank, banks).ok();
+        //     #[cfg(not(feature = "log"))]
+        //     let _ = banks;
+        // }
 
         // Store banks in para 1
         let shft = 12 + offs;
@@ -1591,10 +1591,10 @@ fn auto_scan_dram_size(para: &mut dram_parameters) -> Result<(), &'static str> {
         let i = scan_for_addr_wrap2();
         let pgsize = if i == 9 { 0 } else { 1 << (i - 10) };
 
-        if VERBOSE {
-            #[cfg(feature = "log")]
-            println!("rank {} page size = {}KB", rank, pgsize).ok();
-        }
+        // if VERBOSE {
+        //     #[cfg(feature = "log")]
+        //     println!("rank {} page size = {}KB", rank, pgsize).ok();
+        // }
 
         // Store page size
         let shft = offs;
@@ -1702,10 +1702,10 @@ pub fn init_dram(para: &mut dram_parameters) -> usize {
     // STEP 1: ZQ, gating, calibration and voltage
     // Test ZQ status
     if para.dram_tpr13 & (1 << 16) > 0 {
-        if VERBOSE {
-            #[cfg(feature = "log")]
-            println!("DRAM only has internal ZQ.").ok();
-        }
+        // if VERBOSE {
+        //     #[cfg(feature = "log")]
+        //     println!("DRAM only has internal ZQ.").ok();
+        // }
         writel(RES_CAL_CTRL_REG, readl(RES_CAL_CTRL_REG) | 0x100);
         writel(RES240_CTRL_REG, 0);
         sdelay(10);
@@ -1717,21 +1717,21 @@ pub fn init_dram(para: &mut dram_parameters) -> usize {
         sdelay(10);
         writel(RES_CAL_CTRL_REG, readl(RES_CAL_CTRL_REG) | 0x001);
         sdelay(20);
-        if VERBOSE {
-            let zq_val = readl(ZQ_VALUE);
-            #[cfg(feature = "log")]
-            println!("ZQ: {}", zq_val).ok();
-            #[cfg(not(feature = "log"))]
-            let _ = zq_val;
-        }
+        // if VERBOSE {
+        //     let zq_val = readl(ZQ_VALUE);
+        //     // #[cfg(feature = "log")]
+        //     // println!("ZQ: {}", zq_val).ok();
+        //     // #[cfg(not(feature = "log"))]
+        //     // let _ = zq_val;
+        // }
     }
 
     // Set voltage
     let rc = get_pmu_exists();
-    if VERBOSE {
-        #[cfg(feature = "log")]
-        println!("PMU exists? {}", rc).ok();
-    }
+    // if VERBOSE {
+    //     #[cfg(feature = "log")]
+    //     println!("PMU exists? {}", rc).ok();
+    // }
 
     if !rc {
         dram_vol_set(para);
@@ -1746,52 +1746,52 @@ pub fn init_dram(para: &mut dram_parameters) -> usize {
     // STEP 2: CONFIG
     // Set SDRAM controller auto config
     if (para.dram_tpr13 & 0x1) == 0 {
-        if let Err(msg) = auto_scan_dram_config(para) {
-            #[cfg(feature = "log")]
-            println!("config fail {}", msg).ok();
-            #[cfg(not(feature = "log"))]
-            let _ = msg;
+        if let Err(_msg) = auto_scan_dram_config(para) {
+            // #[cfg(feature = "log")]
+            // println!("config fail {}", msg).ok();
+            // #[cfg(not(feature = "log"))]
+            // let _ = msg;
             return 0;
         }
     }
 
-    let dtype = match para.dram_type {
-        2 => "DDR2",
-        3 => "DDR3",
-        _ => "",
-    };
-    #[cfg(feature = "log")]
-    println!("{}@{}MHz", dtype, para.dram_clk).ok();
-    #[cfg(not(feature = "log"))]
-    let _ = dtype;
+    // let dtype = match para.dram_type {
+    //     2 => "DDR2",
+    //     3 => "DDR3",
+    //     _ => "",
+    // };
+    // #[cfg(feature = "log")]
+    // println!("{}@{}MHz", dtype, para.dram_clk).ok();
+    // #[cfg(not(feature = "log"))]
+    // let _ = dtype;
 
-    if VERBOSE {
-        if (para.dram_odt_en & 0x1) == 0 {
-            #[cfg(feature = "log")]
-            println!("ODT off").ok();
-        } else {
-            #[cfg(feature = "log")]
-            println!("ZQ: {}", para.dram_zq).ok();
-        }
-    }
+    // if VERBOSE {
+    //     if (para.dram_odt_en & 0x1) == 0 {
+    //         #[cfg(feature = "log")]
+    //         println!("ODT off").ok();
+    //     } else {
+    //         #[cfg(feature = "log")]
+    //         println!("ZQ: {}", para.dram_zq).ok();
+    //     }
+    // }
 
-    if VERBOSE {
-        // report ODT
-        if (para.dram_mr1 & 0x44) == 0 {
-            #[cfg(feature = "log")]
-            println!("ODT off").ok();
-        } else {
-            #[cfg(feature = "log")]
-            println!("ODT: {}", para.dram_mr1).ok();
-        }
-    }
+    // if VERBOSE {
+    //     // report ODT
+    //     if (para.dram_mr1 & 0x44) == 0 {
+    //         #[cfg(feature = "log")]
+    //         println!("ODT off").ok();
+    //     } else {
+    //         #[cfg(feature = "log")]
+    //         println!("ODT: {}", para.dram_mr1).ok();
+    //     }
+    // }
 
     // Init core, final run
-    if let Err(msg) = mctl_core_init(para) {
-        #[cfg(feature = "log")]
-        println!("init error {}", msg).ok();
-        #[cfg(not(feature = "log"))]
-        let _ = msg;
+    if let Err(_msg) = mctl_core_init(para) {
+        // #[cfg(feature = "log")]
+        // println!("init error {}", msg).ok();
+        // #[cfg(not(feature = "log"))]
+        // let _ = msg;
         return 0;
     };
 
@@ -1804,10 +1804,10 @@ pub fn init_dram(para: &mut dram_parameters) -> usize {
         para.dram_para2 = (para.dram_para2 & 0xffff) | rc << 16;
     }
     let mem_size = rc;
-    if VERBOSE {
-        #[cfg(feature = "log")]
-        println!("DRAM: {}M", mem_size).ok();
-    }
+    // if VERBOSE {
+    //     #[cfg(feature = "log")]
+    //     println!("DRAM: {}M", mem_size).ok();
+    // }
 
     // Purpose ??
     // What is Auto SR?
@@ -1859,15 +1859,15 @@ pub fn init_dram(para: &mut dram_parameters) -> usize {
         if rc & (1 << 16) != 0 {
             return 0;
         }
-        if let Err(msg) = dramc_simple_wr_test(mem_size, len) {
-            #[cfg(feature = "log")]
-            println!("test fail {}", msg).ok();
-            #[cfg(not(feature = "log"))]
-            let _ = msg;
+        if let Err(_msg) = dramc_simple_wr_test(mem_size, len) {
+            // #[cfg(feature = "log")]
+            // println!("test fail {}", msg).ok();
+            // #[cfg(not(feature = "log"))]
+            // let _ = msg;
             return 0;
         }
-        #[cfg(feature = "log")]
-        println!("test OK").ok();
+        // #[cfg(feature = "log")]
+        // println!("test OK").ok();
     }
 
     handler_super_standby();

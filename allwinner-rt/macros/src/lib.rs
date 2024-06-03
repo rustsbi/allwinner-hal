@@ -14,10 +14,10 @@ pub fn entry(args: TokenStream, input: TokenStream) -> TokenStream {
     let f = parse_macro_input!(input as ItemFn);
 
     // check the function arguments
-    if f.sig.inputs.len() > 1 {
+    if f.sig.inputs.len() != 2 {
         return parse::Error::new(
             f.sig.inputs.last().unwrap().span(),
-            "`#[entry]` function should include at most one parameter",
+            "`#[entry]` function should include exactly two parameters",
         )
         .to_compile_error()
         .into();
@@ -53,18 +53,14 @@ pub fn entry(args: TokenStream, input: TokenStream) -> TokenStream {
         && match f.sig.output {
             ReturnType::Default => true,
             ReturnType::Type(_, ref ty) => {
-                if let Type::Path(_path) = &**ty {
-                    true
-                } else {
-                    false
-                }
+                matches!(&**ty, Type::Never(_))
             }
         };
 
     if !valid_signature {
         return parse::Error::new(
             f.span(),
-            "`#[entry]` function must have signature `[unsafe] fn([params: Parameters]) [-> Handover]`",
+            "`#[entry]` function must have signature `[unsafe] fn(p: Peripherals, c: Clocks) -> !`",
         )
         .to_compile_error()
         .into();
@@ -86,7 +82,7 @@ pub fn entry(args: TokenStream, input: TokenStream) -> TokenStream {
         #[allow(non_snake_case)]
         #[export_name = "main"]
         #(#attrs)*
-        pub #unsafety fn __rom_rt__main(#args) #ret {
+        pub #unsafety fn __allwinner_rt__main(#args) #ret {
             #(#stmts)*
         }
     )

@@ -1,17 +1,18 @@
 // Build this example with:
 // cargo build --example fn-main --target riscv64imac-unknown-none-elf --release
 // Checkout target assembly code:
-// rust-objdump -d target/riscv64imac-unknown-none-elf/release/examples/rom-rt-main > target/1.asm
+// rust-objdump -d target/riscv64imac-unknown-none-elf/release/examples/fn-main > target/1.asm
 
 #![no_std]
 #![no_main]
+use allwinner_rt::{entry, Clocks, Peripherals};
 
-use allwinner_rt::{Handover, Parameters};
-
-#[allwinner_rt::entry]
-fn main(params: Parameters) -> Handover {
-    // on most platforms, params has a UART inside.
-    Handover::from(params)
+#[entry]
+fn main(p: Peripherals, c: Clocks) -> ! {
+    drop((p, c));
+    loop {
+        // TODO: main function contents
+    }
 }
 
 #[panic_handler]
