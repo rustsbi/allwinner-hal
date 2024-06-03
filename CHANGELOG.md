@@ -26,4 +26,4 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - 支持D1类平台的GPIO、SPI和UART兼容性及其中断编号
 
 [Unreleased]: https://github.com/rustsbi/rustsbi/compare/v0.0.0...HEAD
-[0.0.0]: https://gitee.com/rustsbi/aw-soc/releases/tag/v0.0.0
+[0.0.0]: https://gitee.com/rustsbi/allwinner-hal/releases/tag/v0.0.0

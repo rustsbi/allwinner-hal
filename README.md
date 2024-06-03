@@ -1,8 +1,8 @@
-# aw-soc
+# allwinner-hal
 
-[![crates.io](https://img.shields.io/crates/v/aw-soc.svg)](https://crates.io/crates/aw-soc)
-[![Documentation](https://docs.rs/aw-soc/badge.svg)](https://docs.rs/aw-soc)
-![License](https://img.shields.io/crates/l/aw-soc.svg)
+[![crates.io](https://img.shields.io/crates/v/allwinner-hal.svg)](https://crates.io/crates/allwinner-hal)
+[![Documentation](https://docs.rs/allwinner-hal/badge.svg)](https://docs.rs/allwinner-hal)
+![License](https://img.shields.io/crates/l/allwinner-hal.svg)
 
 全志芯片组件化外设驱动；外设包括DDR控制器。
 

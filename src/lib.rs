@@ -4,7 +4,7 @@
 //! use in kernels, firmwares and embedded development with both dynamic and static base
 //! address support.
 //!
-//! Most of `aw-soc` structures have `embedded-hal` traits implemented. Users may combine
+//! Most of `allwinner-hal` structures have `embedded-hal` traits implemented. Users may combine
 //! this package with `embedded-hal` ecosystem drivers to provide abundant amount of features.
 #![no_std]
 #[deny(missing_docs)]

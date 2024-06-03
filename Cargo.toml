@@ -1,5 +1,5 @@
 [package]
-name = "aw-soc"
+name = "allwinner-hal"
 version = "0.0.0"
 edition = "2021"
 description = "Allwinner SoC driver support"
@@ -7,8 +7,8 @@ authors = [
     "Luo Jia <luojia@hust.edu.cn>",
     "Gao Chengbo <electricpower_gao@163.com>",
 ]
-repository = "https://gitee.com/rustsbi/aw-soc"
-documentation = "https://docs.rs/aw-soc"
+repository = "https://github.com/rustsbi/allwinner-hal"
+documentation = "https://docs.rs/allwinner-hal"
 license = "MulanPSL-2.0 OR MIT"
 readme = "README.md"
 keywords = ["hal", "allwinner"]
