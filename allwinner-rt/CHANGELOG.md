@@ -22,5 +22,5 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - DRAM内存初始化函数
 - 从aw-soc库提供基本的外设和时钟配置
 
-[Unreleased]: https://github.com/rustsbi/d1-rom-rt/compare/v0.0.0...HEAD
-[0.0.0]: https://gitee.com/rustsbi/d1-rom-rt/releases/tag/v0.0.0
+[Unreleased]: https://github.com/rustsbi/allwinner-rt/compare/v0.0.0...HEAD
+[0.0.0]: https://github.com/rustsbi/allwinner-rt/releases/tag/v0.0.0

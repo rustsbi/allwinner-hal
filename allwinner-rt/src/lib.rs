@@ -5,7 +5,7 @@
 //! Here's an sample usage of this crate:
 //!
 //! ```no_run
-//! use d1_rom_rt::{entry, Parameters, Handover};
+//! use allwinner_rt::{entry, Parameters, Handover};
 //!
 //! #[entry]
 //! fn main(params: Parameters) -> Handover {
@@ -22,7 +22,7 @@ mod mctl;
 pub use mctl::init as dram_init;
 
 use base_address::Static;
-pub use d1_rom_rt_macros::entry;
+pub use allwinner_rt_macros::entry;
 
 #[cfg(feature = "log")]
 use aw_soc::uart::{self, Parity, Serial, StopBits, WordLength};

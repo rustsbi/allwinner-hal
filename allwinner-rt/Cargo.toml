@@ -1,5 +1,5 @@
 [package]
-name = "d1-rom-rt"
+name = "allwinner-rt"
 description = "ROM runtime for Allwinner D1 chip"
 version = "0.0.0"
 edition = "2021"
@@ -7,8 +7,8 @@ authors = [
     "Luo Jia <luojia@hust.edu.cn>",
     "Gao Chengbo <electricpower_gao@163.com>",
 ]
-repository = "https://gitee.com/rustsbi/d1-rom-rt"
-documentation = "https://docs.rs/d1-rom-rt"
+repository = "https://github.com/rustsbi/allwinner-rt"
+documentation = "https://docs.rs/allwinner-rt"
 license = "MulanPSL-2.0 OR MIT"
 readme = "README.md"
 keywords = ["allwinner"]
@@ -17,7 +17,7 @@ categories = ["embedded", "hardware-support", "no-std"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-d1-rom-rt-macros = "0.0.0"
+allwinner-rt-macros = { version = "0.0.0", path = "macros" }
 base-address = "0.0.0"
 embedded-hal = "1.0.0-alpha.9"
 nb = "1.1.0"
@@ -30,6 +30,3 @@ default = ["nezha"]
 log = ["dep:spin", "dep:ufmt"]
 nezha = []
 lichee = []
-
-[workspace]
-members = ["macros"]

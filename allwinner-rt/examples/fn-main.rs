@@ -6,9 +6,9 @@
 #![no_std]
 #![no_main]
 
-use d1_rom_rt::{Handover, Parameters};
+use allwinner_rt::{Handover, Parameters};
 
-#[d1_rom_rt::entry]
+#[allwinner_rt::entry]
 fn main(params: Parameters) -> Handover {
     // on most platforms, params has a UART inside.
     Handover::from(params)
