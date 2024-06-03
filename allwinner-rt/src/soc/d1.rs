@@ -1,6 +1,6 @@
 //! D1-H, D1s, F133, F133A/B chip platforms.
 
-use allwinner_hal::Pads;
+use allwinner_hal::{ccu::Clocks, time::U32Ext, Pads};
 
 /// ROM runtime peripheral ownership and configurations.
 pub struct Peripherals {
@@ -32,4 +32,13 @@ soc! {
 
     /// Platform-local Interrupt Controller.
     pub struct PLIC => 0x10000000, plic::Plic;
+}
+
+#[doc(hidden)]
+#[inline]
+pub fn __rom_init_clocks() -> Clocks {
+    Clocks {
+        psi: 600_000_000.hz(),
+        apb1: 24_000_000.hz(),
+    }
 }

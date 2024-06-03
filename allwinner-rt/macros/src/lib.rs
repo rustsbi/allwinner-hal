@@ -79,10 +79,15 @@ pub fn entry(args: TokenStream, input: TokenStream) -> TokenStream {
     let ret = f.sig.output;
 
     quote!(
-        #[allow(non_snake_case)]
         #[export_name = "main"]
+        pub fn main() -> ! {
+            let p = unsafe { core::mem::transmute(()) };
+            let c = ::allwinner_rt::__rom_init_clocks();
+            unsafe { __allwinner_rt_macros__main(p, c) }
+        }
+        #[allow(non_snake_case)]
         #(#attrs)*
-        pub #unsafety fn __allwinner_rt__main(#args) #ret {
+        #unsafety fn __allwinner_rt_macros__main(#args) #ret {
             #(#stmts)*
         }
     )
