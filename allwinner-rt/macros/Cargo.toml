@@ -1,0 +1,28 @@
+[package]
+name = "d1-rom-rt-macros"
+description = "Procedural macro for ROM runtime on Allwinner D1 chip"
+version = "0.0.0"
+edition = "2021"
+authors = [
+    "Luo Jia <luojia@hust.edu.cn>",
+    "Gao Chengbo <electricpower_gao@163.com>",
+]
+repository = "https://gitee.com/rustsbi/d1-rom-rt"
+documentation = "https://docs.rs/d1-rom-rt-macros"
+license = "MulanPSL-2.0 OR MIT"
+readme = "../README.md"
+keywords = ["allwinner"]
+categories = ["embedded", "hardware-support", "no-std"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "1.0"
+proc-macro2 = "1.0"
+
+[dependencies.syn]
+version = "1.0"
+features = ["extra-traits", "full"]
