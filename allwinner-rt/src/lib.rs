@@ -33,18 +33,18 @@ pub mod soc {
 }
 
 /// eGON.BT0 identifying structure.
+// TODO verify with original ROM source code
 #[repr(C)]
 pub struct EgonHead {
-    magic: [u8; 8],
+    pub magic: [u8; 8],
     pub checksum: u32,
     pub length: u32,
-    _head_size: u32,
-    fel_script_address: u32,
-    fel_uenv_length: u32,
-    dt_name_offset: u32,
-    dram_size: u32,
-    boot_media: u32,
-    string_pool: [u32; 13],
+    pub pub_head_size: u32,
+    pub pub_head_version: [u8; 4],
+    pub return_addr: u32,
+    pub run_addr: u32,
+    pub boot_cpu: u32,
+    pub platform: [u8; 8],
 }
 
 /// Jump over head data to executable code.
@@ -69,12 +69,12 @@ unsafe extern "C" fn start() -> ! {
         // and branch target buffer table
         "li t1, 0x30013",
         "csrs 0x7C2, t1",
-        // 关中断
+        // Disable interrupt
         "csrw mie, zero",
         "la  sp, {stack}
         li   t0, {stack_size}
         add  sp, sp, t0",
-        // 清空bss
+        // Clear `.bss` section
         "la  t1, sbss
         la   t2, ebss
     1:  bgeu t1, t2, 1f
@@ -82,10 +82,8 @@ unsafe extern "C" fn start() -> ! {
         addi t1, t1, 8
         j    1b
     1:  ",
-        // 启动！
-        "call {main}
-    1:  wfi
-        j 1b",
+        // Start Rust main function
+        "call {main}",
         stack      =   sym STACK,
         stack_size = const STACK_SIZE,
         main       =   sym main,
@@ -105,13 +103,12 @@ static EGON_HEAD: EgonHead = EgonHead {
     magic: *b"eGON.BT0",
     checksum: 0x5F0A6C39, // real checksum filled by blob generator
     length: 0x8000,
-    _head_size: 0,
-    fel_script_address: 0,
-    fel_uenv_length: 0,
-    dt_name_offset: 0,
-    dram_size: 0,
-    boot_media: 0,
-    string_pool: [0; 13],
+    pub_head_size: 0,
+    pub_head_version: *b"3000",
+    return_addr: 0,
+    run_addr: 0,
+    boot_cpu: 0,
+    platform: *b"\0\03.0.0\0",
 };
 
 core::arch::global_asm! {
