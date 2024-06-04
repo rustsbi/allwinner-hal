@@ -2,12 +2,8 @@
 
 use core::cell::UnsafeCell;
 
-#[allow(unused)]
-use crate::gpio::{Function, Pad};
-use crate::{
-    ccu::{self, ClockGate, Clocks},
-    time::Bps,
-};
+use crate::ccu::{self, ClockGate, Clocks};
+use embedded_time::rate::Baud;
 use uart16550::{CharLen, Register, Uart16550, PARITY};
 
 /// Universal Asynchronous Receiver-Transmitter registers.
@@ -22,7 +18,7 @@ pub struct RegisterBlock {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Config {
     /// Serial baudrate in `Bps`.
-    pub baudrate: Bps,
+    pub baudrate: Baud,
     /// Word length, can be 5, 6, 7 or 8.
     pub wordlength: WordLength,
     /// Parity checks, can be `None`, `Odd` or `Even`.

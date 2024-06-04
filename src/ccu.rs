@@ -1,16 +1,16 @@
 //! Clock control unit.
 
 use crate::ccu;
-use crate::time::Hz;
+use embedded_time::rate::Hertz;
 use volatile_register::RW;
 
 /// Clock configuration on current SoC.
 #[derive(Debug)]
 pub struct Clocks {
     /// PSI clock frequency.
-    pub psi: Hz,
+    pub psi: Hertz,
     /// Advanced Peripheral Bus 1 clock frequency.
-    pub apb1: Hz,
+    pub apb1: Hertz,
 }
 
 /// Clock Control Unit registers.

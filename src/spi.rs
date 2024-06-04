@@ -1,11 +1,9 @@
 //! Serial Peripheral Interface bus.
 
-use crate::{
-    ccu::{self, ClockConfig, ClockGate, Clocks, FactorN, SpiClockSource},
-    time::Hz,
-};
+use crate::ccu::{self, ClockConfig, ClockGate, Clocks, FactorN, SpiClockSource};
 use core::cell::UnsafeCell;
 use embedded_hal::spi::Mode;
+use embedded_time::rate::Hertz;
 use volatile_register::{RO, RW};
 
 /// Serial Peripheral Interface registers.
@@ -297,12 +295,12 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> Spi<SPI, I, PINS>
         spi: SPI,
         pins: PINS,
         mode: impl Into<Mode>,
-        freq: Hz,
+        freq: Hertz,
         clocks: &Clocks,
         ccu: impl AsRef<ccu::RegisterBlock>,
     ) -> Self {
         // 1. unwrap parameters
-        let (Hz(freq), Hz(psi)) = (freq, clocks.psi);
+        let (Hertz(freq), Hertz(psi)) = (freq, clocks.psi);
         let (factor_n, factor_m) = {
             let mut err = psi;
             let (mut best_n, mut best_m) = (0, 0);

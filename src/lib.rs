@@ -17,36 +17,6 @@ pub mod spi;
 #[macro_use]
 pub mod uart;
 
-/// Time constants and traits.
-pub mod time {
-    /// Bits per second.
-    #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
-    pub struct Bps(pub u32);
-
-    /// Hertz.
-    #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
-    pub struct Hz(pub u32);
-
-    /// Extension trait that adds convenience methods to the `u32` type.
-    pub trait U32Ext {
-        /// Wrap in `Bps`.
-        fn bps(self) -> Bps;
-        /// Wrap in `Hz`.
-        fn hz(self) -> Hz;
-    }
-
-    impl U32Ext for u32 {
-        #[inline(always)]
-        fn bps(self) -> Bps {
-            Bps(self)
-        }
-        #[inline(always)]
-        fn hz(self) -> Hz {
-            Hz(self)
-        }
-    }
-}
-
 #[allow(unused)]
 macro_rules! impl_pins_trait {
     ($(($p: expr, $i: expr, $m: ty): $Trait: ty;)+) => {

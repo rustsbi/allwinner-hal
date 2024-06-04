@@ -1,6 +1,7 @@
 //! D1-H, D1s, F133, F133A/B chip platforms.
 
-use allwinner_hal::{ccu::Clocks, time::U32Ext, Pads};
+use allwinner_hal::{ccu::Clocks, Pads};
+use embedded_time::rate::Extensions;
 
 /// ROM runtime peripheral ownership and configurations.
 pub struct Peripherals {
@@ -38,7 +39,7 @@ soc! {
 #[inline]
 pub fn __rom_init_clocks() -> Clocks {
     Clocks {
-        psi: 600_000_000.hz(),
-        apb1: 24_000_000.hz(),
+        psi: 600_000_000.Hz(),
+        apb1: 24_000_000.Hz(),
     }
 }

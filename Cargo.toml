@@ -20,6 +20,7 @@ categories = ["os", "embedded", "hardware-support", "no-std"]
 volatile-register = "0.2.1"
 embedded-hal = "1.0.0"
 embedded-io = "0.6.1"
+embedded-time = "0.12.1"
 uart16550 = "0.0.1"
 plic = "0.0.2"
 
