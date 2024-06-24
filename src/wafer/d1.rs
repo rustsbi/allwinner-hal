@@ -1,7 +1,6 @@
 //! SoC configuration on D1-like chips.
 
 use crate::{
-    gpio::{Disabled, Function},
     spi::{Clk, Miso, Mosi},
     uart::{Receive, Transmit},
 };
@@ -100,71 +99,71 @@ impl_gpio_pins! {
 
 // UART PINS
 impl_pins_trait! {
-    ('B', 0, Function<6>): Transmit<0>;
-    ('B', 0, Function<7>): Transmit<2>;
-    ('B', 1, Function<6>): Receive<0>;
-    ('B', 1, Function<7>): Receive<2>;
-    ('B', 2, Function<7>): Transmit<4>;
-    ('B', 3, Function<7>): Receive<4>;
-    ('B', 4, Function<7>): Transmit<5>;
-    ('B', 5, Function<7>): Receive<5>;
-    ('B', 6, Function<7>): Transmit<3>;
-    ('B', 7, Function<7>): Receive<3>;
-    ('B', 8, Function<6>): Transmit<0>;
-    ('B', 8, Function<7>): Transmit<1>;
-    ('B', 9, Function<6>): Receive<0>;
-    ('B', 9, Function<7>): Receive<1>;
-    ('C', 0, Function<2>): Transmit<2>;
-    ('C', 1, Function<2>): Receive<2>;
-    ('C', 6, Function<4>): Transmit<3>;
-    ('C', 7, Function<4>): Receive<3>;
-    ('D', 1, Function<5>): Transmit<2>;
-    ('D', 2, Function<5>): Receive<2>;
-    ('D', 5, Function<5>): Transmit<5>;
-    ('D', 6, Function<5>): Receive<5>;
-    ('D', 7, Function<5>): Transmit<4>;
-    ('D', 8, Function<5>): Receive<4>;
-    ('D', 10, Function<5>): Transmit<3>;
-    ('D', 11, Function<5>): Receive<3>;
-    ('D', 21, Function<4>): Transmit<1>;
-    ('D', 22, Function<4>): Receive<1>;
-    ('E', 2, Function<3>): Transmit<2>;
-    ('E', 2, Function<6>): Transmit<0>;
-    ('E', 3, Function<3>): Receive<2>;
-    ('E', 3, Function<6>): Receive<0>;
-    ('E', 4, Function<3>): Transmit<4>;
-    ('E', 5, Function<3>): Receive<4>;
-    ('E', 6, Function<3>): Transmit<5>;
-    ('E', 7, Function<3>): Receive<5>;
-    ('E', 8, Function<5>): Transmit<3>;
-    ('E', 9, Function<5>): Receive<3>;
-    ('E', 10, Function<3>): Transmit<1>;
-    ('E', 11, Function<3>): Receive<1>;
-    ('G', 0, Function<3>): Transmit<3>;
-    ('G', 1, Function<3>): Receive<3>;
-    ('G', 2, Function<5>): Transmit<4>;
-    ('G', 3, Function<5>): Receive<4>;
-    ('G', 4, Function<3>): Transmit<5>;
-    ('G', 5, Function<3>): Receive<5>;
-    ('G', 6, Function<2>): Transmit<1>;
-    ('G', 7, Function<2>): Receive<1>;
-    ('G', 8, Function<5>): Transmit<3>;
-    ('G', 9, Function<5>): Receive<3>;
-    ('G', 17, Function<2>): Transmit<2>;
-    ('G', 18, Function<2>): Receive<2>;
+    ('B', 0, 6): Transmit<0>;
+    ('B', 0, 7): Transmit<2>;
+    ('B', 1, 6): Receive<0>;
+    ('B', 1, 7): Receive<2>;
+    ('B', 2, 7): Transmit<4>;
+    ('B', 3, 7): Receive<4>;
+    ('B', 4, 7): Transmit<5>;
+    ('B', 5, 7): Receive<5>;
+    ('B', 6, 7): Transmit<3>;
+    ('B', 7, 7): Receive<3>;
+    ('B', 8, 6): Transmit<0>;
+    ('B', 8, 7): Transmit<1>;
+    ('B', 9, 6): Receive<0>;
+    ('B', 9, 7): Receive<1>;
+    ('C', 0, 2): Transmit<2>;
+    ('C', 1, 2): Receive<2>;
+    ('C', 6, 4): Transmit<3>;
+    ('C', 7, 4): Receive<3>;
+    ('D', 1, 5): Transmit<2>;
+    ('D', 2, 5): Receive<2>;
+    ('D', 5, 5): Transmit<5>;
+    ('D', 6, 5): Receive<5>;
+    ('D', 7, 5): Transmit<4>;
+    ('D', 8, 5): Receive<4>;
+    ('D', 10, 5): Transmit<3>;
+    ('D', 11, 5): Receive<3>;
+    ('D', 21, 4): Transmit<1>;
+    ('D', 22, 4): Receive<1>;
+    ('E', 2, 3): Transmit<2>;
+    ('E', 2, 6): Transmit<0>;
+    ('E', 3, 3): Receive<2>;
+    ('E', 3, 6): Receive<0>;
+    ('E', 4, 3): Transmit<4>;
+    ('E', 5, 3): Receive<4>;
+    ('E', 6, 3): Transmit<5>;
+    ('E', 7, 3): Receive<5>;
+    ('E', 8, 5): Transmit<3>;
+    ('E', 9, 5): Receive<3>;
+    ('E', 10, 3): Transmit<1>;
+    ('E', 11, 3): Receive<1>;
+    ('G', 0, 3): Transmit<3>;
+    ('G', 1, 3): Receive<3>;
+    ('G', 2, 5): Transmit<4>;
+    ('G', 3, 5): Receive<4>;
+    ('G', 4, 3): Transmit<5>;
+    ('G', 5, 3): Receive<5>;
+    ('G', 6, 2): Transmit<1>;
+    ('G', 7, 2): Receive<1>;
+    ('G', 8, 5): Transmit<3>;
+    ('G', 9, 5): Receive<3>;
+    ('G', 17, 2): Transmit<2>;
+    ('G', 18, 2): Receive<2>;
 }
 
 // SPI PINS
 impl_pins_trait! {
-    ('B', 9, Function<5>): Miso<1>;
-    ('B', 10, Function<5>): Mosi<1>;
-    ('B', 11, Function<5>): Clk<1>;
-    ('C', 2, Function<2>): Clk<0>;
-    ('C', 4, Function<2>): Mosi<0>;
-    ('C', 5, Function<2>): Miso<0>;
-    ('D', 11, Function<4>): Clk<1>;
-    ('D', 12, Function<4>): Mosi<1>;
-    ('D', 13, Function<4>): Miso<1>;
+    ('B', 9, 5): Miso<1>;
+    ('B', 10, 5): Mosi<1>;
+    ('B', 11, 5): Clk<1>;
+    ('C', 2, 2): Clk<0>;
+    ('C', 4, 2): Mosi<0>;
+    ('C', 5, 2): Miso<0>;
+    ('D', 11, 4): Clk<1>;
+    ('D', 12, 4): Mosi<1>;
+    ('D', 13, 4): Miso<1>;
 }
 
 /// Allwinner D1 interrupts.

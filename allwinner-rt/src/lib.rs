@@ -120,7 +120,7 @@ core::arch::global_asm! {
 
 #[cfg(any(feature = "nezha", feature = "lichee"))]
 pub use {
-    self::soc::d1::{Peripherals, __rom_init_clocks},
+    self::soc::d1::{Peripherals, __rom_init_params},
     allwinner_hal::ccu::Clocks,
 };
 
@@ -130,6 +130,6 @@ pub struct Peripherals {}
 pub struct Clocks {}
 #[cfg(not(any(feature = "nezha", feature = "lichee")))]
 #[doc(hidden)]
-pub fn __rom_init_clocks() -> Clocks {
-    Clocks {}
+pub fn __rom_init_params() -> (Peripherals, Clocks) {
+    (Peripherals {}, Clocks {})
 }

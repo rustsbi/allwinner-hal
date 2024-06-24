@@ -1,4 +1,4 @@
-//! Clock control unit.
+//! Clock Control Unit peripheral.
 
 use crate::ccu;
 use embedded_time::rate::Hertz;

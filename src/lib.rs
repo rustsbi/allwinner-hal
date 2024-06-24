@@ -19,25 +19,14 @@ pub mod uart;
 
 #[allow(unused)]
 macro_rules! impl_pins_trait {
-    ($(($p: expr, $i: expr, $m: ty): $Trait: ty;)+) => {
+    ($(($p: expr, $i: expr, $f: expr): $Trait: ty;)+) => {
         $(
-impl<GPIO> $Trait for $crate::gpio::Pad<GPIO, $p, $i, $m> {}
+impl<'a> $Trait for $crate::gpio::Function<'a, $p, $i, $f> {}
         )+
     };
 }
 
-mod wafer {
-    #[cfg(any(feature = "d1", test))]
-    mod d1;
-    pub mod pins {
-        #[cfg(any(feature = "d1", test))]
-        pub use super::d1::Pads;
-    }
-    pub mod interrupt {
-        #[allow(unused)] // TODO
-        #[cfg(any(feature = "d1", test))]
-        pub use super::d1::{Interrupt, Machine, Supevisor};
-    }
+/// SoC configurations on peripherals and interrupt contexts.
+pub mod wafer {
+    pub mod d1;
 }
-
-pub use wafer::pins::*;

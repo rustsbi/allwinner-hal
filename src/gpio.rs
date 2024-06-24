@@ -1,5 +1,4 @@
 //! Allwinner GPIO controller.
-use core::marker::PhantomData;
 use volatile_register::RW;
 
 /// Generic Purpose Input/Output registers.
@@ -54,29 +53,305 @@ pub struct PioPow {
     pub vol_sel_ctl: RW<u32>,
 }
 
-/// Set GPIO pin mode.
-#[inline]
-fn set_mode<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8, OldM, NewM>(
-    pin: Pad<GPIO, P, N, OldM>,
-) -> Pad<GPIO, P, N, NewM>
-where
-    OldM: PinMode,
-    NewM: PinMode,
-{
-    // take ownership of Pin
-    let Pad { gpio, .. } = pin;
-    // calculate mask and value
-    let (port_idx, cfg_reg_idx, cfg_field_idx) = port_cfg_index(P, N);
-    let mask = !(0xF << cfg_field_idx);
-    let value = (NewM::VALUE as u32) << cfg_field_idx;
-    // apply configuration
-    let cfg_reg = &gpio.as_ref().port[port_idx].cfg[cfg_reg_idx];
-    unsafe { cfg_reg.modify(|cfg| (cfg & mask) | value) };
-    // return ownership of Pad
-    Pad {
-        gpio,
-        _mode: PhantomData,
+/// External interrupt event.
+pub enum Event {
+    PositiveEdge,
+    NegativeEdge,
+    HighLevel,
+    LowLevel,
+    BothEdges,
+}
+
+#[allow(unused)]
+macro_rules! impl_gpio_pins {
+    ($($px: ident:($P: expr, $N: expr, $M: ident);)+) => {
+/// GPIO pads in current platform.
+pub struct Pads<'a> {
+    $(
+    pub $px: $crate::gpio::$M<'a, $P, $N>,
+    )+
+}
+    };
+}
+
+const fn port_index(p: char) -> usize {
+    assert!(p as usize >= b'B' as usize && p as usize <= b'G' as usize);
+    p as usize - b'B' as usize
+}
+
+/// Input mode pad.
+pub struct Input<'a, const P: char, const N: u8> {
+    gpio: &'a RegisterBlock,
+}
+
+impl<'a, const P: char, const N: u8> Input<'a, P, N> {
+    /// Configures the pad to operate as an output pad.
+    #[inline]
+    pub fn into_output(self) -> Output<'a, P, N> {
+        set_mode(self)
     }
+    /// Configures the pad to operate as an alternate function pad.
+    #[inline]
+    pub fn into_function<const F: u8>(self) -> Function<'a, P, N, F> {
+        set_mode(self)
+    }
+    /// Configures the pad to operate as an external interrupt pad.
+    #[inline]
+    pub fn into_eint(self) -> EintPad<'a, P, N> {
+        set_mode(self)
+    }
+    /// Configures the pad to operate as a disabled pad.
+    #[inline]
+    pub fn into_disabled(self) -> Disabled<'a, P, N> {
+        set_mode(self)
+    }
+}
+
+impl<'a, const P: char, const N: u8> embedded_hal::digital::ErrorType for Input<'a, P, N> {
+    type Error = core::convert::Infallible;
+}
+
+impl<'a, const P: char, const N: u8> embedded_hal::digital::InputPin for Input<'a, P, N> {
+    #[inline]
+    fn is_high(&mut self) -> Result<bool, Self::Error> {
+        Ok(self.gpio.port[port_index(P)].dat.read() & (1 << N) != 0)
+    }
+    #[inline]
+    fn is_low(&mut self) -> Result<bool, Self::Error> {
+        Ok(self.gpio.port[port_index(P)].dat.read() & (1 << N) == 0)
+    }
+}
+
+/// Output mode pad.
+pub struct Output<'a, const P: char, const N: u8> {
+    gpio: &'a RegisterBlock,
+}
+
+impl<'a, const P: char, const N: u8> Output<'a, P, N> {
+    /// Configures the pad to operate as an input pad.
+    #[inline]
+    pub fn into_input(self) -> Input<'a, P, N> {
+        set_mode(self)
+    }
+    /// Configures the pad to operate as an alternate function pad.
+    #[inline]
+    pub fn into_function<const F: u8>(self) -> Function<'a, P, N, F> {
+        set_mode(self)
+    }
+    /// Configures the pad to operate as an external interrupt pad.
+    #[inline]
+    pub fn into_eint(self) -> EintPad<'a, P, N> {
+        set_mode(self)
+    }
+    /// Configures the pad to operate as a disabled pad.
+    #[inline]
+    pub fn into_disabled(self) -> Disabled<'a, P, N> {
+        set_mode(self)
+    }
+}
+
+impl<'a, const P: char, const N: u8> embedded_hal::digital::ErrorType for Output<'a, P, N> {
+    type Error = core::convert::Infallible;
+}
+
+impl<'a, const P: char, const N: u8> embedded_hal::digital::OutputPin for Output<'a, P, N> {
+    #[inline]
+    fn set_low(&mut self) -> Result<(), Self::Error> {
+        unsafe {
+            self.gpio.port[port_index(P)]
+                .dat
+                .modify(|value| value & !(1 << N))
+        };
+        Ok(())
+    }
+    #[inline]
+    fn set_high(&mut self) -> Result<(), Self::Error> {
+        unsafe {
+            self.gpio.port[port_index(P)]
+                .dat
+                .modify(|value| value | (1 << N))
+        };
+        Ok(())
+    }
+}
+
+impl<'a, const P: char, const N: u8> embedded_hal::digital::StatefulOutputPin for Output<'a, P, N> {
+    #[inline]
+    fn is_set_high(&mut self) -> Result<bool, Self::Error> {
+        Ok(self.gpio.port[port_index(P)].dat.read() & (1 << N) != 0)
+    }
+    #[inline]
+    fn is_set_low(&mut self) -> Result<bool, Self::Error> {
+        Ok(self.gpio.port[port_index(P)].dat.read() & (1 << N) == 0)
+    }
+}
+
+/// Alternate function pad.
+///
+/// F should be in 2..=8.
+pub struct Function<'a, const P: char, const N: u8, const F: u8> {
+    gpio: &'a RegisterBlock,
+}
+
+impl<'a, const P: char, const N: u8, const F: u8> Function<'a, P, N, F> {
+    /// Configures the pad to operate as an input pad.
+    #[inline]
+    pub fn into_input(self) -> Input<'a, P, N> {
+        set_mode(self)
+    }
+    /// Configures the pad to operate as an output pad.
+    #[inline]
+    pub fn into_output(self) -> Output<'a, P, N> {
+        set_mode(self)
+    }
+    /// Configures the pad to operate as an alternate function pad.
+    #[inline]
+    pub fn into_function<const F2: u8>(self) -> Function<'a, P, N, F2> {
+        set_mode(self)
+    }
+    /// Configures the pad to operate as an external interrupt pad.
+    #[inline]
+    pub fn into_eint(self) -> EintPad<'a, P, N> {
+        set_mode(self)
+    }
+    /// Configures the pad to operate as a disabled pad.
+    #[inline]
+    pub fn into_disabled(self) -> Disabled<'a, P, N> {
+        set_mode(self)
+    }
+}
+
+/// External interrupt mode pad.
+pub struct EintPad<'a, const P: char, const N: u8> {
+    gpio: &'a RegisterBlock,
+}
+
+impl<'a, const P: char, const N: u8> EintPad<'a, P, N> {
+    /// Configures the pad to operate as an input pad.
+    #[inline]
+    pub fn into_input(self) -> Input<'a, P, N> {
+        set_mode(self)
+    }
+    /// Configures the pad to operate as an output pad.
+    #[inline]
+    pub fn into_output(self) -> Output<'a, P, N> {
+        set_mode(self)
+    }
+    /// Configures the pad to operate as an alternate function pad.
+    #[inline]
+    pub fn into_function<const F: u8>(self) -> Function<'a, P, N, F> {
+        set_mode(self)
+    }
+    /// Configures the pad to operate as a disabled pad.
+    #[inline]
+    pub fn into_disabled(self) -> Disabled<'a, P, N> {
+        set_mode(self)
+    }
+}
+
+impl<'a, const P: char, const N: u8> EintPad<'a, P, N> {
+    #[inline]
+    pub fn listen(&mut self, event: Event) {
+        let event_id = match event {
+            Event::PositiveEdge => 0,
+            Event::NegativeEdge => 1,
+            Event::HighLevel => 2,
+            Event::LowLevel => 3,
+            Event::BothEdges => 4,
+        };
+        let (port_idx, cfg_reg_idx, cfg_field_idx) = port_cfg_index(P, N);
+        let mask = !(0xF << cfg_field_idx);
+        let value = event_id << cfg_field_idx;
+        let cfg_reg = &self.gpio.eint[port_idx].cfg[cfg_reg_idx];
+        unsafe { cfg_reg.modify(|cfg| (cfg & mask) | value) };
+    }
+    #[inline]
+    pub fn enable_interrupt(&mut self) {
+        unsafe {
+            self.gpio.eint[port_index(P)]
+                .ctl
+                .modify(|value| value | (1 << N))
+        }
+    }
+    #[inline]
+    pub fn disable_interrupt(&mut self) {
+        unsafe {
+            self.gpio.eint[port_index(P)]
+                .ctl
+                .modify(|value| value & !(1 << N))
+        }
+    }
+    #[inline]
+    pub fn clear_interrupt_pending_bit(&mut self) {
+        unsafe { self.gpio.eint[port_index(P)].status.write(1 << N) }
+    }
+    #[inline]
+    pub fn check_interrupt(&mut self) -> bool {
+        self.gpio.eint[port_index(P)].status.read() & (1 << N) != 0
+    }
+}
+
+/// Disabled GPIO pad.
+pub struct Disabled<'a, const P: char, const N: u8> {
+    gpio: &'a RegisterBlock,
+}
+
+impl<'a, const P: char, const N: u8> Disabled<'a, P, N> {
+    /// Configures the pad to operate as an input pad.
+    #[inline]
+    pub fn into_input(self) -> Input<'a, P, N> {
+        set_mode(self)
+    }
+    /// Configures the pad to operate as an output pad.
+    #[inline]
+    pub fn into_output(self) -> Output<'a, P, N> {
+        set_mode(self)
+    }
+    /// Configures the pad to operate as an alternate function pad.
+    #[inline]
+    pub fn into_function<const F: u8>(self) -> Function<'a, P, N, F> {
+        set_mode(self)
+    }
+    /// Configures the pad to operate as an external interrupt pad.
+    #[inline]
+    pub fn into_eint(self) -> EintPad<'a, P, N> {
+        set_mode(self)
+    }
+
+    // Internal constructor for ROM runtime. Do not use.
+    #[doc(hidden)]
+    #[inline]
+    pub const unsafe fn __new(gpio: &'a RegisterBlock) -> Self {
+        Self { gpio }
+    }
+}
+
+/// Internal function to set GPIO pad mode.
+#[inline]
+fn set_mode<'a, T, U>(value: T) -> U
+where
+    T: HasMode<'a>,
+    U: HasMode<'a>,
+{
+    // take ownership of pad
+    let gpio = value.gpio();
+    // calculate mask and value
+    let (port_idx, cfg_reg_idx, cfg_field_idx) = port_cfg_index(T::P, T::N);
+    let mask = !(0xF << cfg_field_idx);
+    let value = (U::VALUE as u32) << cfg_field_idx;
+    // apply configuration
+    let cfg_reg = &gpio.port[port_idx].cfg[cfg_reg_idx];
+    unsafe { cfg_reg.modify(|cfg| (cfg & mask) | value) };
+    // return ownership of pad
+    unsafe { U::from_gpio(gpio) }
+}
+
+trait HasMode<'a> {
+    const P: char;
+    const N: u8;
+    const VALUE: u8;
+    fn gpio(&self) -> &'a RegisterBlock;
+    unsafe fn from_gpio(gpio: &'a RegisterBlock) -> Self;
 }
 
 const fn port_cfg_index(p: char, n: u8) -> (usize, usize, u8) {
@@ -88,219 +363,74 @@ const fn port_cfg_index(p: char, n: u8) -> (usize, usize, u8) {
     (port_idx, cfg_reg_idx, cfg_field_idx)
 }
 
-/// Individual GPIO pin.
-pub struct Pad<GPIO, const P: char, const N: u8, M> {
-    gpio: GPIO,
-    _mode: PhantomData<M>,
-}
-
-impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8, M: PinMode> Pad<GPIO, P, N, M> {
-    /// Disables the pin.
-    #[inline]
-    pub fn into_disabled(self) -> Pad<GPIO, P, N, Disabled> {
-        set_mode(self)
-    }
-    /// Configures the pin to operate as an input pin.
-    #[inline]
-    pub fn into_input(self) -> Pad<GPIO, P, N, Input> {
-        set_mode(self)
-    }
-    /// Configures the pin to operate as an output pin.
-    #[inline]
-    pub fn into_output(self) -> Pad<GPIO, P, N, Output> {
-        set_mode(self)
-    }
-    /// Configures the pin to operate as an external interrupt.
-    #[inline]
-    pub fn into_eint(self) -> Pad<GPIO, P, N, EintMode> {
-        set_mode(self)
-    }
-    /// Configures the pin to operate as an alternate function.
-    #[inline]
-    pub fn into_function<const F: u8>(self) -> Pad<GPIO, P, N, Function<F>> {
-        set_mode(self)
-    }
-}
-
-/// External interrupt event.
-pub enum Event {
-    PositiveEdge,
-    NegativeEdge,
-    HighLevel,
-    LowLevel,
-    BothEdges,
-}
-
-/// Pin that can receive external interrupt.
-pub trait EintPin {
-    fn listen(&mut self, event: Event);
-
-    fn enable_interrupt(&mut self);
-
-    fn disable_interrupt(&mut self);
-
-    fn clear_interrupt_pending_bit(&mut self);
-
-    fn check_interrupt(&mut self) -> bool;
-}
-
-impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> EintPin for Pad<GPIO, P, N, EintMode> {
-    #[inline]
-    fn listen(&mut self, event: Event) {
-        let event_id = match event {
-            Event::PositiveEdge => 0,
-            Event::NegativeEdge => 1,
-            Event::HighLevel => 2,
-            Event::LowLevel => 3,
-            Event::BothEdges => 4,
-        };
-        let (port_idx, cfg_reg_idx, cfg_field_idx) = port_cfg_index(P, N);
-        let mask = !(0xF << cfg_field_idx);
-        let value = event_id << cfg_field_idx;
-        let cfg_reg = &self.gpio.as_ref().eint[port_idx].cfg[cfg_reg_idx];
-        unsafe { cfg_reg.modify(|cfg| (cfg & mask) | value) };
-    }
-    #[inline]
-    fn enable_interrupt(&mut self) {
-        unsafe {
-            self.gpio.as_ref().eint[port_index(P)]
-                .ctl
-                .modify(|value| value | (1 << N))
-        }
-    }
-    #[inline]
-    fn disable_interrupt(&mut self) {
-        unsafe {
-            self.gpio.as_ref().eint[port_index(P)]
-                .ctl
-                .modify(|value| value & !(1 << N))
-        }
-    }
-    #[inline]
-    fn clear_interrupt_pending_bit(&mut self) {
-        unsafe { self.gpio.as_ref().eint[port_index(P)].status.write(1 << N) }
-    }
-    #[inline]
-    fn check_interrupt(&mut self) -> bool {
-        self.gpio.as_ref().eint[port_index(P)].status.read() & (1 << N) != 0
-    }
-}
-
-#[allow(unused)]
-macro_rules! impl_gpio_pins {
-    ($($px: ident:($P: expr, $N: expr, $M: ty);)+) => {
-/// GPIO pads in current platform.
-pub struct Pads<GPIO> {
-    $(
-    pub $px: $crate::gpio::Pad<GPIO, $P, $N, $M>,
-    )+
-}
-    };
-}
-
-impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> embedded_hal::digital::ErrorType
-    for Pad<GPIO, P, N, Input>
-{
-    type Error = core::convert::Infallible;
-}
-
-impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> embedded_hal::digital::InputPin
-    for Pad<GPIO, P, N, Input>
-{
-    #[inline]
-    fn is_high(&mut self) -> Result<bool, Self::Error> {
-        Ok(self.gpio.as_ref().port[port_index(P)].dat.read() & (1 << N) != 0)
-    }
-    #[inline]
-    fn is_low(&mut self) -> Result<bool, Self::Error> {
-        Ok(self.gpio.as_ref().port[port_index(P)].dat.read() & (1 << N) == 0)
-    }
-}
-
-impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> embedded_hal::digital::ErrorType
-    for Pad<GPIO, P, N, Output>
-{
-    type Error = core::convert::Infallible;
-}
-
-impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8> embedded_hal::digital::OutputPin
-    for Pad<GPIO, P, N, Output>
-{
-    #[inline]
-    fn set_low(&mut self) -> Result<(), Self::Error> {
-        unsafe {
-            self.gpio.as_ref().port[port_index(P)]
-                .dat
-                .modify(|value| value & !(1 << N))
-        };
-        Ok(())
-    }
-    #[inline]
-    fn set_high(&mut self) -> Result<(), Self::Error> {
-        unsafe {
-            self.gpio.as_ref().port[port_index(P)]
-                .dat
-                .modify(|value| value | (1 << N))
-        };
-        Ok(())
-    }
-}
-
-impl<GPIO: AsRef<RegisterBlock>, const P: char, const N: u8>
-    embedded_hal::digital::StatefulOutputPin for Pad<GPIO, P, N, Output>
-{
-    #[inline]
-    fn is_set_high(&mut self) -> Result<bool, Self::Error> {
-        Ok(self.gpio.as_ref().port[port_index(P)].dat.read() & (1 << N) != 0)
-    }
-    #[inline]
-    fn is_set_low(&mut self) -> Result<bool, Self::Error> {
-        Ok(self.gpio.as_ref().port[port_index(P)].dat.read() & (1 << N) == 0)
-    }
-}
-
-const fn port_index(p: char) -> usize {
-    assert!(p as usize >= b'B' as usize && p as usize <= b'G' as usize);
-    p as usize - b'B' as usize
-}
-
-/// Input mode (type state).
-pub struct Input;
-/// Output mode (type state).
-pub struct Output;
-/// Function modes (type state).
-///
-/// N should be in 2..=8.
-pub struct Function<const N: u8>;
-/// External interrupt mode (type state).
-pub struct EintMode;
-/// Disabled mode (type state).
-pub struct Disabled;
-
-/// Valid GPIO pin mode.
-pub trait PinMode {
-    /// GPIO mode value as is represented in `cfg_reg` register.
-    const VALUE: u8;
-}
-
-impl PinMode for Input {
+impl<'a, const P: char, const N: u8> HasMode<'a> for Input<'a, P, N> {
+    const P: char = P;
+    const N: u8 = N;
     const VALUE: u8 = 0;
+    #[inline]
+    fn gpio(&self) -> &'a RegisterBlock {
+        self.gpio
+    }
+    #[inline]
+    unsafe fn from_gpio(gpio: &'a RegisterBlock) -> Self {
+        Self { gpio }
+    }
 }
 
-impl PinMode for Output {
+impl<'a, const P: char, const N: u8> HasMode<'a> for Output<'a, P, N> {
+    const P: char = P;
+    const N: u8 = N;
     const VALUE: u8 = 1;
+    #[inline]
+    fn gpio(&self) -> &'a RegisterBlock {
+        self.gpio
+    }
+    #[inline]
+    unsafe fn from_gpio(gpio: &'a RegisterBlock) -> Self {
+        Self { gpio }
+    }
 }
 
-impl<const N: u8> PinMode for Function<N> {
-    const VALUE: u8 = N;
+impl<'a, const P: char, const N: u8, const F: u8> HasMode<'a> for Function<'a, P, N, F> {
+    const P: char = P;
+    const N: u8 = N;
+    const VALUE: u8 = F;
+    #[inline]
+    fn gpio(&self) -> &'a RegisterBlock {
+        self.gpio
+    }
+    #[inline]
+    unsafe fn from_gpio(gpio: &'a RegisterBlock) -> Self {
+        Self { gpio }
+    }
 }
 
-impl PinMode for EintMode {
+impl<'a, const P: char, const N: u8> HasMode<'a> for EintPad<'a, P, N> {
+    const P: char = P;
+    const N: u8 = N;
     const VALUE: u8 = 14;
+    #[inline]
+    fn gpio(&self) -> &'a RegisterBlock {
+        self.gpio
+    }
+    #[inline]
+    unsafe fn from_gpio(gpio: &'a RegisterBlock) -> Self {
+        Self { gpio }
+    }
 }
 
-impl PinMode for Disabled {
+impl<'a, const P: char, const N: u8> HasMode<'a> for Disabled<'a, P, N> {
+    const P: char = P;
+    const N: u8 = N;
     const VALUE: u8 = 15;
+    #[inline]
+    fn gpio(&self) -> &'a RegisterBlock {
+        self.gpio
+    }
+    #[inline]
+    unsafe fn from_gpio(gpio: &'a RegisterBlock) -> Self {
+        Self { gpio }
+    }
 }
 
 #[cfg(test)]
