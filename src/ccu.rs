@@ -180,9 +180,9 @@ impl SpiBusGating {
 /// Peripheral that can be clock gated by CCU.
 pub trait ClockGate {
     /// Reset this peripheral by provided `ccu`.
-    unsafe fn reset(ccu: impl AsRef<ccu::RegisterBlock>);
+    unsafe fn reset(ccu: &ccu::RegisterBlock);
     /// Free this peripheral by provided `ccu`.
-    unsafe fn free(ccu: impl AsRef<ccu::RegisterBlock>);
+    unsafe fn free(ccu: &ccu::RegisterBlock);
 }
 
 /// Peripheral whose clock can be configurated by CCU.
@@ -196,7 +196,7 @@ pub trait ClockConfig {
         source: Self::Source,
         factor_m: u8,
         factor_n: FactorN,
-        ccu: impl AsRef<ccu::RegisterBlock>,
+        ccu: &ccu::RegisterBlock,
     );
 }
 
@@ -207,8 +207,7 @@ pub struct UART<const IDX: usize>;
 
 impl<const I: usize> ClockGate for UART<I> {
     #[inline]
-    unsafe fn reset(ccu: impl AsRef<ccu::RegisterBlock>) {
-        let ccu = ccu.as_ref();
+    unsafe fn reset(ccu: &ccu::RegisterBlock) {
         let uart_bgr = ccu.uart_bgr.read();
         ccu.uart_bgr
             .write(uart_bgr.gate_mask::<I>().assert_reset::<I>());
@@ -218,8 +217,7 @@ impl<const I: usize> ClockGate for UART<I> {
     }
 
     #[inline]
-    unsafe fn free(ccu: impl AsRef<ccu::RegisterBlock>) {
-        let ccu = ccu.as_ref();
+    unsafe fn free(ccu: &ccu::RegisterBlock) {
         let uart_bgr = ccu.uart_bgr.read();
         ccu.uart_bgr
             .write(uart_bgr.gate_mask::<I>().assert_reset::<I>());
@@ -231,8 +229,7 @@ pub struct SPI<const IDX: usize>;
 
 impl<const I: usize> ClockGate for SPI<I> {
     #[inline]
-    unsafe fn reset(ccu: impl AsRef<ccu::RegisterBlock>) {
-        let ccu = ccu.as_ref();
+    unsafe fn reset(ccu: &ccu::RegisterBlock) {
         let spi_bgr = ccu.spi_bgr.read();
         ccu.spi_bgr
             .write(spi_bgr.gate_mask::<I>().assert_reset::<I>());
@@ -242,8 +239,7 @@ impl<const I: usize> ClockGate for SPI<I> {
     }
 
     #[inline]
-    unsafe fn free(ccu: impl AsRef<ccu::RegisterBlock>) {
-        let ccu = ccu.as_ref();
+    unsafe fn free(ccu: &ccu::RegisterBlock) {
         let spi_bgr = ccu.spi_bgr.read();
         ccu.spi_bgr
             .write(spi_bgr.gate_mask::<I>().assert_reset::<I>());
@@ -257,9 +253,8 @@ impl<const I: usize> ClockConfig for SPI<I> {
         source: Self::Source,
         factor_m: u8,
         factor_n: FactorN,
-        ccu: impl AsRef<ccu::RegisterBlock>,
+        ccu: &ccu::RegisterBlock,
     ) {
-        let ccu = ccu.as_ref();
         let spi_clk = ccu.spi_clk[I].read();
         ccu.spi_clk[I].write(
             spi_clk

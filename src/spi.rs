@@ -297,7 +297,7 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> Spi<SPI, I, PINS>
         mode: impl Into<Mode>,
         freq: Hertz,
         clocks: &Clocks,
-        ccu: impl AsRef<ccu::RegisterBlock>,
+        ccu: &ccu::RegisterBlock,
     ) -> Self {
         // 1. unwrap parameters
         let (Hertz(freq), Hertz(psi)) = (freq, clocks.psi);
@@ -325,9 +325,9 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> Spi<SPI, I, PINS>
         };
         // 2. init peripheral clocks
         // clock and divider
-        unsafe { PINS::Clock::config(SpiClockSource::PllPeri1x, factor_m, factor_n, &ccu) };
+        unsafe { PINS::Clock::config(SpiClockSource::PllPeri1x, factor_m, factor_n, ccu) };
         // de-assert reset
-        unsafe { PINS::Clock::reset(&ccu) };
+        unsafe { PINS::Clock::reset(ccu) };
         // 3. global configuration and soft reset
         unsafe {
             spi.as_ref().gcr.write(
@@ -352,7 +352,7 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> Spi<SPI, I, PINS>
     }
     /// Close SPI and release peripheral.
     #[inline]
-    pub fn free(self, ccu: impl AsRef<ccu::RegisterBlock>) -> (SPI, PINS) {
+    pub fn free(self, ccu: &ccu::RegisterBlock) -> (SPI, PINS) {
         // clock is closed for self.clock_gate is dropped
         unsafe { PINS::Clock::free(ccu) };
         (self.spi, self.pins)

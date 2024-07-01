@@ -14,6 +14,12 @@ impl core::ops::Deref for $Ty {
         unsafe { &*($paddr as *const _) }
     }
 }
+impl core::convert::AsRef<$DerefTy> for $Ty {
+    #[inline(always)]
+    fn as_ref(&self) -> &$DerefTy {
+        unsafe { &*($paddr as *const _) }
+    }
+}
 )+
         )+
     };

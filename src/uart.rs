@@ -27,12 +27,29 @@ pub struct Config {
     pub stopbits: StopBits,
 }
 
+impl Default for Config {
+    #[inline]
+    fn default() -> Self {
+        use embedded_time::rate::Extensions;
+        Self {
+            baudrate: 115200.Bd(),
+            wordlength: WordLength::Eight,
+            parity: Parity::None,
+            stopbits: StopBits::One,
+        }
+    }
+}
+
 /// Serial word length settings.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum WordLength {
+    /// 5 bits per word.
     Five,
+    /// 6 bits per word.
     Six,
+    /// 7 bits per word.
     Seven,
+    /// 8 bits per word.
     Eight,
 }
 
@@ -64,21 +81,21 @@ impl core::ops::Deref for RegisterBlock {
     }
 }
 
-/// Managed serial structure with peripheral and pins.
-pub struct Serial<UART, const I: usize, PINS: Pins<I>> {
+/// Managed serial structure with peripheral and pads.
+pub struct Serial<UART, const I: usize, PADS: Pads<I>> {
     uart: UART,
-    pins: PINS,
+    pads: PADS,
 }
 
-impl<UART: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> Serial<UART, I, PINS> {
+impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> Serial<UART, I, PADS> {
     /// Create a serial instance.
     #[inline]
     pub fn new(
         uart: UART,
-        pins: PINS,
+        pads: PADS,
         config: impl Into<Config>,
         clocks: &Clocks,
-        ccu: impl AsRef<ccu::RegisterBlock>,
+        ccu: &ccu::RegisterBlock,
     ) -> Self {
         // 1. unwrap parameters
         let Config {
@@ -90,7 +107,7 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> Serial<UART, I, 
         let bps = baudrate.0;
         // 2. init peripheral clocks
         // note(unsafe): async read and write using ccu registers
-        unsafe { PINS::ClockGate::reset(&ccu) };
+        unsafe { PADS::ClockGate::reset(ccu) };
         // 3. set interrupt configuration
         // on BT0 stage we disable all uart interrupts
         let interrupt_types = uart.as_ref().ier().read();
@@ -124,19 +141,27 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> Serial<UART, I, 
                 .set_parity(parity),
         );
         // 6. return the instance
-        Serial { uart, pins }
+        Serial { uart, pads }
+    }
+    /// Get a temporary borrow on the underlying GPIO pads.
+    #[inline]
+    pub fn pads<F, T>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut PADS) -> T,
+    {
+        f(&mut self.pads)
     }
     /// Close uart and release peripheral.
     #[inline]
-    pub fn free(self, ccu: impl AsRef<ccu::RegisterBlock>) -> (UART, PINS) {
+    pub fn free(self, ccu: &ccu::RegisterBlock) -> (UART, PADS) {
         // clock is closed for self.clock_gate is dropped
-        unsafe { PINS::ClockGate::free(ccu) };
-        (self.uart, self.pins)
+        unsafe { PADS::ClockGate::free(ccu) };
+        (self.uart, self.pads)
     }
 }
 
-/// Valid serial pins.
-pub trait Pins<const I: usize> {
+/// Valid serial pads.
+pub trait Pads<const I: usize> {
     type ClockGate: ccu::ClockGate;
 }
 
@@ -146,7 +171,7 @@ pub trait Transmit<const I: usize> {}
 /// Valid receive pin for UART peripheral.
 pub trait Receive<const I: usize> {}
 
-impl<const I: usize, T, R> Pins<I> for (T, R)
+impl<const I: usize, T, R> Pads<I> for (T, R)
 where
     T: Transmit<I>,
     R: Receive<I>,
@@ -154,14 +179,14 @@ where
     type ClockGate = ccu::UART<I>;
 }
 
-impl<UART: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_io::ErrorType
-    for Serial<UART, I, PINS>
+impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> embedded_io::ErrorType
+    for Serial<UART, I, PADS>
 {
     type Error = core::convert::Infallible;
 }
 
-impl<UART: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_io::Write
-    for Serial<UART, I, PINS>
+impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> embedded_io::Write
+    for Serial<UART, I, PADS>
 {
     #[inline]
     fn write(&mut self, buffer: &[u8]) -> Result<usize, Self::Error> {
