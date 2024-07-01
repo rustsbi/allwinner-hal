@@ -165,6 +165,22 @@ impl<'a, const P: char, const N: u8> Output<'a, P, N> {
     pub fn into_disabled(self) -> Disabled<'a, P, N> {
         set_mode(self)
     }
+    /// Borrows the pad to temporarily use it as an input pad.
+    #[inline]
+    pub fn with_input<F, T>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut Input<'a, P, N>) -> T,
+    {
+        borrow_with_mode(self, f)
+    }
+    /// Borrows the pad to temporarily use it an alternate function pad.
+    #[inline]
+    pub fn with_function<const G: u8, F, T>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut Function<'a, P, N, G>) -> T,
+    {
+        borrow_with_mode(self, f)
+    }
 }
 
 impl<'a, const P: char, const N: u8> embedded_hal::digital::ErrorType for Output<'a, P, N> {
@@ -230,6 +246,22 @@ impl<'a, const P: char, const N: u8, const F: u8> Function<'a, P, N, F> {
     pub fn into_disabled(self) -> Disabled<'a, P, N> {
         set_mode(self)
     }
+    /// Borrows the pad to temporarily use it as an input pad.
+    #[inline]
+    pub fn with_input<G, T>(&mut self, f: G) -> T
+    where
+        G: FnOnce(&mut Input<'a, P, N>) -> T,
+    {
+        borrow_with_mode(self, f)
+    }
+    /// Borrows the pad to temporarily use it as an output pad.
+    #[inline]
+    pub fn with_output<G, T>(&mut self, f: G) -> T
+    where
+        G: FnOnce(&mut Output<'a, P, N>) -> T,
+    {
+        borrow_with_mode(self, f)
+    }
 }
 
 /// External interrupt mode pad.
@@ -270,8 +302,11 @@ impl<'a, const P: char, const N: u8> EintPad<'a, P, N> {
             Event::LowLevel => 3,
             Event::BothEdges => 4,
         };
-        let (port_idx, cfg_reg_idx, cfg_field_idx) = port_cfg_index(P, N);
-        let mask = !(0xF << cfg_field_idx);
+        let (port_idx, cfg_reg_idx, mask, cfg_field_idx) = const {
+            let (port_idx, cfg_reg_idx, cfg_field_idx) = port_cfg_index(P, N);
+            let mask = !(0xF << cfg_field_idx);
+            (port_idx, cfg_reg_idx, mask, cfg_field_idx)
+        };
         let value = event_id << cfg_field_idx;
         let cfg_reg = &self.gpio.eint[port_idx].cfg[cfg_reg_idx];
         unsafe { cfg_reg.modify(|cfg| (cfg & mask) | value) };
