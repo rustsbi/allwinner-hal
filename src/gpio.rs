@@ -74,6 +74,7 @@ pub struct Pads<'a> {
     };
 }
 
+#[inline]
 const fn port_index(p: char) -> usize {
     assert!(p as usize >= b'B' as usize && p as usize <= b'G' as usize);
     p as usize - b'B' as usize
@@ -105,6 +106,22 @@ impl<'a, const P: char, const N: u8> Input<'a, P, N> {
     pub fn into_disabled(self) -> Disabled<'a, P, N> {
         set_mode(self)
     }
+    /// Borrows the pad to temporarily use it as an output pad.
+    #[inline]
+    pub fn with_output<F, T>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut Output<'a, P, N>) -> T,
+    {
+        borrow_with_mode(self, f)
+    }
+    /// Borrows the pad to temporarily use it an alternate function pad.
+    #[inline]
+    pub fn with_function<const G: u8, F, T>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut Function<'a, P, N, G>) -> T,
+    {
+        borrow_with_mode(self, f)
+    }
 }
 
 impl<'a, const P: char, const N: u8> embedded_hal::digital::ErrorType for Input<'a, P, N> {
@@ -114,11 +131,11 @@ impl<'a, const P: char, const N: u8> embedded_hal::digital::ErrorType for Input<
 impl<'a, const P: char, const N: u8> embedded_hal::digital::InputPin for Input<'a, P, N> {
     #[inline]
     fn is_high(&mut self) -> Result<bool, Self::Error> {
-        Ok(self.gpio.port[port_index(P)].dat.read() & (1 << N) != 0)
+        Ok(self.gpio.port[const { port_index(P) }].dat.read() & (1 << N) != 0)
     }
     #[inline]
     fn is_low(&mut self) -> Result<bool, Self::Error> {
-        Ok(self.gpio.port[port_index(P)].dat.read() & (1 << N) == 0)
+        Ok(self.gpio.port[const { port_index(P) }].dat.read() & (1 << N) == 0)
     }
 }
 
@@ -157,20 +174,14 @@ impl<'a, const P: char, const N: u8> embedded_hal::digital::ErrorType for Output
 impl<'a, const P: char, const N: u8> embedded_hal::digital::OutputPin for Output<'a, P, N> {
     #[inline]
     fn set_low(&mut self) -> Result<(), Self::Error> {
-        unsafe {
-            self.gpio.port[port_index(P)]
-                .dat
-                .modify(|value| value & !(1 << N))
-        };
+        let idx = const { port_index(P) };
+        unsafe { self.gpio.port[idx].dat.modify(|value| value & !(1 << N)) };
         Ok(())
     }
     #[inline]
     fn set_high(&mut self) -> Result<(), Self::Error> {
-        unsafe {
-            self.gpio.port[port_index(P)]
-                .dat
-                .modify(|value| value | (1 << N))
-        };
+        let idx = const { port_index(P) };
+        unsafe { self.gpio.port[idx].dat.modify(|value| value | (1 << N)) };
         Ok(())
     }
 }
@@ -178,11 +189,11 @@ impl<'a, const P: char, const N: u8> embedded_hal::digital::OutputPin for Output
 impl<'a, const P: char, const N: u8> embedded_hal::digital::StatefulOutputPin for Output<'a, P, N> {
     #[inline]
     fn is_set_high(&mut self) -> Result<bool, Self::Error> {
-        Ok(self.gpio.port[port_index(P)].dat.read() & (1 << N) != 0)
+        Ok(self.gpio.port[const { port_index(P) }].dat.read() & (1 << N) != 0)
     }
     #[inline]
     fn is_set_low(&mut self) -> Result<bool, Self::Error> {
-        Ok(self.gpio.port[port_index(P)].dat.read() & (1 << N) == 0)
+        Ok(self.gpio.port[const { port_index(P) }].dat.read() & (1 << N) == 0)
     }
 }
 
@@ -267,27 +278,21 @@ impl<'a, const P: char, const N: u8> EintPad<'a, P, N> {
     }
     #[inline]
     pub fn enable_interrupt(&mut self) {
-        unsafe {
-            self.gpio.eint[port_index(P)]
-                .ctl
-                .modify(|value| value | (1 << N))
-        }
+        let idx = const { port_index(P) };
+        unsafe { self.gpio.eint[idx].ctl.modify(|value| value | (1 << N)) }
     }
     #[inline]
     pub fn disable_interrupt(&mut self) {
-        unsafe {
-            self.gpio.eint[port_index(P)]
-                .ctl
-                .modify(|value| value & !(1 << N))
-        }
+        let idx = const { port_index(P) };
+        unsafe { self.gpio.eint[idx].ctl.modify(|value| value & !(1 << N)) }
     }
     #[inline]
     pub fn clear_interrupt_pending_bit(&mut self) {
-        unsafe { self.gpio.eint[port_index(P)].status.write(1 << N) }
+        unsafe { self.gpio.eint[const { port_index(P) }].status.write(1 << N) }
     }
     #[inline]
     pub fn check_interrupt(&mut self) -> bool {
-        self.gpio.eint[port_index(P)].status.read() & (1 << N) != 0
+        self.gpio.eint[const { port_index(P) }].status.read() & (1 << N) != 0
     }
 }
 
@@ -320,7 +325,7 @@ impl<'a, const P: char, const N: u8> Disabled<'a, P, N> {
 
     // Internal constructor for ROM runtime. Do not use.
     #[doc(hidden)]
-    #[inline]
+    #[inline(always)]
     pub const unsafe fn __new(gpio: &'a RegisterBlock) -> Self {
         Self { gpio }
     }
@@ -335,15 +340,51 @@ where
 {
     // take ownership of pad
     let gpio = value.gpio();
-    // calculate mask and value
-    let (port_idx, cfg_reg_idx, cfg_field_idx) = port_cfg_index(T::P, T::N);
-    let mask = !(0xF << cfg_field_idx);
-    let value = (U::VALUE as u32) << cfg_field_idx;
+    unsafe { write_mode::<T, U>(gpio) };
+    // return ownership of pad
+    unsafe { U::from_gpio(gpio) }
+}
+
+#[inline]
+fn borrow_with_mode<'a, T, U, F, R>(value: &mut T, f: F) -> R
+where
+    T: HasMode<'a>,
+    U: HasMode<'a>,
+    F: FnOnce(&mut U) -> R,
+{
+    // take ownership of pad
+    let gpio = value.gpio();
+    // set pad to new mode
+    unsafe { write_mode::<T, U>(gpio) };
+    let mut pad = unsafe { U::from_gpio(gpio) };
+    let val = f(&mut pad);
+    // restore pad to original mode
+    unsafe { write_mode::<T, T>(gpio) };
+    val
+}
+
+#[inline]
+unsafe fn write_mode<'a, T: HasMode<'a>, U: HasMode<'a>>(gpio: &RegisterBlock) {
+    // calculate mask, value and register address
+    let (mask, value, port_idx, cfg_reg_idx) = const {
+        let (port_idx, cfg_reg_idx, cfg_field_idx) = port_cfg_index(T::P, T::N);
+        let mask = !(0xF << cfg_field_idx);
+        let value = (U::VALUE as u32) << cfg_field_idx;
+        (mask, value, port_idx, cfg_reg_idx)
+    };
     // apply configuration
     let cfg_reg = &gpio.port[port_idx].cfg[cfg_reg_idx];
     unsafe { cfg_reg.modify(|cfg| (cfg & mask) | value) };
-    // return ownership of pad
-    unsafe { U::from_gpio(gpio) }
+}
+
+#[inline]
+const fn port_cfg_index(p: char, n: u8) -> (usize, usize, u8) {
+    assert!(p as usize >= b'B' as usize && p as usize <= b'G' as usize);
+    assert!(n <= 31);
+    let port_idx = p as usize - b'B' as usize;
+    let cfg_reg_idx = (n >> 3) as usize;
+    let cfg_field_idx = (n & 0b111) << 2;
+    (port_idx, cfg_reg_idx, cfg_field_idx)
 }
 
 trait HasMode<'a> {
@@ -352,15 +393,6 @@ trait HasMode<'a> {
     const VALUE: u8;
     fn gpio(&self) -> &'a RegisterBlock;
     unsafe fn from_gpio(gpio: &'a RegisterBlock) -> Self;
-}
-
-const fn port_cfg_index(p: char, n: u8) -> (usize, usize, u8) {
-    assert!(p as usize >= b'B' as usize && p as usize <= b'G' as usize);
-    assert!(n <= 31);
-    let port_idx = p as usize - b'B' as usize;
-    let cfg_reg_idx = (n >> 3) as usize;
-    let cfg_field_idx = (n & 0b111) << 2;
-    (port_idx, cfg_reg_idx, cfg_field_idx)
 }
 
 impl<'a, const P: char, const N: u8> HasMode<'a> for Input<'a, P, N> {

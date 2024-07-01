@@ -52,15 +52,13 @@ pub fn entry(args: TokenStream, input: TokenStream) -> TokenStream {
         && f.sig.variadic.is_none()
         && match f.sig.output {
             ReturnType::Default => true,
-            ReturnType::Type(_, ref ty) => {
-                matches!(&**ty, Type::Never(_))
-            }
+            _ => false,
         };
 
     if !valid_signature {
         return parse::Error::new(
             f.span(),
-            "`#[entry]` function must have signature `[unsafe] fn(p: Peripherals, c: Clocks) -> !`",
+            "`#[entry]` function must have signature `[unsafe] fn(p: Peripherals, c: Clocks)`",
         )
         .to_compile_error()
         .into();
@@ -80,11 +78,12 @@ pub fn entry(args: TokenStream, input: TokenStream) -> TokenStream {
 
     quote!(
         #[export_name = "main"]
-        pub fn main() -> ! {
+        pub fn main() {
             let (p, c) = ::allwinner_rt::__rom_init_params();
             unsafe { __allwinner_rt_macros__main(p, c) }
         }
         #[allow(non_snake_case)]
+        #[inline]
         #(#attrs)*
         #unsafety fn __allwinner_rt_macros__main(#args) #ret {
             #(#stmts)*

@@ -1,18 +1,20 @@
 // Build this example with:
-// cargo build --example fn-main --target riscv64imac-unknown-none-elf --release
+// cargo build --example fn-main --target riscv64imac-unknown-none-elf --release -p allwinner-rt
 // Checkout target assembly code:
 // rust-objdump -d target/riscv64imac-unknown-none-elf/release/examples/fn-main > target/1.asm
 
 #![no_std]
 #![no_main]
 use allwinner_rt::{entry, Clocks, Peripherals};
+use embedded_hal::digital::{InputPin, OutputPin};
 
 #[entry]
-fn main(p: Peripherals, c: Clocks) -> ! {
-    drop((p, c));
-    loop {
-        // TODO: main function contents
-    }
+fn main(p: Peripherals, _c: Clocks) {
+    let mut pb0 = p.gpio.pb7.into_input();
+
+    pb0.with_output(|pad| pad.set_high()).unwrap();
+
+    let _input_high = pb0.is_high();
 }
 
 #[panic_handler]
