@@ -16,15 +16,102 @@ pub struct Clocks {
 /// Clock Control Unit registers.
 #[repr(C)]
 pub struct RegisterBlock {
-    _reserved0: [u32; 579],
+    /// 0x0 - CPU PLL Control register.
+    pub pll_cpu_control: RW<PllCpuControl>,
+    _reserved0: [u32; 3],
+    /// 0x20 - DDR PLL Control register.
+    pub pll_ddr_control: RW<PllDdrControl>,
+    _reserved1: [u32; 3],
+    /// 0x20 - Peripheral PLL Control register 0.
+    pub pll_peri0_control: RW<PllPeri0Control>,
+    _reserved2: [u32; 311],
+    /// 0x500 - CPU AXI Configuration register.
+    pub cpu_axi_config: RW<CpuAxiConfig>,
+    _reserved3: [u32; 258],
     /// 0x90c - UART Bus Gating Reset register.
     pub uart_bgr: RW<UartBusGating>,
-    _reserved1: [u32; 12],
+    _reserved4: [u32; 12],
     /// 0x940..=0x944 - SPI0 Clock Register and SPI1 Clock Register.
     pub spi_clk: [RW<SpiClock>; 2],
-    _reserved2: [u32; 9],
+    _reserved5: [u32; 9],
     /// 0x96c - SPI Bus Gating Reset register.
     pub spi_bgr: RW<SpiBusGating>,
+}
+
+/// CPU PLL Control register.
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+pub struct PllCpuControl(u32);
+
+impl PllCpuControl {
+    // p0 = (reg32 >> 16) & 0x03;
+}
+
+/// DDR PLL Control register.
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+pub struct PllDdrControl(u32);
+
+/// Peripheral PLL Control register 0.
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+pub struct PllPeri0Control(u32);
+
+/// AXI CPU clock source.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CpuClockSource {
+    /// 24-MHz external oscillator.
+    Osc24M,
+    /// 32-KHz clock.
+    Clk32K,
+    /// 16-MHz RC oscillator.
+    Clk16MRC,
+    /// CPU PLL.
+    PllCpu,
+    /// Peripheral PLL (1x).
+    PllPeri1x,
+    /// Peripheral PLL (2x).
+    PllPeri2x,
+    /// 800-MHz Peripheral PLL.
+    PllPeri800M,
+}
+
+/// CPU AXI Configuration register.
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+pub struct CpuAxiConfig(u32);
+
+impl CpuAxiConfig {
+    const CPU_CLK_SEL: u32 = 0x7 << 24;
+
+    /// Get AXI CPU clock source.
+    #[inline]
+    pub const fn clock_source(self) -> CpuClockSource {
+        match (self.0 & Self::CPU_CLK_SEL) >> 24 {
+            0 => CpuClockSource::Osc24M,
+            1 => CpuClockSource::Clk32K,
+            2 => CpuClockSource::Clk16MRC,
+            3 => CpuClockSource::PllCpu,
+            4 => CpuClockSource::PllPeri1x,
+            5 => CpuClockSource::PllPeri2x,
+            6 => CpuClockSource::PllPeri800M,
+            _ => panic!("impossible clock source"),
+        }
+    }
+    /// Set AXI CPU clock source.
+    #[inline]
+    pub const fn set_clock_source(self, val: CpuClockSource) -> Self {
+        let val = match val {
+            CpuClockSource::Osc24M => 0,
+            CpuClockSource::Clk32K => 1,
+            CpuClockSource::Clk16MRC => 2,
+            CpuClockSource::PllCpu => 3,
+            CpuClockSource::PllPeri1x => 4,
+            CpuClockSource::PllPeri2x => 5,
+            CpuClockSource::PllPeri800M => 6,
+        };
+        Self((self.0 & !Self::CPU_CLK_SEL) | (val << 24))
+    }
 }
 
 /// Clock divide factor N.
@@ -271,6 +358,10 @@ mod tests {
     use memoffset::offset_of;
     #[test]
     fn offset_ccu() {
+        assert_eq!(offset_of!(RegisterBlock, pll_cpu_control), 0x0);
+        assert_eq!(offset_of!(RegisterBlock, pll_ddr_control), 0x10);
+        assert_eq!(offset_of!(RegisterBlock, pll_peri0_control), 0x20);
+        assert_eq!(offset_of!(RegisterBlock, cpu_axi_config), 0x500);
         assert_eq!(offset_of!(RegisterBlock, uart_bgr), 0x90c);
         assert_eq!(offset_of!(RegisterBlock, spi_clk), 0x940);
         assert_eq!(offset_of!(RegisterBlock, spi_bgr), 0x96c);
