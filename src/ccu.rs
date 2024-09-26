@@ -52,6 +52,11 @@ impl PllCpuControl {
     const PLL_N: u32 = 0xff << 8;
     const PLL_M: u32 = 0x3 << 0;
 
+    /// Get if PLL is enabled.
+    #[inline]
+    pub const fn is_pll_enabled(self) -> bool {
+        self.0 & Self::PLL_ENABLE != 0
+    }
     /// Enable PLL.
     #[inline]
     pub const fn enable_pll(self) -> Self {
@@ -138,6 +143,11 @@ impl PllDdrControl {
     const PLL_M1: u32 = 0x1 << 1;
     const PLL_M0: u32 = 0x1 << 0;
 
+    /// Get if PLL is enabled.
+    #[inline]
+    pub const fn is_pll_enabled(self) -> bool {
+        self.0 & Self::PLL_ENABLE != 0
+    }
     /// Enable PLL.
     #[inline]
     pub const fn enable_pll(self) -> Self {
@@ -235,6 +245,11 @@ impl PllPeri0Control {
     const PLL_N: u32 = 0xff << 8;
     const PLL_M: u32 = 0x1 << 1;
 
+    /// Get if PLL is enabled.
+    #[inline]
+    pub const fn is_pll_enabled(self) -> bool {
+        self.0 & Self::PLL_ENABLE != 0
+    }
     /// Enable PLL.
     #[inline]
     pub const fn enable_pll(self) -> Self {
