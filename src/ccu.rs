@@ -82,16 +82,6 @@ impl PllCpuControl {
     pub const fn is_lock_enabled(self) -> bool {
         self.0 & Self::LOCK_ENABLE != 0
     }
-    /// Enable PLL lock.
-    #[inline]
-    pub const fn enable_lock(self) -> Self {
-        Self(self.0 | Self::LOCK_ENABLE)
-    }
-    /// Disable PLL lock.
-    #[inline]
-    pub const fn disable_lock(self) -> Self {
-        Self(self.0 & !Self::LOCK_ENABLE)
-    }
     /// Get if PLL is locked.
     #[inline]
     pub const fn is_locked(self) -> bool {
@@ -138,10 +128,203 @@ impl PllCpuControl {
 #[repr(transparent)]
 pub struct PllDdrControl(u32);
 
+impl PllDdrControl {
+    const PLL_ENABLE: u32 = 1 << 31;
+    const PLL_LDO_ENABLE: u32 = 1 << 30;
+    const LOCK_ENABLE: u32 = 1 << 29;
+    const LOCK: u32 = 1 << 28;
+    const PLL_OUTPUT_GATE: u32 = 1 << 27;
+    const PLL_N: u32 = 0xff << 8;
+    const PLL_M1: u32 = 0x1 << 1;
+    const PLL_M0: u32 = 0x1 << 0;
+
+    /// Enable PLL.
+    #[inline]
+    pub const fn enable_pll(self) -> Self {
+        Self(self.0 | Self::PLL_ENABLE)
+    }
+    /// Disable PLL.
+    #[inline]
+    pub const fn disable_pll(self) -> Self {
+        Self(self.0 & !Self::PLL_ENABLE)
+    }
+    /// Get if PLL LDO is enabled.
+    #[inline]
+    pub const fn is_pll_ldo_enabled(self) -> bool {
+        self.0 & Self::PLL_LDO_ENABLE != 0
+    }
+    /// Enable PLL LDO.
+    #[inline]
+    pub const fn enable_pll_ldo(self) -> Self {
+        Self(self.0 | Self::PLL_LDO_ENABLE)
+    }
+    /// Disable PLL LDO.
+    #[inline]
+    pub const fn disable_pll_ldo(self) -> Self {
+        Self(self.0 & !Self::PLL_LDO_ENABLE)
+    }
+    /// Get if PLL lock is enabled.
+    #[inline]
+    pub const fn is_lock_enabled(self) -> bool {
+        self.0 & Self::LOCK_ENABLE != 0
+    }
+    /// Get if PLL is locked.
+    #[inline]
+    pub const fn is_locked(self) -> bool {
+        self.0 & Self::LOCK != 0
+    }
+    /// Gate PLL output.
+    #[inline]
+    pub const fn gate_pll_output(self) -> Self {
+        Self(self.0 | Self::PLL_OUTPUT_GATE)
+    }
+    /// Ungate PLL output.
+    pub const fn ungate_pll_output(self) -> Self {
+        Self(self.0 & !Self::PLL_OUTPUT_GATE)
+    }
+    /// Get if PLL output is gated.
+    #[inline]
+    pub const fn is_pll_output_gated(self) -> bool {
+        self.0 & Self::PLL_OUTPUT_GATE != 0
+    }
+    /// Get PLL N factor.
+    #[inline]
+    pub const fn pll_n(self) -> u8 {
+        ((self.0 & Self::PLL_N) >> 8) as u8
+    }
+    /// Set PLL N factor.
+    #[inline]
+    pub const fn set_pll_n(self, val: u8) -> Self {
+        Self((self.0 & !Self::PLL_N) | ((val as u32) << 8))
+    }
+    /// Get PLL M1 factor.
+    #[inline]
+    pub const fn pll_m1(self) -> u8 {
+        (self.0 & Self::PLL_M1) as u8
+    }
+    /// Set PLL M1 factor.
+    #[inline]
+    pub const fn set_pll_m1(self, val: u8) -> Self {
+        Self((self.0 & !Self::PLL_M1) | val as u32)
+    }
+    /// Get PLL M0 factor.
+    #[inline]
+    pub const fn pll_m0(self) -> u8 {
+        (self.0 & Self::PLL_M0) as u8
+    }
+    /// Set PLL M0 factor.
+    #[inline]
+    pub const fn set_pll_m0(self, val: u8) -> Self {
+        Self((self.0 & !Self::PLL_M0) | val as u32)
+    }
+}
+
 /// Peripheral PLL Control register 0.
 #[derive(Clone, Copy)]
 #[repr(transparent)]
 pub struct PllPeri0Control(u32);
+
+impl PllPeri0Control {
+    const PLL_ENABLE: u32 = 1 << 31;
+    const PLL_LDO_ENABLE: u32 = 1 << 30;
+    const LOCK_ENABLE: u32 = 1 << 29;
+    const LOCK: u32 = 1 << 28;
+    const PLL_OUTPUT_GATE: u32 = 1 << 27;
+    const PLL_P1: u32 = 0x07 << 20;
+    const PLL_P0: u32 = 0x07 << 16;
+    const PLL_N: u32 = 0xff << 8;
+    const PLL_M: u32 = 0x1 << 1;
+
+    /// Enable PLL.
+    #[inline]
+    pub const fn enable_pll(self) -> Self {
+        Self(self.0 | Self::PLL_ENABLE)
+    }
+    /// Disable PLL.
+    #[inline]
+    pub const fn disable_pll(self) -> Self {
+        Self(self.0 & !Self::PLL_ENABLE)
+    }
+    /// Get if PLL LDO is enabled.
+    #[inline]
+    pub const fn is_pll_ldo_enabled(self) -> bool {
+        self.0 & Self::PLL_LDO_ENABLE != 0
+    }
+    /// Enable PLL LDO.
+    #[inline]
+    pub const fn enable_pll_ldo(self) -> Self {
+        Self(self.0 | Self::PLL_LDO_ENABLE)
+    }
+    /// Disable PLL LDO.
+    #[inline]
+    pub const fn disable_pll_ldo(self) -> Self {
+        Self(self.0 & !Self::PLL_LDO_ENABLE)
+    }
+    /// Get if PLL lock is enabled.
+    #[inline]
+    pub const fn is_lock_enabled(self) -> bool {
+        self.0 & Self::LOCK_ENABLE != 0
+    }
+    /// Get if PLL is locked.
+    #[inline]
+    pub const fn is_locked(self) -> bool {
+        self.0 & Self::LOCK != 0
+    }
+    /// Gate PLL output.
+    #[inline]
+    pub const fn gate_pll_output(self) -> Self {
+        Self(self.0 | Self::PLL_OUTPUT_GATE)
+    }
+    /// Ungate PLL output.
+    pub const fn ungate_pll_output(self) -> Self {
+        Self(self.0 & !Self::PLL_OUTPUT_GATE)
+    }
+    /// Get if PLL output is gated.
+    #[inline]
+    pub const fn is_pll_output_gated(self) -> bool {
+        self.0 & Self::PLL_OUTPUT_GATE != 0
+    }
+    /// Get PLL P1 factor.
+    #[inline]
+    pub const fn pll_p1(self) -> u8 {
+        (self.0 & Self::PLL_P1) as u8
+    }
+    /// Set PLL P1 factor.
+    #[inline]
+    pub const fn set_pll_p1(self, val: u8) -> Self {
+        Self((self.0 & !Self::PLL_P1) | val as u32)
+    }
+    /// Get PLL P0 factor.
+    #[inline]
+    pub const fn pll_p0(self) -> u8 {
+        (self.0 & Self::PLL_P0) as u8
+    }
+    /// Set PLL P0 factor.
+    #[inline]
+    pub const fn set_pll_p0(self, val: u8) -> Self {
+        Self((self.0 & !Self::PLL_P0) | val as u32)
+    }
+    /// Get PLL N factor.
+    #[inline]
+    pub const fn pll_n(self) -> u8 {
+        (self.0 & Self::PLL_N) as u8
+    }
+    /// Set PLL N factor.
+    #[inline]
+    pub const fn set_pll_n(self, val: u8) -> Self {
+        Self((self.0 & !Self::PLL_N) | val as u32)
+    }
+    /// Get PLL M factor.
+    #[inline]
+    pub const fn pll_m(self) -> u8 {
+        ((self.0 & Self::PLL_M) >> 8) as u8
+    }
+    /// Set PLL M factor.
+    #[inline]
+    pub const fn set_pll_m(self, val: u8) -> Self {
+        Self((self.0 & !Self::PLL_M) | ((val as u32) << 8))
+    }
+}
 
 /// AXI CPU clock source.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -169,6 +352,9 @@ pub struct CpuAxiConfig(u32);
 
 impl CpuAxiConfig {
     const CPU_CLK_SEL: u32 = 0x7 << 24;
+    const FACTOR_P: u32 = 0x3 << 16;
+    const FACTOR_N: u32 = 0x3 << 8;
+    const FACTOR_M: u32 = 0x3 << 0;
 
     /// Get AXI CPU clock source.
     #[inline]
@@ -198,6 +384,46 @@ impl CpuAxiConfig {
         };
         Self((self.0 & !Self::CPU_CLK_SEL) | (val << 24))
     }
+    /// Get AXI CPU clock divide factor P.
+    #[inline]
+    pub const fn factor_p(self) -> FactorP {
+        match (self.0 & Self::FACTOR_P) >> 16 {
+            0 => FactorP::P1,
+            1 => FactorP::P2,
+            2 => FactorP::P4,
+            _ => unreachable!(),
+        }
+    }
+    /// Set AXI CPU clock divide factor P.
+    #[inline]
+    pub const fn set_factor_p(self, val: FactorP) -> Self {
+        let val = match val {
+            FactorP::P1 => 0,
+            FactorP::P2 => 1,
+            FactorP::P4 => 2,
+        };
+        Self((self.0 & !Self::FACTOR_N) | (val << 8))
+    }
+    /// Get AXI CPU clock divide factor N.
+    #[inline]
+    pub const fn factor_n(self) -> u8 {
+        ((self.0 & Self::FACTOR_N) >> 8) as u8
+    }
+    /// Set AXI CPU clock divide factor N.
+    #[inline]
+    pub const fn set_factor_n(self, val: u8) -> Self {
+        Self((self.0 & !Self::FACTOR_N) | ((val as u32) << 8))
+    }
+    /// Get AXI CPU clock divide factor M.
+    #[inline]
+    pub const fn factor_m(self) -> u8 {
+        (self.0 & Self::FACTOR_M) as u8
+    }
+    /// Set AXI CPU clock divide factor M.
+    #[inline]
+    pub const fn set_factor_m(self, val: u8) -> Self {
+        Self((self.0 & !Self::FACTOR_M) | val as u32)
+    }
 }
 
 /// Clock divide factor N.
@@ -211,6 +437,17 @@ pub enum FactorN {
     N4,
     /// Divide frequency by 8.
     N8,
+}
+
+/// Clock divide factor P.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FactorP {
+    /// Don't divide.
+    P1,
+    /// Divide frequency by 2.
+    P2,
+    /// Divide frequency by 4.
+    P4,
 }
 
 /// UART Bus Gating Reset register.
