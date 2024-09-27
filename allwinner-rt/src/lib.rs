@@ -5,10 +5,10 @@
 //! Here's an sample usage of this crate:
 //!
 //! ```no_run
-//! use allwinner_rt::{entry, Parameters, Handover};
+//! use allwinner_rt::{entry, Clocks, Peripherals};
 //!
 //! #[entry]
-//! fn main(params: Parameters) -> Handover {
+//! fn main(p: Peripherals, c: Clocks) {
 //!     /* code */
 //! }
 //! ```
