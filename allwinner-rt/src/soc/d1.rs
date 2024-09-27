@@ -13,6 +13,8 @@ pub struct Peripherals<'a> {
     pub spi0: SPI0,
     /// Common control peripheral of DDR SDRAM.
     pub com: COM,
+    /// Memory controller physical layer (PHY) of DDR SDRAM.
+    pub phy: PHY,
     /// Clock control unit peripheral.
     pub ccu: CCU,
     /// Platform-local Interrupt Controller.
@@ -28,6 +30,8 @@ soc! {
     pub struct SPI0 => 0x04025000, allwinner_hal::spi::RegisterBlock;
     /// Common control peripheral of DDR SDRAM.
     pub struct COM => 0x03102000, allwinner_hal::com::RegisterBlock;
+    /// Memory controller physical layer (PHY) of DDR SDRAM.
+    pub struct PHY => 0x03103000, allwinner_hal::phy::RegisterBlock;
     /// Clock control unit peripheral.
     pub struct CCU => 0x02001000, allwinner_hal::ccu::RegisterBlock;
 
@@ -133,6 +137,7 @@ pub fn __rom_init_params() -> (Peripherals<'static>, Clocks) {
         uart0: UART0 { _private: () },
         spi0: SPI0 { _private: () },
         com: COM { _private: () },
+        phy: PHY { _private: () },
         ccu: CCU { _private: () },
         plic: PLIC { _private: () },
     };
