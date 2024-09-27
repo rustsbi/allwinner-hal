@@ -19,7 +19,7 @@ pub struct RegisterBlock {
     /// 0x0 - CPU PLL Control register.
     pub pll_cpu_control: RW<PllCpuControl>,
     _reserved0: [u32; 3],
-    /// 0x20 - DDR PLL Control register.
+    /// 0x10 - DDR PLL Control register.
     pub pll_ddr_control: RW<PllDdrControl>,
     _reserved1: [u32; 3],
     /// 0x20 - Peripheral PLL Control register 0.
