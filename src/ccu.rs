@@ -87,23 +87,33 @@ impl PllCpuControl {
     pub const fn is_lock_enabled(self) -> bool {
         self.0 & Self::LOCK_ENABLE != 0
     }
-    /// Get if PLL is locked.
+    /// Enable PLL lock.
+    #[inline]
+    pub const fn enable_lock(self) -> Self {
+        Self(self.0 | Self::LOCK_ENABLE)
+    }
+    /// Disable PLL lock.
+    #[inline]
+    pub const fn disable_lock(self) -> Self {
+        Self(self.0 & !Self::LOCK_ENABLE)
+    }
+    /// Get if the PLL locked state is set by hardware.
     #[inline]
     pub const fn is_locked(self) -> bool {
         self.0 & Self::LOCK != 0
     }
-    /// Gate PLL output.
-    #[inline]
-    pub const fn gate_pll_output(self) -> Self {
+    /// Ungate (enable) PLL output.
+    pub const fn ungate_pll_output(self) -> Self {
         Self(self.0 | Self::PLL_OUTPUT_GATE)
     }
-    /// Ungate PLL output.
-    pub const fn ungate_pll_output(self) -> Self {
+    /// Gate (disable) PLL output.
+    #[inline]
+    pub const fn gate_pll_output(self) -> Self {
         Self(self.0 & !Self::PLL_OUTPUT_GATE)
     }
-    /// Get if PLL output is gated.
+    /// Get if PLL output is ungated.
     #[inline]
-    pub const fn is_pll_output_gated(self) -> bool {
+    pub const fn is_pll_output_ungated(self) -> bool {
         self.0 & Self::PLL_OUTPUT_GATE != 0
     }
     /// Get PLL N factor.
@@ -178,23 +188,33 @@ impl PllDdrControl {
     pub const fn is_lock_enabled(self) -> bool {
         self.0 & Self::LOCK_ENABLE != 0
     }
-    /// Get if PLL is locked.
+    /// Enable PLL lock.
+    #[inline]
+    pub const fn enable_lock(self) -> Self {
+        Self(self.0 | Self::LOCK_ENABLE)
+    }
+    /// Disable PLL lock.
+    #[inline]
+    pub const fn disable_lock(self) -> Self {
+        Self(self.0 & !Self::LOCK_ENABLE)
+    }
+    /// Get if the PLL locked state is set by hardware.
     #[inline]
     pub const fn is_locked(self) -> bool {
         self.0 & Self::LOCK != 0
     }
-    /// Gate PLL output.
-    #[inline]
-    pub const fn gate_pll_output(self) -> Self {
+    /// Ungate (enable) PLL output.
+    pub const fn ungate_pll_output(self) -> Self {
         Self(self.0 | Self::PLL_OUTPUT_GATE)
     }
-    /// Ungate PLL output.
-    pub const fn ungate_pll_output(self) -> Self {
+    /// Gate (disable) PLL output.
+    #[inline]
+    pub const fn gate_pll_output(self) -> Self {
         Self(self.0 & !Self::PLL_OUTPUT_GATE)
     }
-    /// Get if PLL output is gated.
+    /// Get if PLL output is ungated.
     #[inline]
-    pub const fn is_pll_output_gated(self) -> bool {
+    pub const fn is_pll_output_ungated(self) -> bool {
         self.0 & Self::PLL_OUTPUT_GATE != 0
     }
     /// Get PLL N factor.
@@ -280,23 +300,33 @@ impl PllPeri0Control {
     pub const fn is_lock_enabled(self) -> bool {
         self.0 & Self::LOCK_ENABLE != 0
     }
-    /// Get if PLL is locked.
+    /// Enable PLL lock.
+    #[inline]
+    pub const fn enable_lock(self) -> Self {
+        Self(self.0 | Self::LOCK_ENABLE)
+    }
+    /// Disable PLL lock.
+    #[inline]
+    pub const fn disable_lock(self) -> Self {
+        Self(self.0 & !Self::LOCK_ENABLE)
+    }
+    /// Get if the PLL locked state is set by hardware.
     #[inline]
     pub const fn is_locked(self) -> bool {
         self.0 & Self::LOCK != 0
     }
-    /// Gate PLL output.
-    #[inline]
-    pub const fn gate_pll_output(self) -> Self {
+    /// Ungate (enable) PLL output.
+    pub const fn ungate_pll_output(self) -> Self {
         Self(self.0 | Self::PLL_OUTPUT_GATE)
     }
-    /// Ungate PLL output.
-    pub const fn ungate_pll_output(self) -> Self {
+    /// Gate (disable) PLL output.
+    #[inline]
+    pub const fn gate_pll_output(self) -> Self {
         Self(self.0 & !Self::PLL_OUTPUT_GATE)
     }
-    /// Get if PLL output is gated.
+    /// Get if PLL output is ungated.
     #[inline]
-    pub const fn is_pll_output_gated(self) -> bool {
+    pub const fn is_pll_output_ungated(self) -> bool {
         self.0 & Self::PLL_OUTPUT_GATE != 0
     }
     /// Get PLL P1 factor.
