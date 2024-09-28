@@ -230,12 +230,12 @@ impl PllDdrControl {
     /// Get PLL M1 factor.
     #[inline]
     pub const fn pll_m1(self) -> u8 {
-        (self.0 & Self::PLL_M1) as u8
+        ((self.0 & Self::PLL_M1) >> 1) as u8
     }
     /// Set PLL M1 factor.
     #[inline]
     pub const fn set_pll_m1(self, val: u8) -> Self {
-        Self((self.0 & !Self::PLL_M1) | val as u32)
+        Self((self.0 & !Self::PLL_M1) | ((val as u32) << 1))
     }
     /// Get PLL M0 factor.
     #[inline]
@@ -332,42 +332,42 @@ impl PllPeri0Control {
     /// Get PLL P1 factor.
     #[inline]
     pub const fn pll_p1(self) -> u8 {
-        (self.0 & Self::PLL_P1) as u8
+        ((self.0 & Self::PLL_P1) >> 20) as u8
     }
     /// Set PLL P1 factor.
     #[inline]
     pub const fn set_pll_p1(self, val: u8) -> Self {
-        Self((self.0 & !Self::PLL_P1) | val as u32)
+        Self((self.0 & !Self::PLL_P1) | ((val as u32) << 20))
     }
     /// Get PLL P0 factor.
     #[inline]
     pub const fn pll_p0(self) -> u8 {
-        (self.0 & Self::PLL_P0) as u8
+        ((self.0 & Self::PLL_P0) >> 16) as u8
     }
     /// Set PLL P0 factor.
     #[inline]
     pub const fn set_pll_p0(self, val: u8) -> Self {
-        Self((self.0 & !Self::PLL_P0) | val as u32)
+        Self((self.0 & !Self::PLL_P0) | ((val as u32) << 16))
     }
     /// Get PLL N factor.
     #[inline]
     pub const fn pll_n(self) -> u8 {
-        (self.0 & Self::PLL_N) as u8
+        ((self.0 & Self::PLL_N) >> 8) as u8
     }
     /// Set PLL N factor.
     #[inline]
     pub const fn set_pll_n(self, val: u8) -> Self {
-        Self((self.0 & !Self::PLL_N) | val as u32)
+        Self((self.0 & !Self::PLL_N) | ((val as u32) << 8))
     }
     /// Get PLL M factor.
     #[inline]
     pub const fn pll_m(self) -> u8 {
-        ((self.0 & Self::PLL_M) >> 8) as u8
+        ((self.0 & Self::PLL_M) >> 1) as u8
     }
     /// Set PLL M factor.
     #[inline]
     pub const fn set_pll_m(self, val: u8) -> Self {
-        Self((self.0 & !Self::PLL_M) | ((val as u32) << 8))
+        Self((self.0 & !Self::PLL_M) | ((val as u32) << 1))
     }
 }
 
@@ -447,7 +447,7 @@ impl CpuAxiConfig {
             FactorP::P2 => 1,
             FactorP::P4 => 2,
         };
-        Self((self.0 & !Self::FACTOR_N) | (val << 8))
+        Self((self.0 & !Self::FACTOR_P) | (val << 16))
     }
     /// Get AXI CPU clock divide factor N.
     #[inline]
