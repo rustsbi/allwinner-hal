@@ -102,18 +102,18 @@ impl PllCpuControl {
     pub const fn is_locked(self) -> bool {
         self.0 & Self::LOCK != 0
     }
-    /// Ungate (enable) PLL output.
-    pub const fn ungate_pll_output(self) -> Self {
+    /// Unmask (enable) PLL output.
+    pub const fn unmask_pll_output(self) -> Self {
         Self(self.0 | Self::PLL_OUTPUT_GATE)
     }
-    /// Gate (disable) PLL output.
+    /// Mask (disable) PLL output.
     #[inline]
-    pub const fn gate_pll_output(self) -> Self {
+    pub const fn mask_pll_output(self) -> Self {
         Self(self.0 & !Self::PLL_OUTPUT_GATE)
     }
-    /// Get if PLL output is ungated.
+    /// Get if PLL output is unmasked.
     #[inline]
-    pub const fn is_pll_output_ungated(self) -> bool {
+    pub const fn is_pll_output_unmasked(self) -> bool {
         self.0 & Self::PLL_OUTPUT_GATE != 0
     }
     /// Get PLL N factor.
@@ -203,18 +203,18 @@ impl PllDdrControl {
     pub const fn is_locked(self) -> bool {
         self.0 & Self::LOCK != 0
     }
-    /// Ungate (enable) PLL output.
-    pub const fn ungate_pll_output(self) -> Self {
+    /// Unmask (enable) PLL output.
+    pub const fn unmask_pll_output(self) -> Self {
         Self(self.0 | Self::PLL_OUTPUT_GATE)
     }
-    /// Gate (disable) PLL output.
+    /// Mask (disable) PLL output.
     #[inline]
-    pub const fn gate_pll_output(self) -> Self {
+    pub const fn mask_pll_output(self) -> Self {
         Self(self.0 & !Self::PLL_OUTPUT_GATE)
     }
-    /// Get if PLL output is ungated.
+    /// Get if PLL output is unmasked.
     #[inline]
-    pub const fn is_pll_output_ungated(self) -> bool {
+    pub const fn is_pll_output_unmasked(self) -> bool {
         self.0 & Self::PLL_OUTPUT_GATE != 0
     }
     /// Get PLL N factor.
@@ -315,18 +315,18 @@ impl PllPeri0Control {
     pub const fn is_locked(self) -> bool {
         self.0 & Self::LOCK != 0
     }
-    /// Ungate (enable) PLL output.
-    pub const fn ungate_pll_output(self) -> Self {
+    /// Unmask (enable) PLL output.
+    pub const fn unmask_pll_output(self) -> Self {
         Self(self.0 | Self::PLL_OUTPUT_GATE)
     }
-    /// Gate (disable) PLL output.
+    /// Mask (disable) PLL output.
     #[inline]
-    pub const fn gate_pll_output(self) -> Self {
+    pub const fn mask_pll_output(self) -> Self {
         Self(self.0 & !Self::PLL_OUTPUT_GATE)
     }
-    /// Get if PLL output is ungated.
+    /// Get if PLL output is unmasked.
     #[inline]
-    pub const fn is_pll_output_ungated(self) -> bool {
+    pub const fn is_pll_output_unmasked(self) -> bool {
         self.0 & Self::PLL_OUTPUT_GATE != 0
     }
     /// Get PLL P1 factor.
