@@ -27,13 +27,22 @@ pub struct RegisterBlock {
     _reserved2: [u32; 311],
     /// 0x500 - CPU AXI Configuration register.
     pub cpu_axi_config: RW<CpuAxiConfig>,
-    _reserved3: [u32; 258],
+    _reserved3: [u32; 15],
+    /// 0x540 - MBUS Clock register.
+    pub mbus_clock: RW<MbusClock>,
+    _reserved4: [u32; 175],
+    /// 0x800 - DRAM Clock Register.
+    pub dram_clock: RW<DramClock>,
+    _reserved5: [u32; 2],
+    /// 0x80c - DRAM Bus Gating Reset register.
+    pub dram_bgr: RW<DramBusGating>,
+    _reserved6: [u32; 63],
     /// 0x90c - UART Bus Gating Reset register.
     pub uart_bgr: RW<UartBusGating>,
-    _reserved4: [u32; 12],
+    _reserved7: [u32; 12],
     /// 0x940..=0x944 - SPI0 Clock Register and SPI1 Clock Register.
     pub spi_clk: [RW<SpiClock>; 2],
-    _reserved5: [u32; 9],
+    _reserved8: [u32; 9],
     /// 0x96c - SPI Bus Gating Reset register.
     pub spi_bgr: RW<SpiBusGating>,
 }
@@ -471,6 +480,39 @@ impl CpuAxiConfig {
     }
 }
 
+/// MBUS Clock register.
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+pub struct MbusClock(u32);
+
+impl MbusClock {
+    // TODO assert_reset, deassert_reset, is_reset_asserted
+}
+
+// TODO enum DramClockSource { PllDdr, PllAudio1, PllPeri2x, PllPeri800M }
+
+/// DRAM Clock Register.
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+pub struct DramClock(u32);
+
+impl DramClock {
+    // TODO bit 31 - is_clock_unmasked, mask_clock, unmask_clock
+    // TODO bit 26:24 - clock_source, set_clock_source (DramClockSource)
+    // TODO bit 9:8 - factor_n, set_factor_n (FactorN)
+    // TODO bit 1:0 - factor_m, set_factor_m (u8)
+}
+
+/// Dram Bus Gating Reset register.
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+pub struct DramBusGating(u32);
+
+impl DramBusGating {
+    // TODO bit 16: pub const fn assert_reset(self) -> Self, deassert_reset
+    // TODO bit 0: gate_mask, gate_pass
+}
+
 /// Clock divide factor N.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FactorN {
@@ -730,8 +772,17 @@ mod tests {
         assert_eq!(offset_of!(RegisterBlock, pll_ddr_control), 0x10);
         assert_eq!(offset_of!(RegisterBlock, pll_peri0_control), 0x20);
         assert_eq!(offset_of!(RegisterBlock, cpu_axi_config), 0x500);
+        assert_eq!(offset_of!(RegisterBlock, mbus_clock), 0x540);
+        assert_eq!(offset_of!(RegisterBlock, dram_clock), 0x800);
+        assert_eq!(offset_of!(RegisterBlock, dram_bgr), 0x80c);
         assert_eq!(offset_of!(RegisterBlock, uart_bgr), 0x90c);
         assert_eq!(offset_of!(RegisterBlock, spi_clk), 0x940);
         assert_eq!(offset_of!(RegisterBlock, spi_bgr), 0x96c);
     }
+    // TODO structure read/write function unit tests.
+    // Please refer to this link while implementing: https://github.com/rustsbi/bouffalo-hal/blob/6ee8ebf5fde184a68f4c3d5a1b7838dbbc7bfdd3/bouffalo-hal/src/i2c.rs#L902
+    // TODO #[test] fn struct_cpu_axi_config_functions()
+    // TODO struct_mbus_clock_functions
+    // TODO struct_dram_clock_functions
+    // TODO struct_dram_bgr_functions
 }
