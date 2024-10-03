@@ -764,7 +764,10 @@ impl<const I: usize> ClockConfig for SPI<I> {
 
 #[cfg(test)]
 mod tests {
-    use super::RegisterBlock;
+    use super::{
+        CpuAxiConfig, CpuClockSource, FactorP, PllCpuControl, PllDdrControl, PllPeri0Control,
+        RegisterBlock,
+    };
     use memoffset::offset_of;
     #[test]
     fn offset_ccu() {
@@ -779,9 +782,290 @@ mod tests {
         assert_eq!(offset_of!(RegisterBlock, spi_clk), 0x940);
         assert_eq!(offset_of!(RegisterBlock, spi_bgr), 0x96c);
     }
+
+    #[test]
+    fn struct_pll_cpu_control_fuctions() {
+        let mut val = PllCpuControl(0x0);
+
+        val = val.enable_pll();
+        assert_eq!(val.0, 0x80000000);
+        assert!(val.is_pll_enabled());
+
+        val = val.disable_pll();
+        assert_eq!(val.0, 0x00000000);
+        assert!(!val.is_pll_enabled());
+
+        val = val.enable_pll_ldo();
+        assert_eq!(val.0, 0x40000000);
+        assert!(val.is_pll_ldo_enabled());
+
+        val = val.disable_pll_ldo();
+        assert_eq!(val.0, 0x00000000);
+        assert!(!val.is_pll_ldo_enabled());
+
+        val = val.enable_lock();
+        assert_eq!(val.0, 0x20000000);
+        assert!(val.is_lock_enabled());
+
+        val = val.disable_lock();
+        assert_eq!(val.0, 0x00000000);
+        assert!(!val.is_lock_enabled());
+
+        let val = PllCpuControl(0x10000000);
+        assert!(val.is_locked());
+        let val = PllCpuControl(0x0);
+        assert!(!val.is_locked());
+
+        let mut val = PllCpuControl(0x0);
+
+        val = val.unmask_pll_output();
+        assert_eq!(val.0, 0x08000000);
+        assert!(val.is_pll_output_unmasked());
+
+        val = val.mask_pll_output();
+        assert_eq!(val.0, 0x00000000);
+        assert!(!val.is_pll_output_unmasked());
+
+        val = val.set_pll_n(0xFF);
+        assert_eq!(val.0, 0x0000FF00);
+        assert_eq!(val.pll_n(), 0xFF);
+
+        val = val.set_pll_n(0x0);
+        assert_eq!(val.0, 0x00000000);
+        assert_eq!(val.pll_n(), 0x0);
+
+        val = val.set_pll_m(0x03);
+        assert_eq!(val.0, 0x00000003);
+        assert_eq!(val.pll_m(), 0x03);
+
+        val = val.set_pll_m(0x0);
+        assert_eq!(val.0, 0x00000000);
+        assert_eq!(val.pll_m(), 0x0);
+    }
+
+    #[test]
+    fn struct_pll_ddr_control_fuctions() {
+        let mut val = PllDdrControl(0x0);
+
+        val = val.enable_pll();
+        assert_eq!(val.0, 0x80000000);
+        assert!(val.is_pll_enabled());
+
+        val = val.disable_pll();
+        assert_eq!(val.0, 0x00000000);
+        assert!(!val.is_pll_enabled());
+
+        val = val.enable_pll_ldo();
+        assert_eq!(val.0, 0x40000000);
+        assert!(val.is_pll_ldo_enabled());
+
+        val = val.disable_pll_ldo();
+        assert_eq!(val.0, 0x00000000);
+        assert!(!val.is_pll_ldo_enabled());
+
+        val = val.enable_lock();
+        assert_eq!(val.0, 0x20000000);
+        assert!(val.is_lock_enabled());
+
+        val = val.disable_lock();
+        assert_eq!(val.0, 0x00000000);
+        assert!(!val.is_lock_enabled());
+
+        let val = PllDdrControl(0x10000000);
+        assert!(val.is_locked());
+        let val = PllDdrControl(0x0);
+        assert!(!val.is_locked());
+
+        let mut val = PllDdrControl(0x0);
+
+        val = val.unmask_pll_output();
+        assert_eq!(val.0, 0x08000000);
+        assert!(val.is_pll_output_unmasked());
+
+        val = val.mask_pll_output();
+        assert_eq!(val.0, 0x00000000);
+        assert!(!val.is_pll_output_unmasked());
+
+        val = val.set_pll_n(0xFF);
+        assert_eq!(val.0, 0x0000FF00);
+        assert_eq!(val.pll_n(), 0xFF);
+
+        val = val.set_pll_n(0x0);
+        assert_eq!(val.0, 0x00000000);
+        assert_eq!(val.pll_n(), 0x0);
+
+        val = val.set_pll_m1(0x01);
+        assert_eq!(val.0, 0x00000002);
+        assert_eq!(val.pll_m1(), 0x01);
+
+        val = val.set_pll_m1(0x0);
+        assert_eq!(val.0, 0x00000000);
+        assert_eq!(val.pll_m1(), 0x0);
+
+        val = val.set_pll_m0(0x01);
+        assert_eq!(val.0, 0x00000001);
+        assert_eq!(val.pll_m0(), 0x01);
+
+        val = val.set_pll_m0(0x0);
+        assert_eq!(val.0, 0x00000000);
+        assert_eq!(val.pll_m0(), 0x0);
+    }
+
+    #[test]
+    fn struct_pll_peri0_control_fuctions() {
+        let mut val = PllPeri0Control(0x0);
+
+        val = val.enable_pll();
+        assert_eq!(val.0, 0x80000000);
+        assert!(val.is_pll_enabled());
+
+        val = val.disable_pll();
+        assert_eq!(val.0, 0x00000000);
+        assert!(!val.is_pll_enabled());
+
+        val = val.enable_pll_ldo();
+        assert_eq!(val.0, 0x40000000);
+        assert!(val.is_pll_ldo_enabled());
+
+        val = val.disable_pll_ldo();
+        assert_eq!(val.0, 0x00000000);
+        assert!(!val.is_pll_ldo_enabled());
+
+        val = val.enable_lock();
+        assert_eq!(val.0, 0x20000000);
+        assert!(val.is_lock_enabled());
+
+        val = val.disable_lock();
+        assert_eq!(val.0, 0x00000000);
+        assert!(!val.is_lock_enabled());
+
+        let val = PllPeri0Control(0x10000000);
+        assert!(val.is_locked());
+        let val = PllPeri0Control(0x0);
+        assert!(!val.is_locked());
+
+        let mut val = PllPeri0Control(0x0);
+
+        val = val.unmask_pll_output();
+        assert_eq!(val.0, 0x08000000);
+        assert!(val.is_pll_output_unmasked());
+
+        val = val.mask_pll_output();
+        assert_eq!(val.0, 0x00000000);
+        assert!(!val.is_pll_output_unmasked());
+
+        val = val.set_pll_p1(0x07);
+        assert_eq!(val.0, 0x00700000);
+        assert_eq!(val.pll_p1(), 0x07);
+
+        val = val.set_pll_p1(0x0);
+        assert_eq!(val.0, 0x00000000);
+        assert_eq!(val.pll_p1(), 0x0);
+
+        val = val.set_pll_p0(0x07);
+        assert_eq!(val.0, 0x00070000);
+        assert_eq!(val.pll_p0(), 0x07);
+
+        val = val.set_pll_p0(0x0);
+        assert_eq!(val.0, 0x00000000);
+        assert_eq!(val.pll_p0(), 0x0);
+
+        val = val.set_pll_n(0xFF);
+        assert_eq!(val.0, 0x0000FF00);
+        assert_eq!(val.pll_n(), 0xFF);
+
+        val = val.set_pll_n(0x0);
+        assert_eq!(val.0, 0x00000000);
+        assert_eq!(val.pll_n(), 0x0);
+
+        val = val.set_pll_m(0x01);
+        assert_eq!(val.0, 0x00000002);
+        assert_eq!(val.pll_m(), 0x01);
+
+        val = val.set_pll_m(0x0);
+        assert_eq!(val.0, 0x00000000);
+        assert_eq!(val.pll_m(), 0x0);
+    }
+
+    #[test]
+    fn struct_cpu_axi_config_fuctions() {
+        let mut val = CpuAxiConfig(0x0);
+
+        for i in 0..7 as u8 {
+            let tmp = match i {
+                0 => CpuClockSource::Osc24M,
+                1 => CpuClockSource::Clk32K,
+                2 => CpuClockSource::Clk16MRC,
+                3 => CpuClockSource::PllCpu,
+                4 => CpuClockSource::PllPeri1x,
+                5 => CpuClockSource::PllPeri2x,
+                6 => CpuClockSource::PllPeri800M,
+                _ => panic!("impossible clock source"),
+            };
+
+            val = val.set_clock_source(tmp);
+
+            match i {
+                0 => assert_eq!(val.0, 0x00000000),
+                1 => assert_eq!(val.0, 0x01000000),
+                2 => assert_eq!(val.0, 0x02000000),
+                3 => assert_eq!(val.0, 0x03000000),
+                4 => assert_eq!(val.0, 0x04000000),
+                5 => assert_eq!(val.0, 0x05000000),
+                6 => assert_eq!(val.0, 0x06000000),
+                _ => panic!("impossible clock source"),
+            }
+
+            assert_eq!(val.clock_source(), tmp);
+        }
+
+        val = val.set_clock_source(CpuClockSource::Osc24M);
+        assert_eq!(val.0, 0x00000000);
+        assert_eq!(val.clock_source(), CpuClockSource::Osc24M);
+
+        for i in 0..3 as u8 {
+            let tmp = match i {
+                0 => FactorP::P1,
+                1 => FactorP::P2,
+                2 => FactorP::P4,
+                _ => unreachable!(),
+            };
+
+            val = val.set_factor_p(tmp);
+
+            match i {
+                0 => assert_eq!(val.0, 0x00000000),
+                1 => assert_eq!(val.0, 0x00010000),
+                2 => assert_eq!(val.0, 0x00020000),
+                _ => unreachable!(),
+            }
+
+            assert_eq!(val.factor_p(), tmp);
+        }
+
+        val = val.set_factor_p(FactorP::P1);
+        assert_eq!(val.0, 0x00000000);
+        assert_eq!(val.factor_p(), FactorP::P1);
+
+        val = val.set_factor_n(0x03);
+        assert_eq!(val.0, 0x00000300);
+        assert_eq!(val.factor_n(), 0x03);
+
+        val = val.set_factor_n(0x0);
+        assert_eq!(val.0, 0x00000000);
+        assert_eq!(val.factor_n(), 0x0);
+
+        val = val.set_factor_m(0x03);
+        assert_eq!(val.0, 0x00000003);
+        assert_eq!(val.factor_m(), 0x03);
+
+        val = val.set_factor_m(0x0);
+        assert_eq!(val.0, 0x00000000);
+        assert_eq!(val.factor_m(), 0x0);
+    }
+
     // TODO structure read/write function unit tests.
     // Please refer to this link while implementing: https://github.com/rustsbi/bouffalo-hal/blob/6ee8ebf5fde184a68f4c3d5a1b7838dbbc7bfdd3/bouffalo-hal/src/i2c.rs#L902
-    // TODO #[test] fn struct_cpu_axi_config_functions()
     // TODO struct_mbus_clock_functions
     // TODO struct_dram_clock_functions
     // TODO struct_dram_bgr_functions
