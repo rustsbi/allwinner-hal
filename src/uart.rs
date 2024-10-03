@@ -160,6 +160,37 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> Serial<UART, I, 
     }
 }
 
+impl<UART: AsRef<RegisterBlock>, const I: usize, TX: Transmit<I>, RX: Receive<I>>
+    Serial<UART, I, (TX, RX)>
+{
+    /// Split serial instance into transmit and receive halves.
+    #[inline]
+    pub fn split(self) -> (TransmitHalf<UART, I, TX>, ReceiveHalf<UART, I, RX>) {
+        (
+            TransmitHalf {
+                uart: unsafe { core::ptr::read_volatile(&self.uart) },
+                _pads: self.pads.0,
+            },
+            ReceiveHalf {
+                uart: self.uart,
+                _pads: self.pads.1,
+            },
+        )
+    }
+}
+
+/// Transmit half from splitted serial structure.
+pub struct TransmitHalf<UART, const I: usize, PADS: Transmit<I>> {
+    uart: UART,
+    _pads: PADS,
+}
+
+/// Receive half from splitted serial structure.
+pub struct ReceiveHalf<UART, const I: usize, PADS: Receive<I>> {
+    uart: UART,
+    _pads: PADS,
+}
+
 /// Valid serial pads.
 pub trait Pads<const I: usize> {
     type ClockGate: ccu::ClockGate;
@@ -181,6 +212,18 @@ where
 
 impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> embedded_io::ErrorType
     for Serial<UART, I, PADS>
+{
+    type Error = core::convert::Infallible;
+}
+
+impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Transmit<I>> embedded_io::ErrorType
+    for TransmitHalf<UART, I, PADS>
+{
+    type Error = core::convert::Infallible;
+}
+
+impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Receive<I>> embedded_io::ErrorType
+    for ReceiveHalf<UART, I, PADS>
 {
     type Error = core::convert::Infallible;
 }
@@ -208,6 +251,68 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> embedded_io::Wri
             core::hint::spin_loop()
         }
         Ok(())
+    }
+}
+
+impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Transmit<I>> embedded_io::Write
+    for TransmitHalf<UART, I, PADS>
+{
+    #[inline]
+    fn write(&mut self, buffer: &[u8]) -> Result<usize, Self::Error> {
+        let uart = self.uart.as_ref();
+        for c in buffer {
+            // FIXME: should be transmit_fifo_not_full
+            while uart.usr.read().busy() {
+                core::hint::spin_loop()
+            }
+            uart.rbr_thr().tx_data(*c);
+        }
+        Ok(buffer.len())
+    }
+
+    #[inline]
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        let uart = self.uart.as_ref();
+        while !uart.usr.read().transmit_fifo_empty() {
+            core::hint::spin_loop()
+        }
+        Ok(())
+    }
+}
+
+impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> embedded_io::Read
+    for Serial<UART, I, PADS>
+{
+    #[inline]
+    fn read(&mut self, buffer: &mut [u8]) -> Result<usize, Self::Error> {
+        let uart = self.uart.as_ref();
+        let len = buffer.len();
+        for c in buffer {
+            // FIXME: should be receive_fifo_not_full
+            while uart.usr.read().busy() {
+                core::hint::spin_loop()
+            }
+            *c = uart.rbr_thr().rx_data();
+        }
+        Ok(len)
+    }
+}
+
+impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Receive<I>> embedded_io::Read
+    for ReceiveHalf<UART, I, PADS>
+{
+    #[inline]
+    fn read(&mut self, buffer: &mut [u8]) -> Result<usize, Self::Error> {
+        let uart = self.uart.as_ref();
+        let len = buffer.len();
+        for c in buffer {
+            // FIXME: should be receive_fifo_not_full
+            while uart.usr.read().busy() {
+                core::hint::spin_loop()
+            }
+            *c = uart.rbr_thr().rx_data();
+        }
+        Ok(len)
     }
 }
 
