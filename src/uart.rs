@@ -288,8 +288,7 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> embedded_io::Rea
         let uart = self.uart.as_ref();
         let len = buffer.len();
         for c in buffer {
-            // FIXME: should be receive_fifo_not_full
-            while uart.usr.read().busy() {
+            while !uart.uart16550.lsr().read().is_data_ready() {
                 core::hint::spin_loop()
             }
             *c = uart.rbr_thr().rx_data();
@@ -306,8 +305,7 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Receive<I>> embedded_io::
         let uart = self.uart.as_ref();
         let len = buffer.len();
         for c in buffer {
-            // FIXME: should be receive_fifo_not_full
-            while uart.usr.read().busy() {
+            while !uart.uart16550.lsr().read().is_data_ready() {
                 core::hint::spin_loop()
             }
             *c = uart.rbr_thr().rx_data();
