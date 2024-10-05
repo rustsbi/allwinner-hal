@@ -13,6 +13,7 @@ pub mod com;
 #[macro_use]
 pub mod gpio;
 pub mod phy;
+pub mod smhc;
 pub mod spi;
 #[macro_use]
 pub mod uart;
