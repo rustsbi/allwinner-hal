@@ -58,21 +58,21 @@ pub struct RegisterBlock {
 #[repr(transparent)]
 pub struct GlobalControl(u32);
 
-/// FIFO access mode
+/// FIFO access mode.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AccessMode {
-    // Dma bus
+    // Dma bus.
     Dma,
-    // Ahb bus
+    // Ahb bus.
     Ahb,
 }
 
-/// DDR mode
+/// DDR mode.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DdrMode {
-    // SDR mode
+    // SDR mode.
     Sdr,
-    // DDR mode
+    // DDR mode.
     Ddr,
 }
 
@@ -166,10 +166,10 @@ impl GlobalControl {
     pub const fn set_software_reset(self) -> Self {
         Self(self.0 | Self::SOFT_RST)
     }
-    // note: DMA_RST, FIFO_RST and SOFT_RST are write-1-set, auto-cleared by hardware
-    // TODO has_dma_reset
-    // TODO has_fifo_reset
-    // TODO has_software_reset
+    // Note: DMA_RST, FIFO_RST and SOFT_RST are write-1-set, auto-cleared by hardware.
+    // TODO has_dma_reset.
+    // TODO has_fifo_reset.
+    // TODO has_software_reset.
 }
 
 /// Clock control register.
@@ -247,14 +247,14 @@ impl TimeOut {
 #[repr(transparent)]
 pub struct BusWidth(u32);
 
-/// busWidth
+/// Bus width bits.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Bus_Width {
-    /// 1 bit
+pub enum BusWidthBits {
+    /// 1 bit.
     OneBit,
-    /// 4 bit
+    /// 4 bit.
     FourBit,
-    /// 8 bit
+    /// 8 bit.
     EightBit,
 }
 
@@ -262,17 +262,17 @@ impl BusWidth {
     const CARD_WID: u32 = 0x3 << 0;
     /// Get bus width.
     #[inline]
-    pub const fn bus_width(self) -> Bus_Width {
+    pub const fn bus_width(self) -> BusWidthBits {
         match (self.0 & Self::CARD_WID) >> 0 {
-            0x0 => Bus_Width::OneBit,
-            0x1 => Bus_Width::FourBit,
-            0x2 | 0x3 => Bus_Width::EightBit,
+            0x0 => BusWidthBits::OneBit,
+            0x1 => BusWidthBits::FourBit,
+            0x2 | 0x3 => BusWidthBits::EightBit,
             _ => unreachable!(),
         }
     }
     /// Set bus width.
     #[inline]
-    pub const fn set_bus_width(self, width: Bus_Width) -> Self {
+    pub const fn set_bus_width(self, width: BusWidthBits) -> Self {
         Self((self.0 & !Self::CARD_WID) | ((width as u32) << 0))
     }
 }
@@ -320,12 +320,12 @@ impl ByteCount {
 #[repr(transparent)]
 pub struct Command(u32);
 
-/// busWidth
+/// Transfer direction.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TransferDirection {
-    /// Read from card
+    /// Read from card.
     Read,
-    /// Write to card
+    /// Write to card.
     Write,
 }
 
@@ -378,7 +378,7 @@ impl Command {
     pub const fn disable_send_init_seq(self) -> Self {
         Self(self.0 & !Self::SEND_INIT_SEQ)
     }
-    /// if stop abort command is enabled.
+    /// If stop abort command is enabled.
     #[inline]
     pub const fn is_stop_abort_enabled(self) -> bool {
         (self.0 & Self::STOP_ABT_CMD) != 0
@@ -507,8 +507,8 @@ impl Command {
     pub const fn set_command_index(self, val: u8) -> Self {
         Self((self.0 & !Self::CMD_IDX) | ((val as u32) << 0))
     }
-    // bit 31 (SMHC_CMD_START, or CMD_LOAD) is write-1-set by software, auto-cleared by hardware
-    // TODO has_command_start
+    // Bit 31 (SMHC_CMD_START, or CMD_LOAD) is write-1-set by software, auto-cleared by hardware.
+    // TODO has_command_start.
 }
 
 /// Argument register.
@@ -519,14 +519,14 @@ pub struct Argument(u32);
 impl Argument {
     const CMD_ARG: u32 = 0xFFFFFFFF << 0;
 
-    /// Get argument
+    /// Get argument.
     #[inline]
-    pub fn argument(self) -> u32 {
+    pub const fn argument(self) -> u32 {
         (self.0 & Self::CMD_ARG) as u32 >> 0
     }
-    /// Set argument
+    /// Set argument.
     #[inline]
-    pub fn set_argument(self, arg: u32) -> Self {
+    pub const fn set_argument(self, arg: u32) -> Self {
         Self((self.0 & !Self::CMD_ARG) | ((arg as u32) << 0))
     }
 }
@@ -536,7 +536,7 @@ impl Argument {
 #[repr(transparent)]
 pub struct InterruptMask(u32);
 
-/// interrupt
+/// Interrupt register.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Interrupt {
     CardRemoved,
@@ -579,8 +579,8 @@ impl InterruptMask {
     const CC_INT_EN: u32 = 1 << 2;
     const RE_INT_EN: u32 = 1 << 1;
 
-    /// If the interrupt is masked.
-    pub fn is_interrupt_masked(self, interrupt: Interrupt) -> bool {
+    /// If the interrupt is unmasked.
+    pub const fn is_interrupt_unmasked(self, interrupt: Interrupt) -> bool {
         match interrupt {
             Interrupt::CardRemoved => self.0 & Self::CARD_REMOVAL_INT_EN != 0,
             Interrupt::CardInserted => self.0 & Self::CARD_INSERT_INT_EN != 0,
@@ -602,9 +602,9 @@ impl InterruptMask {
             Interrupt::ResponseError => self.0 & Self::RE_INT_EN != 0,
         }
     }
-    /// Mask the specified interrupt.
+    /// Unmask the specified interrupt.
     #[inline]
-    pub fn mask_interrupt(self, interrupt: Interrupt) -> Self {
+    pub const fn unmask_interrupt(self, interrupt: Interrupt) -> Self {
         match interrupt {
             Interrupt::CardRemoved => Self(self.0 | Self::CARD_REMOVAL_INT_EN),
             Interrupt::CardInserted => Self(self.0 | Self::CARD_INSERT_INT_EN),
@@ -626,9 +626,9 @@ impl InterruptMask {
             Interrupt::ResponseError => Self(self.0 | Self::RE_INT_EN),
         }
     }
-    /// Unmask the specified interrupt.
+    /// Mask the specified interrupt.
     #[inline]
-    pub fn unmask_interrupt(self, interrupt: Interrupt) -> Self {
+    pub const fn mask_interrupt(self, interrupt: Interrupt) -> Self {
         match interrupt {
             Interrupt::CardRemoved => Self(self.0 & !Self::CARD_REMOVAL_INT_EN),
             Interrupt::CardInserted => Self(self.0 & !Self::CARD_INSERT_INT_EN),
@@ -664,7 +664,7 @@ impl InterruptStateMasked {
     const M_DEE_INT: u32 = 1 << 15;
     const M_ACD_INT: u32 = 1 << 14;
     const M_DSE_BC_INT: u32 = 1 << 13;
-    const M_CB_IW_INT_: u32 = 1 << 12;
+    const M_CB_IW_INT: u32 = 1 << 12;
     const M_FU_FO_INT: u32 = 1 << 11;
     const M_DSTO_VSD_INT: u32 = 1 << 10;
     const M_DTO_BDS_INT: u32 = 1 << 9;
@@ -679,7 +679,7 @@ impl InterruptStateMasked {
 
     /// If the interrupt occurs.
     #[inline]
-    pub fn has_interrupt(self, interrupt: Interrupt) -> bool {
+    pub const fn has_interrupt(self, interrupt: Interrupt) -> bool {
         match interrupt {
             Interrupt::CardRemoved => self.0 & Self::M_CARD_REMOVAL_INT != 0,
             Interrupt::CardInserted => self.0 & Self::M_CARD_INSERT_INT != 0,
@@ -687,7 +687,7 @@ impl InterruptStateMasked {
             Interrupt::DataEndBitError => self.0 & Self::M_DEE_INT != 0,
             Interrupt::AutoCommandDone => self.0 & Self::M_ACD_INT != 0,
             Interrupt::DataStartError => self.0 & Self::M_DSE_BC_INT != 0,
-            Interrupt::CommandBusyAndIllegalWrite => self.0 & Self::M_CB_IW_INT_ != 0,
+            Interrupt::CommandBusyAndIllegalWrite => self.0 & Self::M_CB_IW_INT != 0,
             Interrupt::FifoUnderrunOrOverflow => self.0 & Self::M_FU_FO_INT != 0,
             Interrupt::DataStarvationTimeout1V8SwitchDone => self.0 & Self::M_DSTO_VSD_INT != 0,
             Interrupt::DataTimeoutBootDataStart => self.0 & Self::M_DTO_BDS_INT != 0,
@@ -730,7 +730,7 @@ impl InterruptStateRaw {
 
     /// If the interrupt occurs.
     #[inline]
-    pub fn has_interrupt(self, interrupt: Interrupt) -> bool {
+    pub const fn has_interrupt(self, interrupt: Interrupt) -> bool {
         match interrupt {
             Interrupt::CardRemoved => self.0 & Self::CARD_REMOVAL != 0,
             Interrupt::CardInserted => self.0 & Self::CARD_INSERT != 0,
@@ -754,7 +754,7 @@ impl InterruptStateRaw {
     }
     /// Clears the specified interrupt.
     #[inline]
-    pub fn clear_interrupt(self, interrupt: Interrupt) -> Self {
+    pub const fn clear_interrupt(self, interrupt: Interrupt) -> Self {
         match interrupt {
             Interrupt::CardRemoved => Self(self.0 | Self::CARD_REMOVAL),
             Interrupt::CardInserted => Self(self.0 | Self::CARD_INSERT),
@@ -792,22 +792,22 @@ impl Status {
 
     /// Get FIFO level.
     #[inline]
-    pub fn fifo_level(self) -> u16 {
+    pub const fn fifo_level(self) -> u16 {
         ((self.0 & Self::FIFO_LEVEL) >> 17) as u16
     }
     /// Is the card busy?
     #[inline]
-    pub fn card_busy(self) -> bool {
+    pub const fn card_busy(self) -> bool {
         self.0 & Self::CARD_BUSY != 0
     }
     /// Is the FIFO full?
     #[inline]
-    pub fn fifo_full(self) -> bool {
+    pub const fn fifo_full(self) -> bool {
         self.0 & Self::FIFO_FULL != 0
     }
     /// Is the FIFO empty?
     #[inline]
-    pub fn fifo_empty(self) -> bool {
+    pub const fn fifo_empty(self) -> bool {
         self.0 & Self::FIFO_EMPTY != 0
     }
 }
@@ -817,7 +817,7 @@ impl Status {
 #[repr(transparent)]
 pub struct FifoWaterLevel(u32);
 
-/// BurstSize.
+/// Burst size.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BurstSize {
     /// 1 byte.
@@ -837,7 +837,7 @@ impl FifoWaterLevel {
 
     /// Get the burst size of the transmitter. Value is from 0 to 3.(4 to 7 are reserved)
     #[inline]
-    pub fn burst_size(self) -> BurstSize {
+    pub const fn burst_size(self) -> BurstSize {
         match (self.0 & Self::BSIZE_OF_TRANS) >> 28 {
             0 => BurstSize::OneBit,
             1 => BurstSize::FourBit,
@@ -848,27 +848,27 @@ impl FifoWaterLevel {
     }
     /// Set the burst size of the transmitter. Value is from 0 to 3.(4 to 7 are reserved)
     #[inline]
-    pub fn set_burst_size(self, bsize: BurstSize) -> Self {
+    pub const fn set_burst_size(self, bsize: BurstSize) -> Self {
         Self(self.0 & !Self::BSIZE_OF_TRANS | (bsize as u32) << 28)
     }
     /// Get the receive trigger level(0xFF is reserved).
     #[inline]
-    pub fn receive_trigger_level(self) -> u8 {
+    pub const fn receive_trigger_level(self) -> u8 {
         ((self.0 & Self::RX_TL) >> 16) as u8
     }
     /// Set the receive trigger level(0x0 to 0xFE, 0xFF is reserved).
     #[inline]
-    pub fn set_receive_trigger_level(self, level: u8) -> Self {
+    pub const fn set_receive_trigger_level(self, level: u8) -> Self {
         Self(self.0 & !Self::RX_TL | (level as u32) << 16)
     }
     /// Get the transmit trigger level(0x1 to 0xFF, 0x0 is no trigger).
     #[inline]
-    pub fn transmit_trigger_level(self) -> u8 {
+    pub const fn transmit_trigger_level(self) -> u8 {
         ((self.0 & Self::TX_TL) >> 0) as u8
     }
     /// Set the transmit trigger level(0x0 to 0xFF, 0x0 is no trigger).
     #[inline]
-    pub fn set_transmit_trigger_level(self, level: u8) -> Self {
+    pub const fn set_transmit_trigger_level(self, level: u8) -> Self {
         Self(self.0 & !Self::TX_TL | (level as u32) << 0)
     }
 }
@@ -878,9 +878,9 @@ impl FifoWaterLevel {
 #[repr(transparent)]
 pub struct NewTimingSet(u32);
 
-/// Timing phase.
+/// New timing set timing phase.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum NTS_TimingPhase {
+pub enum NtsTimingPhase {
     Offset90,
     Offset180,
     Offset270,
@@ -893,33 +893,33 @@ impl NewTimingSet {
 
     /// If new mode is enabled.
     #[inline]
-    pub fn is_new_mode_enabled(self) -> bool {
+    pub const fn is_new_mode_enabled(self) -> bool {
         (self.0 & Self::MODE_SELECT) != 0
     }
     /// Enable new mode.
     #[inline]
-    pub fn enable_new_mode(self) -> Self {
+    pub const fn enable_new_mode(self) -> Self {
         Self(self.0 | Self::MODE_SELECT)
     }
     /// Disable new mode.
     #[inline]
-    pub fn disable_new_mode(self) -> Self {
+    pub const fn disable_new_mode(self) -> Self {
         Self(self.0 & !Self::MODE_SELECT)
     }
     /// Get timing phase.
     #[inline]
-    pub fn sample_timing_phase(self) -> NTS_TimingPhase {
+    pub const fn sample_timing_phase(self) -> NtsTimingPhase {
         match (self.0 & Self::DAT_SAMPLE_TIMING_PHASE) >> 8 {
-            0x0 => NTS_TimingPhase::Offset90,
-            0x1 => NTS_TimingPhase::Offset180,
-            0x2 => NTS_TimingPhase::Offset270,
-            0x3 => NTS_TimingPhase::Offset0,
+            0x0 => NtsTimingPhase::Offset90,
+            0x1 => NtsTimingPhase::Offset180,
+            0x2 => NtsTimingPhase::Offset270,
+            0x3 => NtsTimingPhase::Offset0,
             _ => unreachable!(),
         }
     }
     /// Set timing phase.
     #[inline]
-    pub fn set_sample_timing_phase(self, phase: NTS_TimingPhase) -> Self {
+    pub const fn set_sample_timing_phase(self, phase: NtsTimingPhase) -> Self {
         Self((self.0 & !Self::DAT_SAMPLE_TIMING_PHASE) | ((phase as u32) << 8))
     }
 }
@@ -928,12 +928,12 @@ impl NewTimingSet {
 #[repr(transparent)]
 pub struct DriveDelayControl(u32);
 
-/// Timing phase.
+/// Drive delay control timing phase.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DDC_TimingPhase {
-    ///Offset is 90 degrees at SDR mode, 45 degrees at DDR mode.
+pub enum DdcTimingPhase {
+    /// Offset is 90 degrees at SDR mode, 45 degrees at DDR mode.
     Sdr90Ddr45,
-    ///Offset is 180 degrees at SDR mode, 90 degrees at DDR mode.
+    /// Offset is 180 degrees at SDR mode, 90 degrees at DDR mode.
     Sdr180Ddr90,
 }
 
@@ -943,30 +943,30 @@ impl DriveDelayControl {
 
     /// Get data drive phase.
     #[inline]
-    pub fn data_drive_phase(self) -> DDC_TimingPhase {
+    pub const fn data_drive_phase(self) -> DdcTimingPhase {
         match (self.0 & Self::DAT_DRV_PH_SEL) >> 17 {
-            0x0 => DDC_TimingPhase::Sdr90Ddr45,
-            0x1 => DDC_TimingPhase::Sdr180Ddr90,
+            0x0 => DdcTimingPhase::Sdr90Ddr45,
+            0x1 => DdcTimingPhase::Sdr180Ddr90,
             _ => unreachable!(),
         }
     }
     /// Set data drive phase.
     #[inline]
-    pub fn set_data_drive_phase(self, phase: DDC_TimingPhase) -> Self {
+    pub const fn set_data_drive_phase(self, phase: DdcTimingPhase) -> Self {
         Self((self.0 & !Self::DAT_DRV_PH_SEL) | ((phase as u32) << 17))
     }
     /// Get command drive phase.
     #[inline]
-    pub fn command_drive_phase(self) -> DDC_TimingPhase {
+    pub const fn command_drive_phase(self) -> DdcTimingPhase {
         match (self.0 & Self::CMD_DRV_PH_SEL) >> 16 {
-            0x0 => DDC_TimingPhase::Sdr90Ddr45,
-            0x1 => DDC_TimingPhase::Sdr180Ddr90,
+            0x0 => DdcTimingPhase::Sdr90Ddr45,
+            0x1 => DdcTimingPhase::Sdr180Ddr90,
             _ => unreachable!(),
         }
     }
     /// Set command drive phase.
     #[inline]
-    pub fn set_command_drive_phase(self, phase: DDC_TimingPhase) -> Self {
+    pub const fn set_command_drive_phase(self, phase: DdcTimingPhase) -> Self {
         Self((self.0 & !Self::CMD_DRV_PH_SEL) | ((phase as u32) << 16))
     }
 }
@@ -974,10 +974,10 @@ impl DriveDelayControl {
 #[cfg(test)]
 mod tests {
     use super::{
-        AccessMode, Argument, BlockSize, BurstSize, BusWidth, Bus_Width, ByteCount, ClockControl,
-        Command, DDC_TimingPhase, DdrMode, DriveDelayControl, FifoWaterLevel, GlobalControl,
-        Interrupt, InterruptMask, InterruptStateMasked, InterruptStateRaw, NTS_TimingPhase,
-        NewTimingSet, RegisterBlock, Status, TimeOut, TransferDirection,
+        AccessMode, Argument, BlockSize, BurstSize, BusWidth, BusWidthBits, ByteCount,
+        ClockControl, Command, DdcTimingPhase, DdrMode, DriveDelayControl, FifoWaterLevel,
+        GlobalControl, Interrupt, InterruptMask, InterruptStateMasked, InterruptStateRaw,
+        NewTimingSet, NtsTimingPhase, RegisterBlock, Status, TimeOut, TransferDirection,
     };
     use memoffset::offset_of;
     #[test]
@@ -1096,16 +1096,16 @@ mod tests {
     fn struct_bus_width_functions() {
         let mut val = BusWidth(0x0);
 
-        val = val.set_bus_width(Bus_Width::OneBit);
-        assert_eq!(val.bus_width(), Bus_Width::OneBit);
+        val = val.set_bus_width(BusWidthBits::OneBit);
+        assert_eq!(val.bus_width(), BusWidthBits::OneBit);
         assert_eq!(val.0, 0x00000000);
 
-        val = val.set_bus_width(Bus_Width::FourBit);
-        assert_eq!(val.bus_width(), Bus_Width::FourBit);
+        val = val.set_bus_width(BusWidthBits::FourBit);
+        assert_eq!(val.bus_width(), BusWidthBits::FourBit);
         assert_eq!(val.0, 0x00000001);
 
-        val = val.set_bus_width(Bus_Width::EightBit);
-        assert_eq!(val.bus_width(), Bus_Width::EightBit);
+        val = val.set_bus_width(BusWidthBits::EightBit);
+        assert_eq!(val.bus_width(), BusWidthBits::EightBit);
         assert_eq!(val.0, 0x00000002);
     }
 
@@ -1280,21 +1280,18 @@ mod tests {
                 _ => unreachable!(),
             };
 
-            val = val.mask_interrupt(int_tmp);
-            assert!(val.is_interrupt_masked(int_tmp));
+            val = val.unmask_interrupt(int_tmp);
+            assert!(val.is_interrupt_unmasked(int_tmp));
             assert_eq!(val.0, val_tmp);
 
-            val = val.unmask_interrupt(int_tmp);
-            assert!(!val.is_interrupt_masked(int_tmp));
+            val = val.mask_interrupt(int_tmp);
+            assert!(!val.is_interrupt_unmasked(int_tmp));
             assert_eq!(val.0, 0x00000000);
-            
         }
     }
 
     #[test]
     fn struct_interrupt_state_masked_functions() {
-        let mut val = InterruptStateMasked(0x0);
-
         for i in 0..18 as u8 {
             let int_tmp = match i {
                 0x0 => Interrupt::CardRemoved,
@@ -1340,15 +1337,13 @@ mod tests {
                 _ => unreachable!(),
             };
 
-            val = InterruptStateMasked(val_tmp);
+            let val = InterruptStateMasked(val_tmp);
             assert!(val.has_interrupt(int_tmp));
         }
     }
 
     #[test]
     fn struct_interrupt_state_raw_functions() {
-        let mut val =InterruptStateRaw(0x0);
-
         for i in 0..18 as u8 {
             let int_tmp = match i {
                 0 => Interrupt::CardRemoved,
@@ -1394,7 +1389,7 @@ mod tests {
                 _ => unreachable!(),
             };
 
-            val = InterruptStateRaw(val_tmp);
+            let mut val = InterruptStateRaw(val_tmp);
             assert!(val.has_interrupt(int_tmp));
 
             val = InterruptStateRaw(0x0);
@@ -1405,9 +1400,7 @@ mod tests {
 
     #[test]
     fn struct_status_functions() {
-        let mut val = Status(0x0);
-
-        val = Status(0x03FE0000);
+        let mut val = Status(0x03FE0000);
         assert_eq!(val.fifo_level(), 0x1FF);
 
         val = Status(0x00000200);
@@ -1471,10 +1464,10 @@ mod tests {
 
         for i in 0..4 as u8 {
             let tp_tmp = match i {
-                0x0 => NTS_TimingPhase::Offset90,
-                0x1 => NTS_TimingPhase::Offset180,
-                0x2 => NTS_TimingPhase::Offset270,
-                0x3 => NTS_TimingPhase::Offset0,
+                0x0 => NtsTimingPhase::Offset90,
+                0x1 => NtsTimingPhase::Offset180,
+                0x2 => NtsTimingPhase::Offset270,
+                0x3 => NtsTimingPhase::Offset0,
                 _ => unreachable!(),
             };
 
@@ -1496,20 +1489,20 @@ mod tests {
     fn struct_drive_delay_control_functions() {
         let mut val = DriveDelayControl(0x0);
 
-        val = val.set_data_drive_phase(DDC_TimingPhase::Sdr180Ddr90);
-        assert_eq!(val.data_drive_phase(), DDC_TimingPhase::Sdr180Ddr90);
+        val = val.set_data_drive_phase(DdcTimingPhase::Sdr180Ddr90);
+        assert_eq!(val.data_drive_phase(), DdcTimingPhase::Sdr180Ddr90);
         assert_eq!(val.0, 0x00020000);
 
-        val = val.set_data_drive_phase(DDC_TimingPhase::Sdr90Ddr45);
-        assert_eq!(val.data_drive_phase(), DDC_TimingPhase::Sdr90Ddr45);
+        val = val.set_data_drive_phase(DdcTimingPhase::Sdr90Ddr45);
+        assert_eq!(val.data_drive_phase(), DdcTimingPhase::Sdr90Ddr45);
         assert_eq!(val.0, 0x00000000);
 
-        val = val.set_command_drive_phase(DDC_TimingPhase::Sdr180Ddr90);
-        assert_eq!(val.command_drive_phase(), DDC_TimingPhase::Sdr180Ddr90);
+        val = val.set_command_drive_phase(DdcTimingPhase::Sdr180Ddr90);
+        assert_eq!(val.command_drive_phase(), DdcTimingPhase::Sdr180Ddr90);
         assert_eq!(val.0, 0x00010000);
 
-        val = val.set_command_drive_phase(DDC_TimingPhase::Sdr90Ddr45);
-        assert_eq!(val.command_drive_phase(), DDC_TimingPhase::Sdr90Ddr45);
+        val = val.set_command_drive_phase(DdcTimingPhase::Sdr90Ddr45);
+        assert_eq!(val.command_drive_phase(), DdcTimingPhase::Sdr90Ddr45);
         assert_eq!(val.0, 0x00000000);
     }
 }
