@@ -1,5 +1,7 @@
+//! SD/MMC Host Controller peripheral.
 use volatile_register::{RO, RW};
 
+/// SD/MMC Host Controller registers.
 #[repr(C)]
 pub struct RegisterBlock {
     /// 0x00 - SMC Global Control Register.
@@ -536,7 +538,7 @@ impl Argument {
 #[repr(transparent)]
 pub struct InterruptMask(u32);
 
-/// Interrupt register.
+/// Interrupt type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Interrupt {
     CardRemoved,
@@ -924,6 +926,7 @@ impl NewTimingSet {
     }
 }
 
+/// Drive Delay Control register.
 #[derive(Clone, Copy)]
 #[repr(transparent)]
 pub struct DriveDelayControl(u32);
