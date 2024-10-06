@@ -7,16 +7,22 @@ use embedded_time::rate::Extensions;
 pub struct Peripherals<'a> {
     /// General Purpose Input/Output peripheral.
     pub gpio: Pads<'a>,
+    /// Clock control unit peripheral.
+    pub ccu: CCU,
     /// Universal Asynchronous Receiver/Transmitter 0.
     pub uart0: UART0,
-    /// Serial Peripheral Interface peripheral 0.
-    pub spi0: SPI0,
     /// Common control peripheral of DDR SDRAM.
     pub com: COM,
     /// Memory controller physical layer (PHY) of DDR SDRAM.
     pub phy: PHY,
-    /// Clock control unit peripheral.
-    pub ccu: CCU,
+    /// SD/MMC Host Controller peripheral 0.
+    pub smhc0: SMHC0,
+    /// SD/MMC Host Controller peripheral 1.
+    pub smhc1: SMHC1,
+    /// SD/MMC Host Controller peripheral 2.
+    pub smhc2: SMHC2,
+    /// Serial Peripheral Interface peripheral 0.
+    pub spi0: SPI0,
     /// Platform-local Interrupt Controller.
     pub plic: PLIC,
 }
@@ -24,17 +30,22 @@ pub struct Peripherals<'a> {
 soc! {
     /// General Purpose Input/Output peripheral.
     pub struct GPIO => 0x02000000, allwinner_hal::gpio::RegisterBlock;
+    /// Clock control unit peripheral.
+    pub struct CCU => 0x02001000, allwinner_hal::ccu::RegisterBlock;
     /// Universal Asynchronous Receiver/Transmitter 0.
     pub struct UART0 => 0x02500000, allwinner_hal::uart::RegisterBlock;
-    /// Serial Peripheral Interface peripheral 0.
-    pub struct SPI0 => 0x04025000, allwinner_hal::spi::RegisterBlock;
     /// Common control peripheral of DDR SDRAM.
     pub struct COM => 0x03102000, allwinner_hal::com::RegisterBlock;
     /// Memory controller physical layer (PHY) of DDR SDRAM.
     pub struct PHY => 0x03103000, allwinner_hal::phy::RegisterBlock;
-    /// Clock control unit peripheral.
-    pub struct CCU => 0x02001000, allwinner_hal::ccu::RegisterBlock;
-
+    /// SD/MMC Host Controller peripheral 0.
+    pub struct SMHC0 => 0x04020000, allwinner_hal::smhc::RegisterBlock;
+    /// SD/MMC Host Controller peripheral 1.
+    pub struct SMHC1 => 0x04021000, allwinner_hal::smhc::RegisterBlock;
+    /// SD/MMC Host Controller peripheral 2.
+    pub struct SMHC2 => 0x04022000, allwinner_hal::smhc::RegisterBlock;
+    /// Serial Peripheral Interface peripheral 0.
+    pub struct SPI0 => 0x04025000, allwinner_hal::spi::RegisterBlock;
     /// Platform-local Interrupt Controller.
     pub struct PLIC => 0x10000000, plic::Plic;
 }
@@ -134,11 +145,14 @@ pub fn __rom_init_params() -> (Peripherals<'static>, Clocks) {
             pg17: unsafe { Disabled::__new(&_GPIO) },
             pg18: unsafe { Disabled::__new(&_GPIO) },
         },
+        ccu: CCU { _private: () },
         uart0: UART0 { _private: () },
-        spi0: SPI0 { _private: () },
         com: COM { _private: () },
         phy: PHY { _private: () },
-        ccu: CCU { _private: () },
+        smhc0: SMHC0 { _private: () },
+        smhc1: SMHC1 { _private: () },
+        smhc2: SMHC2 { _private: () },
+        spi0: SPI0 { _private: () },
         plic: PLIC { _private: () },
     };
     let clocks = Clocks {
