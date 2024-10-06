@@ -1,0 +1,18 @@
+name: fmt-and-test
+
+on: [push,pull_request]
+
+jobs:
+  fmt-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+    
+      - name: Check format
+        run: cargo fmt --check
+
+      - name: Run test
+        if: ${{ success() }}
+        run: cargo test
