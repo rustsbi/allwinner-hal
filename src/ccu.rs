@@ -486,21 +486,106 @@ impl CpuAxiConfig {
 pub struct MbusClock(u32);
 
 impl MbusClock {
-    // TODO assert_reset, deassert_reset, is_reset_asserted
-}
+    const MBUS_RST: u32 = 0x1 << 30;
 
-// TODO enum DramClockSource { PllDdr, PllAudio1, PllPeri2x, PllPeri800M }
+    /// If reset is asserted.
+    #[inline]
+    pub const fn is_reset_asserted(self) -> bool {
+        self.0 & Self::MBUS_RST == 0
+    }
+    /// Assert reset.
+    #[inline]
+    pub const fn assert_reset(self) -> Self {
+        Self(self.0 & !Self::MBUS_RST)
+    }
+    /// De-assert reset.
+    #[inline]
+    pub const fn deassert_reset(self) -> Self {
+        Self(self.0 | Self::MBUS_RST)
+    }
+}
 
 /// DRAM Clock Register.
 #[derive(Clone, Copy)]
 #[repr(transparent)]
 pub struct DramClock(u32);
 
+/// Dram clock source.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DramClockSource {
+    /// PLL_DDR.
+    PllDdr,
+    /// PLL_AUDIO1 (DIV2).
+    PllAudio1,
+    /// PLL_PERI (2X).
+    PllPeri2x,
+    /// PLL_PERI (800M).
+    PllPeri800M,
+}
+
 impl DramClock {
-    // TODO bit 31 - is_clock_unmasked, mask_clock, unmask_clock
-    // TODO bit 26:24 - clock_source, set_clock_source (DramClockSource)
-    // TODO bit 9:8 - factor_n, set_factor_n (FactorN)
-    // TODO bit 1:0 - factor_m, set_factor_m (u8)
+    const DRAM_CLK_GATING: u32 = 0x1 << 31;
+    const DRAM_CLK_SEL: u32 = 0x7 << 24;
+    const DRAM_N: u32 = 0x3 << 8;
+    const DRAM_M: u32 = 0x3 << 0;
+
+    /// If clock is unmasked.
+    #[inline]
+    pub const fn is_clock_unmasked(self) -> bool {
+        self.0 & Self::DRAM_CLK_GATING != 0
+    }
+    /// Unmask (enable) clock.
+    #[inline]
+    pub const fn unmask_clock(self) -> Self {
+        Self(self.0 | Self::DRAM_CLK_GATING)
+    }
+    /// Mask (disable) clock.
+    #[inline]
+    pub const fn mask_clock(self) -> Self {
+        Self(self.0 & !Self::DRAM_CLK_GATING)
+    }
+    /// Get clock source.
+    #[inline]
+    pub const fn clock_source(self) -> DramClockSource {
+        match ((self.0 & Self::DRAM_CLK_SEL) >> 24) as u8 {
+            0x0 => DramClockSource::PllDdr,
+            0x1 => DramClockSource::PllAudio1,
+            0x2 => DramClockSource::PllPeri2x,
+            0x3 => DramClockSource::PllPeri800M,
+            _ => unreachable!(),
+        }
+    }
+    /// Set clock source.
+    #[inline]
+    pub const fn set_clock_source(self, val: DramClockSource) -> Self {
+        Self((self.0 & !Self::DRAM_CLK_SEL) | ((val as u32) << 24))
+    }
+    /// Get factor n.
+    #[inline]
+    pub const fn factor_n(self) -> FactorN {
+        match ((self.0 & Self::DRAM_N) >> 8) as u8 {
+            0x0 => FactorN::N1,
+            0x1 => FactorN::N2,
+            0x2 => FactorN::N4,
+            0x3 => FactorN::N8,
+            _ => unreachable!(),
+        }
+    }
+    /// Set factor n.
+    #[inline]
+    pub const fn set_factor_n(self, val: FactorN) -> Self {
+        Self((self.0 & !Self::DRAM_N) | ((val as u32) << 8))
+    }
+    /// Get factor m (from 0 to 3).
+    #[inline]
+    pub const fn factor_m(self) -> u8 {
+        ((self.0 & Self::DRAM_M) >> 0) as u8
+    }
+    /// Set factor m (from 0 to 3).
+    #[inline]
+    pub const fn set_factor_m(self, val: u8) -> Self {
+        Self((self.0 & !Self::DRAM_M) | ((val as u32) << 0))
+    }
 }
 
 /// Dram Bus Gating Reset register.
@@ -509,8 +594,29 @@ impl DramClock {
 pub struct DramBusGating(u32);
 
 impl DramBusGating {
-    // TODO bit 16: pub const fn assert_reset(self) -> Self, deassert_reset
-    // TODO bit 0: gate_mask, gate_pass
+    const DRAM_RST: u32 = 1 << 16;
+    const DRAM_GATING: u32 = 1 << 0;
+
+    /// Assert dram reset.
+    #[inline]
+    pub const fn assert_reset(self) -> Self {
+        Self(self.0 & !Self::DRAM_RST)
+    }
+    /// De-assert dram reset.
+    #[inline]
+    pub const fn deassert_reset(self) -> Self {
+        Self(self.0 | Self::DRAM_RST)
+    }
+    /// Mask the dram gating.
+    #[inline]
+    pub const fn gate_mask(self) -> Self {
+        Self(self.0 & !Self::DRAM_GATING)
+    }
+    /// Unmask (pass) the dram gating.
+    #[inline]
+    pub const fn gate_pass(self) -> Self {
+        Self(self.0 | Self::DRAM_GATING)
+    }
 }
 
 /// Clock divide factor N.
@@ -765,8 +871,8 @@ impl<const I: usize> ClockConfig for SPI<I> {
 #[cfg(test)]
 mod tests {
     use super::{
-        CpuAxiConfig, CpuClockSource, FactorP, PllCpuControl, PllDdrControl, PllPeri0Control,
-        RegisterBlock,
+        CpuAxiConfig, CpuClockSource, DramBusGating, DramClock, DramClockSource, FactorN, FactorP,
+        MbusClock, PllCpuControl, PllDdrControl, PllPeri0Control, RegisterBlock,
     };
     use memoffset::offset_of;
     #[test]
@@ -784,7 +890,7 @@ mod tests {
     }
 
     #[test]
-    fn struct_pll_cpu_control_fuctions() {
+    fn struct_pll_cpu_control_functions() {
         let mut val = PllCpuControl(0x0);
 
         val = val.enable_pll();
@@ -844,7 +950,7 @@ mod tests {
     }
 
     #[test]
-    fn struct_pll_ddr_control_fuctions() {
+    fn struct_pll_ddr_control_functions() {
         let mut val = PllDdrControl(0x0);
 
         val = val.enable_pll();
@@ -912,7 +1018,7 @@ mod tests {
     }
 
     #[test]
-    fn struct_pll_peri0_control_fuctions() {
+    fn struct_pll_peri0_control_functions() {
         let mut val = PllPeri0Control(0x0);
 
         val = val.enable_pll();
@@ -988,7 +1094,7 @@ mod tests {
     }
 
     #[test]
-    fn struct_cpu_axi_config_fuctions() {
+    fn struct_cpu_axi_config_functions() {
         let mut val = CpuAxiConfig(0x0);
 
         for i in 0..7 as u8 {
@@ -1000,7 +1106,7 @@ mod tests {
                 4 => CpuClockSource::PllPeri1x,
                 5 => CpuClockSource::PllPeri2x,
                 6 => CpuClockSource::PllPeri800M,
-                _ => panic!("impossible clock source"),
+                _ => unreachable!(),
             };
 
             val = val.set_clock_source(tmp);
@@ -1013,7 +1119,7 @@ mod tests {
                 4 => assert_eq!(val.0, 0x04000000),
                 5 => assert_eq!(val.0, 0x05000000),
                 6 => assert_eq!(val.0, 0x06000000),
-                _ => panic!("impossible clock source"),
+                _ => unreachable!(),
             }
 
             assert_eq!(val.clock_source(), tmp);
@@ -1064,9 +1170,99 @@ mod tests {
         assert_eq!(val.factor_m(), 0x0);
     }
 
+    #[test]
+    fn struct_mbus_clock_functions() {
+        let mut val = MbusClock(0x0);
+
+        val = val.deassert_reset();
+        assert!(!val.is_reset_asserted());
+        assert_eq!(val.0, 0x40000000);
+
+        val = val.assert_reset();
+        assert!(val.is_reset_asserted());
+        assert_eq!(val.0, 0x00000000);
+    }
+
+    #[test]
+    fn struct_dram_clock_functions() {
+        let mut val = DramClock(0x0);
+
+        val = val.unmask_clock();
+        assert!(val.is_clock_unmasked());
+        assert_eq!(val.0, 0x80000000);
+
+        val = val.mask_clock();
+        assert!(!val.is_clock_unmasked());
+        assert_eq!(val.0, 0x00000000);
+
+        for i in 0..4 as u8 {
+            let cs_tmp = match i {
+                0x0 => DramClockSource::PllDdr,
+                0x1 => DramClockSource::PllAudio1,
+                0x2 => DramClockSource::PllPeri2x,
+                0x3 => DramClockSource::PllPeri800M,
+                _ => unreachable!(),
+            };
+
+            let val_tmp = match i {
+                0x0 => 0x00000000,
+                0x1 => 0x01000000,
+                0x2 => 0x02000000,
+                0x3 => 0x03000000,
+                _ => unreachable!(),
+            };
+
+            val = val.set_clock_source(cs_tmp);
+            assert_eq!(val.clock_source(), cs_tmp);
+            assert_eq!(val.0, val_tmp);
+        }
+
+        val = DramClock(0x0);
+
+        for i in 0..4 as u8 {
+            let fn_tmp = match i {
+                0x0 => FactorN::N1,
+                0x1 => FactorN::N2,
+                0x2 => FactorN::N4,
+                0x3 => FactorN::N8,
+                _ => unreachable!(),
+            };
+
+            let val_tmp = match i {
+                0x0 => 0x00000000,
+                0x1 => 0x00000100,
+                0x2 => 0x00000200,
+                0x3 => 0x00000300,
+                _ => unreachable!(),
+            };
+
+            val = val.set_factor_n(fn_tmp);
+            assert_eq!(val.factor_n(), fn_tmp);
+            assert_eq!(val.0, val_tmp);
+        }
+
+        val = DramClock(0x0);
+        val = val.set_factor_m(0x03);
+        assert_eq!(val.factor_m(), 0x03);
+        assert_eq!(val.0, 0x00000003);
+    }
+
+    #[test]
+    fn struct_dram_bgr_functions() {
+        let mut val = DramBusGating(0x0);
+
+        val = val.deassert_reset();
+        assert_eq!(val.0, 0x00010000);
+
+        val = val.assert_reset();
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.gate_pass();
+        assert_eq!(val.0, 0x00000001);
+
+        val = val.gate_mask();
+        assert_eq!(val.0, 0x00000000);
+    }
     // TODO structure read/write function unit tests.
     // Please refer to this link while implementing: https://github.com/rustsbi/bouffalo-hal/blob/6ee8ebf5fde184a68f4c3d5a1b7838dbbc7bfdd3/bouffalo-hal/src/i2c.rs#L902
-    // TODO struct_mbus_clock_functions
-    // TODO struct_dram_clock_functions
-    // TODO struct_dram_bgr_functions
 }
