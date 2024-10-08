@@ -1263,6 +1263,120 @@ mod tests {
         val = val.gate_mask();
         assert_eq!(val.0, 0x00000000);
     }
-    // TODO structure read/write function unit tests.
-    // Please refer to this link while implementing: https://github.com/rustsbi/bouffalo-hal/blob/6ee8ebf5fde184a68f4c3d5a1b7838dbbc7bfdd3/bouffalo-hal/src/i2c.rs#L902
+
+    #[test]
+    fn struct_uart_bgr_functions() {
+        let mut val = super::UartBusGating(0x0);
+
+        val = val.gate_pass::<0>();
+        assert_eq!(val.0, 0x00000001);
+
+        val = val.gate_mask::<0>();
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.deassert_reset::<0>();
+        assert_eq!(val.0, 0x00010000);
+
+        val = val.assert_reset::<0>();
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.gate_pass::<1>();
+        assert_eq!(val.0, 0x00000002);
+
+        val = val.gate_mask::<1>();
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.deassert_reset::<1>();
+        assert_eq!(val.0, 0x00020000);
+
+        val = val.assert_reset::<1>();
+        assert_eq!(val.0, 0x00000000);
+    }
+
+    #[test]
+    fn struct_spi_clock_functions() {
+        let mut val = super::SpiClock(0x0);
+
+        for i in 0..5 as u8 {
+            let cs_tmp = match i {
+                0x0 => super::SpiClockSource::Hosc,
+                0x1 => super::SpiClockSource::PllPeri1x,
+                0x2 => super::SpiClockSource::PllPeri2x,
+                0x3 => super::SpiClockSource::PllAudio1Div2,
+                0x4 => super::SpiClockSource::PllAudio1Div5,
+                _ => unreachable!(),
+            };
+
+            let val_tmp = match i {
+                0x0 => 0x00000000,
+                0x1 => 0x01000000,
+                0x2 => 0x02000000,
+                0x3 => 0x03000000,
+                0x4 => 0x04000000,
+                _ => unreachable!(),
+            };
+
+            val = val.set_clock_source(cs_tmp);
+            assert_eq!(val.clock_source(), cs_tmp);
+            assert_eq!(val.0, val_tmp);
+        }
+
+        val = super::SpiClock(0x0);
+
+        for i in 0..4 as u8 {
+            let fn_tmp = match i {
+                0x0 => FactorN::N1,
+                0x1 => FactorN::N2,
+                0x2 => FactorN::N4,
+                0x3 => FactorN::N8,
+                _ => unreachable!(),
+            };
+
+            let val_tmp = match i {
+                0x0 => 0x00000000,
+                0x1 => 0x00000100,
+                0x2 => 0x00000200,
+                0x3 => 0x00000300,
+                _ => unreachable!(),
+            };
+
+            val = val.set_factor_n(fn_tmp);
+            assert_eq!(val.factor_n(), fn_tmp);
+            assert_eq!(val.0, val_tmp);
+        }
+
+        val = super::SpiClock(0x0);
+        val = val.set_factor_m(0x03);
+        assert_eq!(val.factor_m(), 0x03);
+        assert_eq!(val.0, 0x00000003);
+    }
+
+    #[test]
+    fn struct_spi_bgr_functions() {
+        let mut val = super::SpiBusGating(0x0);
+
+        val = val.gate_pass::<0>();
+        assert_eq!(val.0, 0x00000001);
+
+        val = val.gate_mask::<0>();
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.deassert_reset::<0>();
+        assert_eq!(val.0, 0x00010000);
+
+        val = val.assert_reset::<0>();
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.gate_pass::<1>();
+        assert_eq!(val.0, 0x00000002);
+
+        val = val.gate_mask::<1>();
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.deassert_reset::<1>();
+        assert_eq!(val.0, 0x00020000);
+
+        val = val.assert_reset::<1>();
+        assert_eq!(val.0, 0x00000000);
+    }
 }

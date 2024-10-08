@@ -168,10 +168,21 @@ impl GlobalControl {
     pub const fn set_software_reset(self) -> Self {
         Self(self.0 | Self::SOFT_RST)
     }
-    // Note: DMA_RST, FIFO_RST and SOFT_RST are write-1-set, auto-cleared by hardware.
-    // TODO has_dma_reset.
-    // TODO has_fifo_reset.
-    // TODO has_software_reset.
+    /// Is DMA Reset signal cleared by hardware?
+    #[inline]
+    pub const fn is_dma_reset_cleared(self) -> bool {
+        (self.0 & Self::DMA_RST) == 0
+    }
+    /// Is FIFO Reset signal cleared by hardware?
+    #[inline]
+    pub const fn is_fifo_reset_cleared(self) -> bool {
+        (self.0 & Self::FIFO_RST) == 0
+    }
+    /// Is Software Reset signal cleared by hardware?
+    #[inline]
+    pub const fn is_software_reset_cleared(self) -> bool {
+        (self.0 & Self::SOFT_RST) == 0
+    }
 }
 
 /// Clock control register.
@@ -509,8 +520,11 @@ impl Command {
     pub const fn set_command_index(self, val: u8) -> Self {
         Self((self.0 & !Self::CMD_IDX) | ((val as u32) << 0))
     }
-    // Bit 31 (SMHC_CMD_START, or CMD_LOAD) is write-1-set by software, auto-cleared by hardware.
-    // TODO has_command_start.
+    /// Is command start signal cleared by hardware?
+    #[inline]
+    pub const fn is_command_start_cleared(self) -> bool {
+        (self.0 & Self::CMD_LOAD) == 0
+    }
 }
 
 /// Argument register.
@@ -1057,19 +1071,18 @@ mod tests {
         assert_eq!(val.0, 0x000000000);
 
         val = val.set_dma_reset();
+        assert!(!val.is_dma_reset_cleared());
         assert_eq!(val.0, 0x00000004);
 
         val = GlobalControl(0x0);
         val = val.set_fifo_reset();
+        assert!(!val.is_fifo_reset_cleared());
         assert_eq!(val.0, 0x00000002);
 
         val = GlobalControl(0x0);
         val = val.set_software_reset();
+        assert!(!val.is_software_reset_cleared());
         assert_eq!(val.0, 0x00000001);
-
-        // TODO has_dma_reset
-        // TODO has_fifo_reset
-        // TODO has_software_reset
     }
 
     #[test]
@@ -1146,6 +1159,7 @@ mod tests {
         let mut val = Command(0x0);
 
         val = val.set_command_start();
+        assert!(!val.is_command_start_cleared());
         assert_eq!(val.0, 0x80000000);
 
         val = Command(0x0);
@@ -1232,8 +1246,6 @@ mod tests {
         val = val.set_command_index(0x3F);
         assert_eq!(val.command_index(), 0x3F);
         assert_eq!(val.0, 0x0000003F);
-
-        // TODO has_command_start
     }
 
     #[test]
