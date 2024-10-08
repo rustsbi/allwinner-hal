@@ -1,7 +1,7 @@
 //! SoC configuration on D1-like chips.
 
 use crate::{
-    spi::{Clk, Miso, Mosi},
+    smhc, spi,
     uart::{Receive, Transmit},
 };
 use core::num::NonZeroU32;
@@ -155,15 +155,26 @@ impl_pins_trait! {
 
 // SPI PINS
 impl_pins_trait! {
-    ('B', 9, 5): Miso<1>;
-    ('B', 10, 5): Mosi<1>;
-    ('B', 11, 5): Clk<1>;
-    ('C', 2, 2): Clk<0>;
-    ('C', 4, 2): Mosi<0>;
-    ('C', 5, 2): Miso<0>;
-    ('D', 11, 4): Clk<1>;
-    ('D', 12, 4): Mosi<1>;
-    ('D', 13, 4): Miso<1>;
+    ('B', 9, 5): spi::Miso<1>;
+    ('B', 10, 5): spi::Mosi<1>;
+    ('B', 11, 5): spi::Clk<1>;
+    ('C', 2, 2): spi::Clk<0>;
+    ('C', 4, 2): spi::Mosi<0>;
+    ('C', 5, 2): spi::Miso<0>;
+    ('D', 11, 4): spi::Clk<1>;
+    ('D', 12, 4): spi::Mosi<1>;
+    ('D', 13, 4): spi::Miso<1>;
+}
+
+// SMHC pins
+impl_pins_trait! {
+    ('F', 0, 2): smhc::Data<1>;
+    ('F', 1, 2): smhc::Data<0>;
+    ('F', 2, 2): smhc::Clk;
+    ('F', 3, 2): smhc::Cmd;
+    ('F', 4, 2): smhc::Data<3>;
+    ('F', 5, 2): smhc::Data<2>;
+    // TODO other SDC{0,1,2} pins. Please refer to Section 9.7.3.2 'GPIO Multiplex Function'.
 }
 
 /// Allwinner D1 interrupts.

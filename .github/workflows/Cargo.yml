@@ -1,6 +1,6 @@
-name: CI
+name: Cargo
 
-on: [push,pull_request]
+on: [push, pull_request]
 
 env:
   CARGO_TERM_COLOR: always
