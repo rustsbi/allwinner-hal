@@ -12,7 +12,7 @@
 //!     /* code */
 //! }
 //! ```
-#![feature(naked_functions, asm_const)]
+#![feature(naked_functions)]
 #![no_std]
 
 #[macro_use]
@@ -25,8 +25,6 @@ mod mctl;
 pub use mctl::init as dram_init;
 
 pub use allwinner_rt_macros::entry;
-
-use core::arch::asm;
 
 pub mod soc {
     pub mod d1;
@@ -61,7 +59,7 @@ unsafe extern "C" fn start() -> ! {
     const STACK_SIZE: usize = 4 * 1024;
     #[link_section = ".bss.uninit"]
     static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
-    asm!(
+    core::arch::naked_asm!(
         // Enable T-Head ISA extension
         "li     t1, 1 << 22",
         "csrs   0x7C0, t1",
@@ -102,7 +100,6 @@ unsafe extern "C" fn start() -> ! {
         stack      =   sym STACK,
         stack_size = const STACK_SIZE,
         main       =   sym main,
-        options(noreturn)
     )
 }
 
