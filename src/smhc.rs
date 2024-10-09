@@ -63,18 +63,18 @@ pub struct GlobalControl(u32);
 /// FIFO access mode.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum AccessMode {
-    // Dma bus.
+    /// Dma bus.
     Dma,
-    // Ahb bus.
+    /// Ahb bus.
     Ahb,
 }
 
 /// DDR mode.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DdrMode {
-    // SDR mode.
+    /// SDR mode.
     Sdr,
-    // DDR mode.
+    /// DDR mode.
     Ddr,
 }
 

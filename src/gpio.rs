@@ -359,7 +359,7 @@ impl<'a, const P: char, const N: u8> Disabled<'a, P, N> {
         set_mode(self)
     }
 
-    // Internal constructor for ROM runtime. Do not use.
+    /// Internal constructor for ROM runtime. Do not use.
     #[doc(hidden)]
     #[inline(always)]
     pub const unsafe fn __new(gpio: &'a RegisterBlock) -> Self {
