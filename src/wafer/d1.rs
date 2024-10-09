@@ -174,7 +174,18 @@ impl_pins_trait! {
     ('F', 3, 2): smhc::Cmd;
     ('F', 4, 2): smhc::Data<3>;
     ('F', 5, 2): smhc::Data<2>;
-    // TODO other SDC{0,1,2} pins. Please refer to Section 9.7.3.2 'GPIO Multiplex Function'.
+    ('G', 0, 2): smhc::Clk;
+    ('G', 1, 2): smhc::Cmd;
+    ('G', 2, 2): smhc::Data<0>;
+    ('G', 3, 2): smhc::Data<1>;
+    ('G', 4, 2): smhc::Data<2>;
+    ('G', 5, 2): smhc::Data<3>;
+    ('C', 2, 3): smhc::Clk;
+    ('C', 3, 3): smhc::Cmd;
+    ('C', 4, 3): smhc::Data<2>;
+    ('C', 5, 3): smhc::Data<1>;
+    ('C', 6, 3): smhc::Data<0>;
+    ('C', 7, 3): smhc::Data<3>;
 }
 
 /// Allwinner D1 interrupts.

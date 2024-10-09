@@ -813,17 +813,14 @@ impl ClockGate for DRAM {
     #[inline]
     unsafe fn reset(ccu: &ccu::RegisterBlock) {
         let dram_bgr = ccu.dram_bgr.read();
-        ccu.dram_bgr
-            .write(dram_bgr.gate_mask().assert_reset());
+        ccu.dram_bgr.write(dram_bgr.gate_mask().assert_reset());
         let dram_bgr = ccu.dram_bgr.read();
-        ccu.dram_bgr
-            .write(dram_bgr.gate_pass().deassert_reset());
+        ccu.dram_bgr.write(dram_bgr.gate_pass().deassert_reset());
     }
     #[inline]
     unsafe fn free(ccu: &ccu::RegisterBlock) {
         let dram_bgr = ccu.dram_bgr.read();
-        ccu.dram_bgr
-            .write(dram_bgr.gate_mask().assert_reset());
+        ccu.dram_bgr.write(dram_bgr.gate_mask().assert_reset());
     }
 }
 
@@ -842,7 +839,7 @@ impl ClockConfig for DRAM {
             dram_clk
                 .set_clock_source(source)
                 .set_factor_m(factor_m)
-                .set_factor_n(factor_n)
+                .set_factor_n(factor_n),
         )
     }
 }
