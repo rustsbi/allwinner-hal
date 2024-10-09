@@ -31,18 +31,24 @@ pub struct RegisterBlock {
     /// 0x540 - MBUS Clock register.
     pub mbus_clock: RW<MbusClock>,
     _reserved4: [u32; 175],
-    /// 0x800 - DRAM Clock Register.
+    /// 0x800 - DRAM Clock register.
     pub dram_clock: RW<DramClock>,
     _reserved5: [u32; 2],
     /// 0x80c - DRAM Bus Gating Reset register.
     pub dram_bgr: RW<DramBusGating>,
-    _reserved6: [u32; 63],
+    _reserved6: [u32; 8],
+    /// 0x830..=0x838 - SMHC0 Clock register, SMHC1 Clock register and SMHC2 Clock register.
+    pub smhc_clk: [RW<SmhcClock>; 3],
+    _reserved7: [u32; 4],
+    /// 0x84c - SMHC Bus Gating Reset register.
+    pub smhc_bgr: RW<SmhcBusGating>,
+    _reserved8: [u32; 47],
     /// 0x90c - UART Bus Gating Reset register.
     pub uart_bgr: RW<UartBusGating>,
-    _reserved7: [u32; 12],
-    /// 0x940..=0x944 - SPI0 Clock Register and SPI1 Clock Register.
+    _reserved9: [u32; 12],
+    /// 0x940..=0x944 - SPI0 Clock register and SPI1 Clock register.
     pub spi_clk: [RW<SpiClock>; 2],
-    _reserved8: [u32; 9],
+    _reserved10: [u32; 9],
     /// 0x96c - SPI Bus Gating Reset register.
     pub spi_bgr: RW<SpiBusGating>,
 }
@@ -505,7 +511,7 @@ impl MbusClock {
     }
 }
 
-/// DRAM Clock Register.
+/// DRAM Clock register.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct DramClock(u32);
@@ -513,13 +519,13 @@ pub struct DramClock(u32);
 /// Dram clock source.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DramClockSource {
-    /// PLL_DDR.
+    /// DRAM PLL.
     PllDdr,
-    /// PLL_AUDIO1 (DIV2).
-    PllAudio1,
-    /// PLL_PERI (2X).
+    /// Audio PLL (div 2).
+    PllAudio1Div2,
+    /// Peripheral PLL (2x).
     PllPeri2x,
-    /// PLL_PERI (800M).
+    /// 800-MHz Peripheral PLL.
     PllPeri800M,
 }
 
@@ -549,7 +555,7 @@ impl DramClock {
     pub const fn clock_source(self) -> DramClockSource {
         match ((self.0 & Self::DRAM_CLK_SEL) >> 24) as u8 {
             0x0 => DramClockSource::PllDdr,
-            0x1 => DramClockSource::PllAudio1,
+            0x1 => DramClockSource::PllAudio1Div2,
             0x2 => DramClockSource::PllPeri2x,
             0x3 => DramClockSource::PllPeri800M,
             _ => unreachable!(),
@@ -671,7 +677,7 @@ impl UartBusGating {
     }
 }
 
-/// SPI Clock Register.
+/// SPI Clock register.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct SpiClock(u32);
@@ -911,6 +917,116 @@ impl<const I: usize> ClockConfig for SPI<I> {
     }
 }
 
+/// SMHC Clock register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct SmhcClock(u32);
+
+impl SmhcClock {
+    const CLK_SRC_SEL: u32 = 0x7 << 24;
+    const FACTOR_N: u32 = 0x3 << 8;
+    const FACTOR_M: u32 = 0xf << 0;
+    /// Get SMHC clock source.
+    #[inline]
+    pub const fn clock_source(self) -> SmhcClockSource {
+        match (self.0 & Self::CLK_SRC_SEL) >> 24 {
+            0x0 => SmhcClockSource::Hosc,
+            0x1 => SmhcClockSource::PllPeri1x,
+            0x2 => SmhcClockSource::PllPeri2x,
+            0x3 => SmhcClockSource::PllPeri800M,
+            0x4 => SmhcClockSource::PllAudio1Div2,
+            _ => panic!("impossible clock source"),
+        }
+    }
+    /// Set SMHC clock source.
+    #[inline]
+    pub const fn set_clock_source(self, val: SmhcClockSource) -> Self {
+        let val = match val {
+            SmhcClockSource::Hosc => 0x0,
+            SmhcClockSource::PllPeri1x => 0x1,
+            SmhcClockSource::PllPeri2x => 0x2,
+            SmhcClockSource::PllPeri800M => 0x3,
+            SmhcClockSource::PllAudio1Div2 => 0x4,
+        };
+        Self((self.0 & !Self::CLK_SRC_SEL) | (val << 24))
+    }
+    /// Get SMHC clock divide factor N.
+    #[inline]
+    pub const fn factor_n(self) -> FactorN {
+        match (self.0 & Self::FACTOR_N) >> 8 {
+            0 => FactorN::N1,
+            1 => FactorN::N2,
+            2 => FactorN::N4,
+            3 => FactorN::N8,
+            _ => unreachable!(),
+        }
+    }
+    /// Set SMHC clock divide factor N.
+    #[inline]
+    pub const fn set_factor_n(self, val: FactorN) -> Self {
+        let val = match val {
+            FactorN::N1 => 0,
+            FactorN::N2 => 1,
+            FactorN::N4 => 2,
+            FactorN::N8 => 3,
+        };
+        Self((self.0 & !Self::FACTOR_N) | (val << 8))
+    }
+    /// Get SMHC clock divide factor M.
+    #[inline]
+    pub const fn factor_m(self) -> u8 {
+        (self.0 & Self::FACTOR_M) as u8
+    }
+    /// Set SMHC clock divide factor M.
+    #[inline]
+    pub const fn set_factor_m(self, val: u8) -> Self {
+        Self((self.0 & !Self::FACTOR_M) | val as u32)
+    }
+}
+
+/// SMHC clock source.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SmhcClockSource {
+    /// HOSC.
+    Hosc,
+    /// Peripheral PLL (1x).
+    PllPeri1x,
+    /// Peripheral PLL (2x).
+    PllPeri2x,
+    /// 800-MHz Peripheral PLL.
+    PllPeri800M,
+    /// Audio PLL (div 2).
+    PllAudio1Div2,
+}
+
+/// SMHC Clock Reset register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct SmhcBusGating(u32);
+
+impl SmhcBusGating {
+    /// Disable clock gate for SMHC `I`.
+    #[inline]
+    pub const fn gate_mask<const I: usize>(self) -> Self {
+        Self(self.0 & !(1 << I))
+    }
+    /// Enable clock gate for SMHC `I`.
+    #[inline]
+    pub const fn gate_pass<const I: usize>(self) -> Self {
+        Self(self.0 | (1 << I))
+    }
+    /// Assert reset signal for SMHC `I`.
+    #[inline]
+    pub const fn assert_reset<const I: usize>(self) -> Self {
+        Self(self.0 & !(1 << (I + 16)))
+    }
+    /// Deassert reset signal for SMHC `I`.
+    #[inline]
+    pub const fn deassert_reset<const I: usize>(self) -> Self {
+        Self(self.0 | (1 << (I + 16)))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -927,6 +1043,8 @@ mod tests {
         assert_eq!(offset_of!(RegisterBlock, mbus_clock), 0x540);
         assert_eq!(offset_of!(RegisterBlock, dram_clock), 0x800);
         assert_eq!(offset_of!(RegisterBlock, dram_bgr), 0x80c);
+        assert_eq!(offset_of!(RegisterBlock, smhc_clk), 0x830);
+        assert_eq!(offset_of!(RegisterBlock, smhc_bgr), 0x84c);
         assert_eq!(offset_of!(RegisterBlock, uart_bgr), 0x90c);
         assert_eq!(offset_of!(RegisterBlock, spi_clk), 0x940);
         assert_eq!(offset_of!(RegisterBlock, spi_bgr), 0x96c);
@@ -1241,7 +1359,7 @@ mod tests {
         for i in 0..4 as u8 {
             let cs_tmp = match i {
                 0x0 => DramClockSource::PllDdr,
-                0x1 => DramClockSource::PllAudio1,
+                0x1 => DramClockSource::PllAudio1Div2,
                 0x2 => DramClockSource::PllPeri2x,
                 0x3 => DramClockSource::PllPeri800M,
                 _ => unreachable!(),
