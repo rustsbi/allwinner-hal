@@ -48,7 +48,7 @@ pub struct RegisterBlock {
 }
 
 /// CPU PLL Control register.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct PllCpuControl(u32);
 
@@ -148,7 +148,7 @@ impl PllCpuControl {
 }
 
 /// DDR PLL Control register.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct PllDdrControl(u32);
 
@@ -259,7 +259,7 @@ impl PllDdrControl {
 }
 
 /// Peripheral PLL Control register 0.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct PllPeri0Control(u32);
 
@@ -381,7 +381,7 @@ impl PllPeri0Control {
 }
 
 /// AXI CPU clock source.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CpuClockSource {
     /// 24-MHz external oscillator.
     Osc24M,
@@ -400,7 +400,7 @@ pub enum CpuClockSource {
 }
 
 /// CPU AXI Configuration register.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct CpuAxiConfig(u32);
 
@@ -481,7 +481,7 @@ impl CpuAxiConfig {
 }
 
 /// MBUS Clock register.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct MbusClock(u32);
 
@@ -506,7 +506,7 @@ impl MbusClock {
 }
 
 /// DRAM Clock Register.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct DramClock(u32);
 
@@ -589,7 +589,7 @@ impl DramClock {
 }
 
 /// Dram Bus Gating Reset register.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct DramBusGating(u32);
 
@@ -620,7 +620,7 @@ impl DramBusGating {
 }
 
 /// Clock divide factor N.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum FactorN {
     /// Don't divide.
     N1,
@@ -633,7 +633,7 @@ pub enum FactorN {
 }
 
 /// Clock divide factor P.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum FactorP {
     /// Don't divide.
     P1,
@@ -644,9 +644,10 @@ pub enum FactorP {
 }
 
 /// UART Bus Gating Reset register.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct UartBusGating(u32);
+
 impl UartBusGating {
     /// Disable clock gate for UART `I`.
     #[inline]
@@ -671,7 +672,7 @@ impl UartBusGating {
 }
 
 /// SPI Clock Register.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct SpiClock(u32);
 
@@ -738,7 +739,7 @@ impl SpiClock {
 }
 
 /// SPI clock source.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SpiClockSource {
     /// HOSC.
     Hosc,
@@ -753,7 +754,7 @@ pub enum SpiClockSource {
 }
 
 /// SPI Bus Gating Reset register.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct SpiBusGating(u32);
 
@@ -806,6 +807,7 @@ pub trait ClockConfig {
 /// Universal Asynchronous Receiver-Transmitter clock gate.
 ///
 /// UART peripheral should be indexed by type parameter `IDX`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct UART<const IDX: usize>;
 
 impl<const I: usize> ClockGate for UART<I> {
@@ -828,6 +830,7 @@ impl<const I: usize> ClockGate for UART<I> {
 }
 
 /// Serial Peripheral Interface clock gate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SPI<const IDX: usize>;
 
 impl<const I: usize> ClockGate for SPI<I> {

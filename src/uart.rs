@@ -41,7 +41,7 @@ impl Default for Config {
 }
 
 /// Serial word length settings.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum WordLength {
     /// 5 bits per word.
     Five,
@@ -54,7 +54,7 @@ pub enum WordLength {
 }
 
 /// Serial parity bit settings.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Parity {
     /// No parity checks.
     None,
@@ -65,7 +65,7 @@ pub enum Parity {
 }
 
 /// Stop bit settings.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum StopBits {
     /// 1 stop bit
     One,
@@ -82,6 +82,7 @@ impl core::ops::Deref for RegisterBlock {
 }
 
 /// Managed serial structure with peripheral and pads.
+#[derive(Debug)]
 pub struct Serial<UART, const I: usize, PADS: Pads<I>> {
     uart: UART,
     pads: PADS,
@@ -180,12 +181,14 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, TX: Transmit<I>, RX: Receive<I>
 }
 
 /// Transmit half from splitted serial structure.
+#[derive(Debug)]
 pub struct TransmitHalf<UART, const I: usize, PADS: Transmit<I>> {
     uart: UART,
     _pads: PADS,
 }
 
 /// Receive half from splitted serial structure.
+#[derive(Debug)]
 pub struct ReceiveHalf<UART, const I: usize, PADS: Receive<I>> {
     uart: UART,
     _pads: PADS,
@@ -315,11 +318,12 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Receive<I>> embedded_io::
 }
 
 /// UART Status Register.
+#[derive(Debug)]
 #[repr(transparent)]
 pub struct USR<R: Register>(UnsafeCell<R>);
 
 /// Status settings for current peripheral.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct UartStatus(u8);
 

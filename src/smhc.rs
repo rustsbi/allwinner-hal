@@ -56,12 +56,12 @@ pub struct RegisterBlock {
 }
 
 /// Global control register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct GlobalControl(u32);
 
 /// FIFO access mode.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum AccessMode {
     // Dma bus.
     Dma,
@@ -70,7 +70,7 @@ pub enum AccessMode {
 }
 
 /// DDR mode.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DdrMode {
     // SDR mode.
     Sdr,
@@ -175,7 +175,7 @@ impl GlobalControl {
 }
 
 /// Clock control register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct ClockControl(u32);
 
@@ -245,12 +245,12 @@ impl TimeOut {
 }
 
 /// Bus width register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct BusWidth(u32);
 
 /// Bus width bits.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BusWidthBits {
     /// 1 bit.
     OneBit,
@@ -280,7 +280,7 @@ impl BusWidth {
 }
 
 /// Block size register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct BlockSize(u32);
 
@@ -299,7 +299,7 @@ impl BlockSize {
 }
 
 /// Byte count register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct ByteCount(u32);
 
@@ -318,12 +318,12 @@ impl ByteCount {
 }
 
 /// Command register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Command(u32);
 
 /// Transfer direction.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TransferDirection {
     /// Read from card.
     Read,
@@ -514,7 +514,7 @@ impl Command {
 }
 
 /// Argument register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Argument(u32);
 
@@ -534,12 +534,12 @@ impl Argument {
 }
 
 /// Interrupt mask register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct InterruptMask(u32);
 
 /// Interrupt type.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Interrupt {
     CardRemoved,
     CardInserted,
@@ -655,7 +655,7 @@ impl InterruptMask {
 }
 
 /// Masked Interrupt state masked register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct InterruptStateMasked(u32);
 
@@ -706,7 +706,7 @@ impl InterruptStateMasked {
 }
 
 /// Raw Interrupt state register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct InterruptStateRaw(u32);
 
@@ -781,7 +781,7 @@ impl InterruptStateRaw {
 }
 
 /// State register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 // note: read-only register, no write functions
 pub struct Status(u32);
@@ -815,12 +815,12 @@ impl Status {
 }
 
 /// FIFO water level register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct FifoWaterLevel(u32);
 
 /// Burst size.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BurstSize {
     /// 1 byte.
     OneBit,
@@ -876,12 +876,12 @@ impl FifoWaterLevel {
 }
 
 /// New timing set register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct NewTimingSet(u32);
 
 /// New timing set timing phase.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum NtsTimingPhase {
     Offset90,
     Offset180,
@@ -927,12 +927,12 @@ impl NewTimingSet {
 }
 
 /// Drive Delay Control register.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct DriveDelayControl(u32);
 
 /// Drive delay control timing phase.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DdcTimingPhase {
     /// Offset is 90 degrees at SDR mode, 45 degrees at DDR mode.
     Sdr90Ddr45,

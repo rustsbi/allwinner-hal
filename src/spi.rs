@@ -239,6 +239,7 @@ impl BurstControl {
 }
 
 /// Transmit data register.
+#[derive(Debug)]
 #[repr(transparent)]
 pub struct TXD(UnsafeCell<u32>);
 
@@ -261,6 +262,7 @@ impl TXD {
 }
 
 /// Receive data register.
+#[derive(Debug)]
 #[repr(transparent)]
 pub struct RXD(UnsafeCell<u32>);
 
@@ -283,6 +285,7 @@ impl RXD {
 }
 
 /// Managed SPI structure with peripheral and pins.
+#[derive(Debug)]
 pub struct Spi<SPI, const I: usize, PINS: Pins<I>> {
     spi: SPI,
     pins: PINS,

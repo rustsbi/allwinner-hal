@@ -54,6 +54,7 @@ pub struct PioPow {
 }
 
 /// External interrupt event.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Event {
     PositiveEdge,
     NegativeEdge,
