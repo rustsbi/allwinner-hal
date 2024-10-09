@@ -33,4 +33,8 @@ default = ["d1"]
 d1 = []
 
 [workspace]
-members = ["allwinner-rt", "allwinner-rt/macros"]
+members = [
+    "allwinner-rt",
+    "allwinner-rt/macros",
+    "examples/nezha-d1",
+]

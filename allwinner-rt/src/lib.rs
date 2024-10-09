@@ -76,27 +76,27 @@ unsafe extern "C" fn start() -> ! {
         // Clear `.bss` section
         "la     t1, sbss
         la      t2, ebss
-    1:  bgeu    t1, t2, 1f
+    3:  bgeu    t1, t2, 3f
         sd      zero, 0(t1)
         addi    t1, t1, 8
-        j       1b
-    1:  ",
+        j       3b
+    3:  ",
         // Prepare data segment
     "   la      t3, sidata
         la      t4, sdata
         la      t5, edata
-    1:  bgeu    t4, t5, 2f
+    3:  bgeu    t4, t5, 2f
         ld      t6, 0(t3)
         sd      t6, 0(t4)
         addi    t3, t3, 8
         addi    t4, t4, 8
-        j       1b",
+        j       3b",
     "2: ",
         // Start Rust main function
         "call   {main}",
         // Platform halt if main function returns
-    "1: wfi
-        j       1b",
+    "3: wfi
+        j       3b",
         stack      =   sym STACK,
         stack_size = const STACK_SIZE,
         main       =   sym main,
