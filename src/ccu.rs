@@ -804,6 +804,49 @@ pub trait ClockConfig {
     );
 }
 
+// TODO: a more proper abstraction considering the PLL source behind peripheral clock
+
+/// Dynamic Random-Access Memory (DRAM) clock gate.
+pub struct DRAM;
+
+impl ClockGate for DRAM {
+    #[inline]
+    unsafe fn reset(ccu: &ccu::RegisterBlock) {
+        let dram_bgr = ccu.dram_bgr.read();
+        ccu.dram_bgr
+            .write(dram_bgr.gate_mask().assert_reset());
+        let dram_bgr = ccu.dram_bgr.read();
+        ccu.dram_bgr
+            .write(dram_bgr.gate_pass().deassert_reset());
+    }
+    #[inline]
+    unsafe fn free(ccu: &ccu::RegisterBlock) {
+        let dram_bgr = ccu.dram_bgr.read();
+        ccu.dram_bgr
+            .write(dram_bgr.gate_mask().assert_reset());
+    }
+}
+
+impl ClockConfig for DRAM {
+    type Source = DramClockSource;
+
+    #[inline]
+    unsafe fn config(
+        source: Self::Source,
+        factor_m: u8,
+        factor_n: FactorN,
+        ccu: &ccu::RegisterBlock,
+    ) {
+        let dram_clk = ccu.dram_clock.read();
+        ccu.dram_clock.write(
+            dram_clk
+                .set_clock_source(source)
+                .set_factor_m(factor_m)
+                .set_factor_n(factor_n)
+        )
+    }
+}
+
 /// Universal Asynchronous Receiver-Transmitter clock gate.
 ///
 /// UART peripheral should be indexed by type parameter `IDX`.
