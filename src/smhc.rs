@@ -361,7 +361,7 @@ impl Command {
     pub const fn set_command_start(self) -> Self {
         Self(self.0 | Self::CMD_LOAD)
     }
-    ///If change clock is enabled.
+    /// If change clock is enabled.
     #[inline]
     pub const fn is_change_clock_enabled(self) -> bool {
         (self.0 & Self::PRG_CLK) != 0
@@ -1075,14 +1075,23 @@ mod tests {
         assert_eq!(val.0, 0x00000004);
 
         val = GlobalControl(0x0);
+        assert!(val.is_dma_reset_cleared());
+
+        val = GlobalControl(0x0);
         val = val.set_fifo_reset();
         assert!(!val.is_fifo_reset_cleared());
         assert_eq!(val.0, 0x00000002);
 
         val = GlobalControl(0x0);
+        assert!(val.is_fifo_reset_cleared());
+
+        val = GlobalControl(0x0);
         val = val.set_software_reset();
         assert!(!val.is_software_reset_cleared());
         assert_eq!(val.0, 0x00000001);
+
+        val = GlobalControl(0x0);
+        assert!(val.is_software_reset_cleared());
     }
 
     #[test]
@@ -1161,6 +1170,9 @@ mod tests {
         val = val.set_command_start();
         assert!(!val.is_command_start_cleared());
         assert_eq!(val.0, 0x80000000);
+
+        val = Command(0x0);
+        assert!(val.is_command_start_cleared());
 
         val = Command(0x0);
         val = val.enable_change_clock();
