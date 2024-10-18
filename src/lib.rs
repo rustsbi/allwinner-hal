@@ -15,6 +15,8 @@ pub mod gpio;
 pub mod phy;
 pub mod smhc;
 pub mod spi;
+#[doc(hidden)]
+pub mod sysctl;
 #[macro_use]
 pub mod uart;
 
