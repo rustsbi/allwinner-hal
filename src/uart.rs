@@ -205,6 +205,44 @@ pub trait Transmit<const I: usize> {}
 /// Valid receive pin for UART peripheral.
 pub trait Receive<const I: usize> {}
 
+#[inline]
+fn uart_write_blocking(
+    uart: &RegisterBlock,
+    buffer: &[u8],
+) -> Result<usize, core::convert::Infallible> {
+    for c in buffer {
+        // FIXME: should be transmit_fifo_not_full
+        while uart.usr.read().busy() {
+            core::hint::spin_loop()
+        }
+        uart.rbr_thr().tx_data(*c);
+    }
+    Ok(buffer.len())
+}
+
+#[inline]
+fn uart_flush_blocking(uart: &RegisterBlock) -> Result<(), core::convert::Infallible> {
+    while !uart.usr.read().transmit_fifo_empty() {
+        core::hint::spin_loop()
+    }
+    Ok(())
+}
+
+#[inline]
+fn uart_read_blocking(
+    uart: &RegisterBlock,
+    buffer: &mut [u8],
+) -> Result<usize, core::convert::Infallible> {
+    let len = buffer.len();
+    for c in buffer {
+        while !uart.uart16550.lsr().read().is_data_ready() {
+            core::hint::spin_loop()
+        }
+        *c = uart.rbr_thr().rx_data();
+    }
+    Ok(len)
+}
+
 impl<const I: usize, T, R> Pads<I> for (T, R)
 where
     T: Transmit<I>,
@@ -236,24 +274,12 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> embedded_io::Wri
 {
     #[inline]
     fn write(&mut self, buffer: &[u8]) -> Result<usize, Self::Error> {
-        let uart = self.uart.as_ref();
-        for c in buffer {
-            // FIXME: should be transmit_fifo_not_full
-            while uart.usr.read().busy() {
-                core::hint::spin_loop()
-            }
-            uart.rbr_thr().tx_data(*c);
-        }
-        Ok(buffer.len())
+        uart_write_blocking(self.uart.as_ref(), buffer)
     }
 
     #[inline]
     fn flush(&mut self) -> Result<(), Self::Error> {
-        let uart = self.uart.as_ref();
-        while !uart.usr.read().transmit_fifo_empty() {
-            core::hint::spin_loop()
-        }
-        Ok(())
+        uart_flush_blocking(self.uart.as_ref())
     }
 }
 
@@ -262,24 +288,12 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Transmit<I>> embedded_io:
 {
     #[inline]
     fn write(&mut self, buffer: &[u8]) -> Result<usize, Self::Error> {
-        let uart = self.uart.as_ref();
-        for c in buffer {
-            // FIXME: should be transmit_fifo_not_full
-            while uart.usr.read().busy() {
-                core::hint::spin_loop()
-            }
-            uart.rbr_thr().tx_data(*c);
-        }
-        Ok(buffer.len())
+        uart_write_blocking(self.uart.as_ref(), buffer)
     }
 
     #[inline]
     fn flush(&mut self) -> Result<(), Self::Error> {
-        let uart = self.uart.as_ref();
-        while !uart.usr.read().transmit_fifo_empty() {
-            core::hint::spin_loop()
-        }
-        Ok(())
+        uart_flush_blocking(self.uart.as_ref())
     }
 }
 
@@ -288,15 +302,7 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> embedded_io::Rea
 {
     #[inline]
     fn read(&mut self, buffer: &mut [u8]) -> Result<usize, Self::Error> {
-        let uart = self.uart.as_ref();
-        let len = buffer.len();
-        for c in buffer {
-            while !uart.uart16550.lsr().read().is_data_ready() {
-                core::hint::spin_loop()
-            }
-            *c = uart.rbr_thr().rx_data();
-        }
-        Ok(len)
+        uart_read_blocking(self.uart.as_ref(), buffer)
     }
 }
 
@@ -305,15 +311,7 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Receive<I>> embedded_io::
 {
     #[inline]
     fn read(&mut self, buffer: &mut [u8]) -> Result<usize, Self::Error> {
-        let uart = self.uart.as_ref();
-        let len = buffer.len();
-        for c in buffer {
-            while !uart.uart16550.lsr().read().is_data_ready() {
-                core::hint::spin_loop()
-            }
-            *c = uart.rbr_thr().rx_data();
-        }
-        Ok(len)
+        uart_read_blocking(self.uart.as_ref(), buffer)
     }
 }
 
