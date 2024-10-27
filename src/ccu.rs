@@ -926,6 +926,8 @@ impl SmhcClock {
     const CLK_SRC_SEL: u32 = 0x7 << 24;
     const FACTOR_N: u32 = 0x3 << 8;
     const FACTOR_M: u32 = 0xf << 0;
+    const CLK_GATING: u32 = 1 << 31;
+
     /// Get SMHC clock source.
     #[inline]
     pub const fn clock_source(self) -> SmhcClockSource {
@@ -981,6 +983,21 @@ impl SmhcClock {
     #[inline]
     pub const fn set_factor_m(self, val: u8) -> Self {
         Self((self.0 & !Self::FACTOR_M) | val as u32)
+    }
+    /// Enable clock gating.
+    #[inline]
+    pub const fn enable_clock_gating(self) -> Self {
+        Self(self.0 | Self::CLK_GATING)
+    }
+    /// Disable clock gating.
+    #[inline]
+    pub const fn disable_clock_gating(self) -> Self {
+        Self(self.0 & !Self::CLK_GATING)
+    }
+    /// Get if clock gating is enabled.
+    #[inline]
+    pub const fn is_clock_gating_enabled(self) -> bool {
+        self.0 & Self::CLK_GATING != 0
     }
 }
 

@@ -47,7 +47,9 @@ pub struct RegisterBlock {
     _reserved2: [u32; 44],
     /// 0x140 - Drive Delay Control register.
     pub drive_delay_control: RW<DriveDelayControl>,
-    _reserved3: [u32; 16],
+    /// 0x144 - Sample Delay Control Register
+    pub sample_delay_control: RW<SampleDelayControl>,
+    _reserved3: [u32; 15],
     /// 0x184 - deskew control control register.
     pub skew_control: RW<u32>,
     _reserved4: [u32; 30],
@@ -192,7 +194,7 @@ pub struct ClockControl(u32);
 
 impl ClockControl {
     const MASK_DATA0: u32 = 1 << 31;
-    const CCLK_CTRL: u32 = 1 << 17;
+    const CCLK_CTRL: u32 = 1 << 16;
     const CCLK_DIV: u32 = 0xFF << 0;
     /// If mask data0 is enabled.
     #[inline]
@@ -356,6 +358,11 @@ impl Command {
     const RESP_RCV: u32 = 0x1 << 6;
     const CMD_IDX: u32 = 0x3F << 0;
 
+    /// Create a new command register.
+    #[inline]
+    pub const fn new() -> Self {
+        Self(0)
+    }
     /// Start command.
     #[inline]
     pub const fn set_command_start(self) -> Self {
@@ -988,6 +995,42 @@ impl DriveDelayControl {
     }
 }
 
+/// Sample Delay Control Register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct SampleDelayControl(u32);
+
+impl SampleDelayControl {
+    const SAMP_DL_SW: u32 = 0x3F << 0;
+    const SAMP_DL_SW_EN: u32 = 1 << 7;
+
+    /// Set sample delay software.
+    #[inline]
+    pub const fn set_sample_delay_software(self, delay: u8) -> Self {
+        Self((self.0 & !Self::SAMP_DL_SW) | ((delay as u32) << 0))
+    }
+    /// Get sample delay software.
+    #[inline]
+    pub const fn sample_delay_software(self) -> u8 {
+        ((self.0 & Self::SAMP_DL_SW) >> 0) as u8
+    }
+    /// Enable sample delay software.
+    #[inline]
+    pub const fn enable_sample_delay_software(self) -> Self {
+        Self(self.0 | Self::SAMP_DL_SW_EN)
+    }
+    /// Disable sample delay software.
+    #[inline]
+    pub const fn disable_sample_delay_software(self) -> Self {
+        Self(self.0 & !Self::SAMP_DL_SW_EN)
+    }
+    /// Get if sample delay software is enabled.
+    #[inline]
+    pub const fn is_sample_delay_software_enabled(self) -> bool {
+        (self.0 & Self::SAMP_DL_SW_EN) != 0
+    }
+}
+
 /// Clock signal pad.
 pub trait Clk {}
 
@@ -1030,6 +1073,7 @@ mod tests {
         assert_eq!(offset_of!(RegisterBlock, dma_state), 0x88);
         assert_eq!(offset_of!(RegisterBlock, dma_interrupt_enable), 0x8C);
         assert_eq!(offset_of!(RegisterBlock, drive_delay_control), 0x140);
+        assert_eq!(offset_of!(RegisterBlock, sample_delay_control), 0x144);
         assert_eq!(offset_of!(RegisterBlock, skew_control), 0x184);
         assert_eq!(offset_of!(RegisterBlock, fifo), 0x200);
     }
@@ -1108,7 +1152,7 @@ mod tests {
 
         val = val.enable_card_clock();
         assert!(val.is_card_clock_enabled());
-        assert_eq!(val.0, 0x00020000);
+        assert_eq!(val.0, 0x00010000);
 
         val = val.disable_card_clock();
         assert!(!val.is_card_clock_enabled());
