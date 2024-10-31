@@ -41,7 +41,7 @@ fn main() {
     let mut interface = device.claim_interface(0).expect("open USB interface 0");
     let fel = Fel::open_usb_interface(&mut interface).expect("open usb interface as an FEL device");
     let version = fel.get_version();
-    println!("{:?}", version);
+    println!("{:x?}", version);
 }
 
 struct Fel<'a> {
@@ -214,14 +214,34 @@ struct Version {
     pad: [u8; 8],
 }
 
+impl Version {
+    /// Get chip from version.
+    fn chip(self) -> Option<Chip> {
+        match self.id {
+            0x00185900 => Some(Chip::D1),
+            _ => None,
+        }
+    }
+}
+
 impl fmt::Debug for Version {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_map()
-            .entry(&"magic", &String::from_utf8_lossy(&self.magic))
-            .entry(&"id", &self.id)
-            .entry(&"dflag", &self.dflag)
+        let mut map = f.debug_map();
+        map.entry(&"magic", &String::from_utf8_lossy(&self.magic));
+        match self.chip() {
+            Some(chip) => map.entry(&"chip", &chip),
+            None => map.entry(&"id", &self.id)
+        };
+        map.entry(&"dflag", &self.dflag)
             .entry(&"dlength", &self.dlength)
             .entry(&"scratchpad", &self.scratchpad)
             .finish()
     }
+}
+
+#[derive(Debug)]
+#[repr(u32)]
+enum Chip {
+    /// D1-H, D1s or F133 chip.
+    D1 = 0x00185900,
 }
