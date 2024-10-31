@@ -18,7 +18,7 @@ categories = ["embedded", "hardware-support", "no-std"]
 
 [dependencies]
 allwinner-rt-macros = { version = "0.0.0", path = "macros" }
-allwinner-hal = { version = "0.0.0", features = ["d1"], path = ".." }
+allwinner-hal = { version = "0.0.0", features = ["d1"], path = "../allwinner-hal" }
 embedded-hal = "1.0.0"
 embedded-time = "0.12.1"
 nb = "1.1.0"

@@ -5,7 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
-allwinner-hal = { path = "../.." }
+allwinner-hal = { path = "../../allwinner-hal" }
 allwinner-rt = { path = "../../allwinner-rt" }
 panic-halt = "0.2.0"
 embedded-io = "0.6.1"

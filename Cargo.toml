@@ -1,39 +1,7 @@
-[package]
-name = "allwinner-hal"
-version = "0.0.0"
-edition = "2021"
-description = "Allwinner SoC driver support"
-authors = [
-    "Luo Jia <luojia@hust.edu.cn>",
-    "Gao Chengbo <electricpower_gao@163.com>",
-]
-repository = "https://github.com/rustsbi/allwinner-hal"
-documentation = "https://docs.rs/allwinner-hal"
-license = "MulanPSL-2.0 OR MIT"
-readme = "README.md"
-keywords = ["hal", "allwinner"]
-categories = ["os", "embedded", "hardware-support", "no-std"]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-volatile-register = "0.2.1"
-embedded-hal = "1.0.0"
-embedded-io = "0.6.1"
-embedded-time = "0.12.1"
-uart16550 = "0.0.1"
-plic = "0.0.2"
-
-[dev-dependencies]
-memoffset = "0.8"
-
-[features]
-default = ["d1"]
-# D1-like chips: D1-H, D1s, F133.
-d1 = []
-
 [workspace]
+resolver = "2"
 members = [
+    "allwinner-hal",
     "allwinner-rt",
     "allwinner-rt/macros",
     "examples/nezha-d1",
