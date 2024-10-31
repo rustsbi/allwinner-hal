@@ -6,6 +6,7 @@ members = [
     "allwinner-rt/macros",
     "examples/nezha-d1",
     "examples/sdmmc",
+    "rfel",
 ]
 
 [workspace.package]
