@@ -1,15 +1,15 @@
 [package]
 name = "allwinner-hal"
-version = "0.0.0"
-edition = "2021"
 description = "Allwinner SoC driver support"
+version = "0.0.0"
 authors = [
     "Luo Jia <luojia@hust.edu.cn>",
     "Gao Chengbo <electricpower_gao@163.com>",
 ]
-repository = "https://github.com/rustsbi/allwinner-hal"
 documentation = "https://docs.rs/allwinner-hal"
-license = "MulanPSL-2.0 OR MIT"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 readme = "README.md"
 keywords = ["hal", "allwinner"]
 categories = ["os", "embedded", "hardware-support", "no-std"]
