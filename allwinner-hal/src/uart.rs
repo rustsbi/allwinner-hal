@@ -108,7 +108,7 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> Serial<UART, I, 
         let bps = baudrate.0;
         // 2. init peripheral clocks
         // note(unsafe): async read and write using ccu registers
-        unsafe { PADS::ClockGate::reset(ccu) };
+        unsafe { PADS::Clock::reset(ccu) };
         // 3. set interrupt configuration
         // on BT0 stage we disable all uart interrupts
         let interrupt_types = uart.as_ref().ier().read();
@@ -156,7 +156,7 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> Serial<UART, I, 
     #[inline]
     pub fn free(self, ccu: &ccu::RegisterBlock) -> (UART, PADS) {
         // clock is closed for self.clock_gate is dropped
-        unsafe { PADS::ClockGate::free(ccu) };
+        unsafe { PADS::Clock::free(ccu) };
         (self.uart, self.pads)
     }
 }
@@ -196,7 +196,7 @@ pub struct ReceiveHalf<UART, const I: usize, PADS: Receive<I>> {
 
 /// Valid serial pads.
 pub trait Pads<const I: usize> {
-    type ClockGate: ccu::ClockGate;
+    type Clock: ccu::ClockGate + ccu::ClockReset;
 }
 
 /// Valid transmit pin for UART peripheral.
@@ -248,7 +248,7 @@ where
     T: Transmit<I>,
     R: Receive<I>,
 {
-    type ClockGate = ccu::UART<I>;
+    type Clock = ccu::UART<I>;
 }
 
 impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> embedded_io::ErrorType
