@@ -789,10 +789,22 @@ impl SpiBusGating {
 
 /// Peripheral that can be clock gated by CCU.
 pub trait ClockGate {
-    /// Reset this peripheral by provided `ccu`.
-    unsafe fn reset(ccu: &ccu::RegisterBlock);
+    /// Assert reset signal.
+    unsafe fn assert_reset(ccu: &ccu::RegisterBlock);
+    /// Deassert reset signal.
+    unsafe fn deassert_reset(ccu: &ccu::RegisterBlock);
     /// Free this peripheral by provided `ccu`.
-    unsafe fn free(ccu: &ccu::RegisterBlock);
+    #[inline]
+    unsafe fn free(ccu: &ccu::RegisterBlock) {
+        // by default, asserting reset signal.
+        Self::assert_reset(ccu);
+    }
+    /// Reset this peripheral without reconfiguring clocks (if applicable).
+    #[inline]
+    unsafe fn reset(ccu: &ccu::RegisterBlock) {
+        Self::assert_reset(ccu);
+        Self::deassert_reset(ccu);
+    }
 }
 
 /// Peripheral whose clock can be configurated by CCU.
@@ -802,12 +814,26 @@ pub trait ClockConfig {
     /// Configure peripheral clock.
     ///
     /// Value `factor_m` should be in 0 ..= 15.
-    unsafe fn config(
+    unsafe fn configure(
+        ccu: &ccu::RegisterBlock,
         source: Self::Source,
         factor_m: u8,
         factor_n: FactorN,
-        ccu: &ccu::RegisterBlock,
     );
+    /// Reconfigure peripheral clock by applying clock parameters while asserting reset.
+    #[inline]
+    unsafe fn reconfigure(
+        ccu: &ccu::RegisterBlock,
+        source: Self::Source,
+        factor_m: u8,
+        factor_n: FactorN,
+    ) where
+        Self: ClockGate,
+    {
+        Self::assert_reset(ccu);
+        Self::configure(ccu, source, factor_m, factor_n);
+        Self::deassert_reset(ccu);
+    }
 }
 
 // TODO: a more proper abstraction considering the PLL source behind peripheral clock
@@ -817,16 +843,14 @@ pub struct DRAM;
 
 impl ClockGate for DRAM {
     #[inline]
-    unsafe fn reset(ccu: &ccu::RegisterBlock) {
-        let dram_bgr = ccu.dram_bgr.read();
-        ccu.dram_bgr.write(dram_bgr.gate_mask().assert_reset());
-        let dram_bgr = ccu.dram_bgr.read();
-        ccu.dram_bgr.write(dram_bgr.gate_pass().deassert_reset());
+    unsafe fn assert_reset(ccu: &ccu::RegisterBlock) {
+        ccu.dram_bgr
+            .write(ccu.dram_bgr.read().gate_mask().assert_reset());
     }
     #[inline]
-    unsafe fn free(ccu: &ccu::RegisterBlock) {
-        let dram_bgr = ccu.dram_bgr.read();
-        ccu.dram_bgr.write(dram_bgr.gate_mask().assert_reset());
+    unsafe fn deassert_reset(ccu: &ccu::RegisterBlock) {
+        ccu.dram_bgr
+            .write(ccu.dram_bgr.read().gate_pass().deassert_reset());
     }
 }
 
@@ -834,11 +858,11 @@ impl ClockConfig for DRAM {
     type Source = DramClockSource;
 
     #[inline]
-    unsafe fn config(
+    unsafe fn configure(
+        ccu: &ccu::RegisterBlock,
         source: Self::Source,
         factor_m: u8,
         factor_n: FactorN,
-        ccu: &ccu::RegisterBlock,
     ) {
         let dram_clk = ccu.dram_clock.read();
         ccu.dram_clock.write(
@@ -858,20 +882,17 @@ pub struct UART<const IDX: usize>;
 
 impl<const I: usize> ClockGate for UART<I> {
     #[inline]
-    unsafe fn reset(ccu: &ccu::RegisterBlock) {
+    unsafe fn assert_reset(ccu: &ccu::RegisterBlock) {
         let uart_bgr = ccu.uart_bgr.read();
         ccu.uart_bgr
             .write(uart_bgr.gate_mask::<I>().assert_reset::<I>());
-        let uart_bgr = ccu.uart_bgr.read();
-        ccu.uart_bgr
-            .write(uart_bgr.gate_pass::<I>().deassert_reset::<I>());
     }
 
     #[inline]
-    unsafe fn free(ccu: &ccu::RegisterBlock) {
+    unsafe fn deassert_reset(ccu: &ccu::RegisterBlock) {
         let uart_bgr = ccu.uart_bgr.read();
         ccu.uart_bgr
-            .write(uart_bgr.gate_mask::<I>().assert_reset::<I>());
+            .write(uart_bgr.gate_pass::<I>().deassert_reset::<I>());
     }
 }
 
@@ -881,31 +902,27 @@ pub struct SPI<const IDX: usize>;
 
 impl<const I: usize> ClockGate for SPI<I> {
     #[inline]
-    unsafe fn reset(ccu: &ccu::RegisterBlock) {
+    unsafe fn assert_reset(ccu: &ccu::RegisterBlock) {
         let spi_bgr = ccu.spi_bgr.read();
         ccu.spi_bgr
             .write(spi_bgr.gate_mask::<I>().assert_reset::<I>());
+    }
+    #[inline]
+    unsafe fn deassert_reset(ccu: &ccu::RegisterBlock) {
         let spi_bgr = ccu.spi_bgr.read();
         ccu.spi_bgr
             .write(spi_bgr.gate_pass::<I>().deassert_reset::<I>());
-    }
-
-    #[inline]
-    unsafe fn free(ccu: &ccu::RegisterBlock) {
-        let spi_bgr = ccu.spi_bgr.read();
-        ccu.spi_bgr
-            .write(spi_bgr.gate_mask::<I>().assert_reset::<I>());
     }
 }
 
 impl<const I: usize> ClockConfig for SPI<I> {
     type Source = SpiClockSource;
 
-    unsafe fn config(
+    unsafe fn configure(
+        ccu: &ccu::RegisterBlock,
         source: Self::Source,
         factor_m: u8,
         factor_n: FactorN,
-        ccu: &ccu::RegisterBlock,
     ) {
         let spi_clk = ccu.spi_clk[I].read();
         ccu.spi_clk[I].write(

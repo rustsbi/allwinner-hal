@@ -327,10 +327,8 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> Spi<SPI, I, PINS>
             (factor_n, factor_m)
         };
         // 2. init peripheral clocks
-        // clock and divider
-        unsafe { PINS::Clock::config(SpiClockSource::PllPeri1x, factor_m, factor_n, ccu) };
-        // de-assert reset
-        unsafe { PINS::Clock::reset(ccu) };
+        // Reset and reconfigure clock source and divider
+        unsafe { PINS::Clock::reconfigure(ccu, SpiClockSource::PllPeri1x, factor_m, factor_n) };
         // 3. global configuration and soft reset
         unsafe {
             spi.as_ref().gcr.write(
