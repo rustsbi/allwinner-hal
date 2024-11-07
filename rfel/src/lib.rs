@@ -55,9 +55,20 @@ impl<'a> Fel<'a> {
     }
 
     pub fn read_address(&self, address: u32, buf: &mut [u8]) -> usize {
+        trace!("read_address");
         for chunk in buf.chunks_mut(CHUNK_SIZE) {
-            self.send_fel_request(FelRequest::write_raw(address, chunk.len() as u32));
+            self.send_fel_request(FelRequest::read_raw(address, chunk.len() as u32));
             self.usb_read(chunk);
+            self.read_fel_status();
+        }
+        buf.len()
+    }
+
+    pub fn write_address(&self, address: u32, buf: &[u8]) -> usize {
+        trace!("write_address");
+        for chunk in buf.chunks(CHUNK_SIZE) {
+            self.send_fel_request(FelRequest::write_raw(address, chunk.len() as u32));
+            self.usb_write(chunk);
             self.read_fel_status();
         }
         buf.len()
@@ -65,25 +76,14 @@ impl<'a> Fel<'a> {
 
     fn send_fel_request(&self, request: FelRequest) {
         trace!("send_fel_request");
-        let buf: [u8; 36] = unsafe {
-            core::mem::transmute(UsbRequest::usb_write(
-                core::mem::size_of::<FelRequest>() as u32
-            ))
-        };
-        block_on(self.iface.bulk_out(self.endpoint_out, buf.to_vec()))
-            .status
-            .expect("send_usb_request on send_fel_request transfer");
         let buf: [u8; 16] = unsafe { core::mem::transmute(request) };
-        block_on(self.iface.bulk_out(self.endpoint_out, buf.to_vec()))
-            .status
-            .expect("usb bulk out on send_fel_request transfer");
-        let buf = nusb::transfer::RequestBuffer::new(13);
-        let ans = block_on(self.iface.bulk_in(self.endpoint_in, buf));
-        ans.status
-            .expect("read_usb_response on send_fel_request transfer");
-        if ans.data != *b"AWUS\0\0\0\0\0\0\0\0\0" {
-            panic!("invalid data received from read_usb_response")
-        }
+        self.usb_write(&buf);
+    }
+
+    fn read_fel_status(&self) {
+        trace!("read_fel_status");
+        let mut buf = [0u8; 8];
+        self.usb_read(&mut buf);
     }
 
     fn usb_read(&self, buf: &mut [u8]) {
@@ -107,10 +107,24 @@ impl<'a> Fel<'a> {
         buf.copy_from_slice(&ans.data);
     }
 
-    fn read_fel_status(&self) {
-        trace!("read_fel_status");
-        let mut buf = [0u8; 8];
-        self.usb_read(&mut buf);
+    fn usb_write(&self, buf: &[u8]) {
+        trace!("usb_write");
+        let buf_1: [u8; 36] =
+            unsafe { core::mem::transmute(UsbRequest::usb_write(buf.len() as u32)) };
+        block_on(self.iface.bulk_out(self.endpoint_out, buf_1.to_vec()))
+            .status
+            .expect("send_usb_request on usb_write transfer");
+        block_on(self.iface.bulk_out(self.endpoint_out, buf.to_vec()))
+            .status
+            .expect("usb bulk out on usb_write transfer");
+        let buf_3 = nusb::transfer::RequestBuffer::new(13);
+        let ans_1 = block_on(self.iface.bulk_in(self.endpoint_in, buf_3));
+        ans_1
+            .status
+            .expect("read_usb_response on usb_write transfer");
+        if ans_1.data != *b"AWUS\0\0\0\0\0\0\0\0\0" {
+            panic!("invalid data received from read_usb_response")
+        }
     }
 }
 
@@ -166,6 +180,15 @@ impl FelRequest {
             request: 0x001,
             address: 0,
             length: 0,
+            pad: 0,
+        }
+    }
+    #[inline]
+    pub const fn read_raw(address: u32, length: u32) -> Self {
+        FelRequest {
+            request: 0x103,
+            address,
+            length,
             pad: 0,
         }
     }
