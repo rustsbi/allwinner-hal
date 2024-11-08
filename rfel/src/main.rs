@@ -68,7 +68,7 @@ fn main() {
         Commands::Version => {
             let version = fel.get_version();
             println!("{:x?}", version);
-        },
+        }
         Commands::Hexdump { address, length } => {
             let address: usize = match parse_value(address.trim()) {
                 Some(address) => address,
@@ -122,7 +122,7 @@ fn main() {
                 }
             };
             fel.write_address(address, &value.to_le_bytes());
-        },
+        }
     }
 }
 

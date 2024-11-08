@@ -1,5 +1,10 @@
 //! Clock Control Unit peripheral.
 
+mod divide;
+
+pub(crate) use divide::calculate_best_factors_nm;
+pub use divide::{FactorN, FactorP};
+
 use crate::ccu;
 use embedded_time::rate::Hertz;
 use volatile_register::RW;
@@ -623,30 +628,6 @@ impl DramBusGating {
     pub const fn gate_pass(self) -> Self {
         Self(self.0 | Self::DRAM_GATING)
     }
-}
-
-/// Clock divide factor N.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum FactorN {
-    /// Don't divide.
-    N1,
-    /// Divide frequency by 2.
-    N2,
-    /// Divide frequency by 4.
-    N4,
-    /// Divide frequency by 8.
-    N8,
-}
-
-/// Clock divide factor P.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum FactorP {
-    /// Don't divide.
-    P1,
-    /// Divide frequency by 2.
-    P2,
-    /// Divide frequency by 4.
-    P4,
 }
 
 /// UART Bus Gating Reset register.

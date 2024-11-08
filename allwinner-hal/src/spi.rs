@@ -1,6 +1,6 @@
 //! Serial Peripheral Interface bus.
 
-use crate::ccu::{self, ClockConfig, ClockGate, Clocks, FactorN, SpiClockSource};
+use crate::ccu::{self, ClockConfig, ClockGate, Clocks, SpiClockSource};
 use core::cell::UnsafeCell;
 use embedded_hal::spi::Mode;
 use embedded_time::rate::Hertz;
@@ -303,29 +303,8 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> Spi<SPI, I, PINS>
         ccu: &ccu::RegisterBlock,
     ) -> Self {
         // 1. unwrap parameters
-        let (Hertz(freq), Hertz(psi)) = (freq, clocks.psi);
-        let (factor_n, factor_m) = {
-            let mut err = psi;
-            let (mut best_n, mut best_m) = (0, 0);
-            for m in 1u8..=16 {
-                for n in [1, 2, 4, 8] {
-                    let actual = psi / n / m as u32;
-                    if actual.abs_diff(freq) < err {
-                        err = actual.abs_diff(freq);
-                        (best_n, best_m) = (n, m);
-                    }
-                }
-            }
-            let factor_n = match best_n {
-                1 => FactorN::N1,
-                2 => FactorN::N2,
-                4 => FactorN::N4,
-                8 => FactorN::N8,
-                _ => unreachable!(),
-            };
-            let factor_m = best_m - 1;
-            (factor_n, factor_m)
-        };
+        let (Hertz(psi), Hertz(freq)) = (clocks.psi, freq);
+        let (factor_n, factor_m) = ccu::calculate_best_factors_nm(psi, freq);
         // 2. init peripheral clocks
         // Reset and reconfigure clock source and divider
         unsafe { PINS::Clock::reconfigure(ccu, SpiClockSource::PllPeri1x, factor_m, factor_n) };
