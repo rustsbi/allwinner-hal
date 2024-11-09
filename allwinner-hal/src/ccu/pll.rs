@@ -218,7 +218,12 @@ impl PllDdrControl {
     }
 }
 
-// TODO: default value for PllDdrControl is 0x4800_2301
+impl Default for PllDdrControl {
+    #[inline]
+    fn default() -> Self {
+        Self(0x4800_2301)
+    }
+}
 
 /// Peripheral PLL Control register.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -342,7 +347,12 @@ impl PllPeri0Control {
     }
 }
 
-// TODO: default value for PllPeriControl is 0x4821_6300
+impl Default for PllPeri0Control {
+    #[inline]
+    fn default() -> Self {
+        Self(0x4821_6300)
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -483,6 +493,16 @@ mod tests {
         val = val.set_pll_m0(0x0);
         assert_eq!(val.0, 0x00000000);
         assert_eq!(val.pll_m0(), 0x0);
+
+        let default = PllDdrControl::default();
+        assert!(!default.is_pll_enabled());
+        assert!(default.is_pll_ldo_enabled());
+        assert!(!default.is_lock_enabled());
+        assert!(!default.is_locked());
+        assert!(default.is_pll_output_unmasked());
+        assert_eq!(default.pll_n(), 0x23);
+        assert_eq!(default.pll_m1(), 0x0);
+        assert_eq!(default.pll_m0(), 0x1);
     }
 
     #[test]
@@ -559,5 +579,16 @@ mod tests {
         val = val.set_pll_m(0x0);
         assert_eq!(val.0, 0x00000000);
         assert_eq!(val.pll_m(), 0x0);
+
+        let default = PllPeri0Control::default();
+        assert!(!default.is_pll_enabled());
+        assert!(default.is_pll_ldo_enabled());
+        assert!(!default.is_lock_enabled());
+        assert!(!default.is_locked());
+        assert!(default.is_pll_output_unmasked());
+        assert_eq!(default.pll_p1(), 0x2);
+        assert_eq!(default.pll_p0(), 0x1);
+        assert_eq!(default.pll_n(), 0x63);
+        assert_eq!(default.pll_m(), 0x0);
     }
 }
