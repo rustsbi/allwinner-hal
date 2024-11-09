@@ -1,3 +1,5 @@
+//! Divide factors.
+
 /// Peripheral clock divide factor N.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PeriFactorN {
@@ -12,7 +14,6 @@ pub enum PeriFactorN {
 }
 
 /// CPU and RISC-V coprocessor AXI clock divide factor N.
-// TODO: use this on CpuAxiConfig
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum AxiFactorN {
     /// Divide frequency by 2.
@@ -36,7 +37,7 @@ pub enum FactorP {
 
 /// Calculate the best N-M divide factors from `f_src` and `f_dst` parameters.
 #[inline]
-pub fn calculate_best_factors_nm(f_src: u32, f_dst: u32) -> (PeriFactorN, u8) {
+pub fn calculate_best_peripheral_factors_nm(f_src: u32, f_dst: u32) -> (PeriFactorN, u8) {
     let mut err = f_src;
     let (mut best_n, mut best_m) = (0, 0);
     for m in 1u8..=16 {

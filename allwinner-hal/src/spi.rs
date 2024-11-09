@@ -304,7 +304,7 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> Spi<SPI, I, PINS>
     ) -> Self {
         // 1. unwrap parameters
         let (Hertz(psi), Hertz(freq)) = (clocks.psi, freq);
-        let (factor_n, factor_m) = ccu::calculate_best_factors_nm(psi, freq);
+        let (factor_n, factor_m) = ccu::calculate_best_peripheral_factors_nm(psi, freq);
         // 2. init peripheral clocks
         // Reset and reconfigure clock source and divider
         unsafe { PINS::Clock::reconfigure(ccu, SpiClockSource::PllPeri1x, factor_m, factor_n) };
