@@ -1,11 +1,12 @@
 //! Clock Control Unit peripheral.
 
 mod divide;
+mod source;
 
 pub(crate) use divide::calculate_best_factors_nm;
 pub use divide::{AxiFactorN, FactorP, PeriFactorN};
+pub use source::{CpuClockSource, DramClockSource, SmhcClockSource, SpiClockSource};
 
-use crate::ccu;
 use embedded_time::rate::Hertz;
 use volatile_register::RW;
 
@@ -391,25 +392,6 @@ impl PllPeri0Control {
     }
 }
 
-/// AXI CPU clock source.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum CpuClockSource {
-    /// 24-MHz external oscillator.
-    Osc24M,
-    /// 32-KHz clock.
-    Clk32K,
-    /// 16-MHz RC oscillator.
-    Clk16MRC,
-    /// CPU PLL.
-    PllCpu,
-    /// Peripheral PLL (1x).
-    PllPeri1x,
-    /// Peripheral PLL (2x).
-    PllPeri2x,
-    /// 800-MHz Peripheral PLL.
-    PllPeri800M,
-}
-
 /// CPU AXI Configuration register.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -425,7 +407,7 @@ impl CpuAxiConfig {
     #[inline]
     pub const fn clock_source(self) -> CpuClockSource {
         match (self.0 & Self::CPU_CLK_SEL) >> 24 {
-            0 => CpuClockSource::Osc24M,
+            0 => CpuClockSource::Hosc,
             1 => CpuClockSource::Clk32K,
             2 => CpuClockSource::Clk16MRC,
             3 => CpuClockSource::PllCpu,
@@ -439,7 +421,7 @@ impl CpuAxiConfig {
     #[inline]
     pub const fn set_clock_source(self, val: CpuClockSource) -> Self {
         let val = match val {
-            CpuClockSource::Osc24M => 0,
+            CpuClockSource::Hosc => 0,
             CpuClockSource::Clk32K => 1,
             CpuClockSource::Clk16MRC => 2,
             CpuClockSource::PllCpu => 3,
@@ -525,19 +507,6 @@ impl MbusClock {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct DramClock(u32);
-
-/// Dram clock source.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DramClockSource {
-    /// DRAM PLL.
-    PllDdr,
-    /// Audio PLL (div 2).
-    PllAudio1Div2,
-    /// Peripheral PLL (2x).
-    PllPeri2x,
-    /// 800-MHz Peripheral PLL.
-    PllPeri800M,
-}
 
 impl DramClock {
     const DRAM_CLK_GATING: u32 = 0x1 << 31;
@@ -730,21 +699,6 @@ impl SpiClock {
     }
 }
 
-/// SPI clock source.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum SpiClockSource {
-    /// HOSC.
-    Hosc,
-    /// Peripheral PLL (1x).
-    PllPeri1x,
-    /// Peripheral PLL (2x).
-    PllPeri2x,
-    /// Audio PLL (div 2).
-    PllAudio1Div2,
-    /// Audio PLL (div 5).
-    PllAudio1Div5,
-}
-
 /// SPI Bus Gating Reset register.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -857,21 +811,6 @@ impl SmhcClock {
     }
 }
 
-/// SMHC clock source.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum SmhcClockSource {
-    /// HOSC.
-    Hosc,
-    /// Peripheral PLL (1x).
-    PllPeri1x,
-    /// Peripheral PLL (2x).
-    PllPeri2x,
-    /// 800-MHz Peripheral PLL.
-    PllPeri800M,
-    /// Audio PLL (div 2).
-    PllAudio1Div2,
-}
-
 /// SMHC Clock Reset register.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -903,31 +842,31 @@ impl SmhcBusGating {
 /// Peripheral that have clock reset feature in CCU.
 pub trait ClockReset {
     /// Assert reset signal.
-    unsafe fn assert_reset_only(ccu: &ccu::RegisterBlock);
+    unsafe fn assert_reset_only(ccu: &RegisterBlock);
     /// Deassert reset signal.
-    unsafe fn deassert_reset_only(ccu: &ccu::RegisterBlock);
+    unsafe fn deassert_reset_only(ccu: &RegisterBlock);
 }
 
 /// Peripheral that can be clock gated by CCU.
 pub trait ClockGate: ClockReset {
     /// Unmask clock gate.
-    unsafe fn unmask_gate_only(ccu: &ccu::RegisterBlock);
+    unsafe fn unmask_gate_only(ccu: &RegisterBlock);
     /// Mask clock gate.
-    unsafe fn mask_gate_only(ccu: &ccu::RegisterBlock);
+    unsafe fn mask_gate_only(ccu: &RegisterBlock);
     /// Assert reset signal and mask the clock gate.
-    unsafe fn disable_in(ccu: &ccu::RegisterBlock);
+    unsafe fn disable_in(ccu: &RegisterBlock);
     /// Deassert reset signal and unmask the clock gate.
-    unsafe fn enable_in(ccu: &ccu::RegisterBlock);
+    unsafe fn enable_in(ccu: &RegisterBlock);
     /// Reset this peripheral without reconfiguring clocks (if applicable).
     #[inline]
-    unsafe fn reset(ccu: &ccu::RegisterBlock) {
+    unsafe fn reset(ccu: &RegisterBlock) {
         // assert reset and then deassert reset.
         Self::disable_in(ccu);
         Self::enable_in(ccu);
     }
     /// Free this peripheral by provided `ccu`.
     #[inline]
-    unsafe fn free(ccu: &ccu::RegisterBlock) {
+    unsafe fn free(ccu: &RegisterBlock) {
         // by default, asserting reset signal and mask clock gate.
         Self::disable_in(ccu);
     }
@@ -941,7 +880,7 @@ pub trait ClockConfig {
     ///
     /// Value `factor_m` should be in 0 ..= 15.
     unsafe fn configure(
-        ccu: &ccu::RegisterBlock,
+        ccu: &RegisterBlock,
         source: Self::Source,
         factor_m: u8,
         factor_n: PeriFactorN,
@@ -949,7 +888,7 @@ pub trait ClockConfig {
     /// Reconfigure peripheral clock by applying clock parameters while asserting reset.
     #[inline]
     unsafe fn reconfigure(
-        ccu: &ccu::RegisterBlock,
+        ccu: &RegisterBlock,
         source: Self::Source,
         factor_m: u8,
         factor_n: PeriFactorN,
@@ -963,14 +902,14 @@ pub trait ClockConfig {
     /// Reconfigure this clock with dependency to a resettable clock type `T`.
     #[inline]
     unsafe fn reconfigure_with<T: ClockReset, F, G>(
-        ccu: &ccu::RegisterBlock,
+        ccu: &RegisterBlock,
         dependency: T,
         before_configure: F,
         after_configure: G,
     ) where
         Self: ClockGate,
-        F: FnOnce(&ccu::RegisterBlock) -> (Self::Source, u8, PeriFactorN),
-        G: FnOnce(&ccu::RegisterBlock),
+        F: FnOnce(&RegisterBlock) -> (Self::Source, u8, PeriFactorN),
+        G: FnOnce(&RegisterBlock),
     {
         let _ = dependency; // does not use value, the type T is used instead
         T::assert_reset_only(ccu);
@@ -991,30 +930,30 @@ pub struct DRAM;
 
 impl ClockReset for DRAM {
     #[inline]
-    unsafe fn deassert_reset_only(ccu: &ccu::RegisterBlock) {
+    unsafe fn deassert_reset_only(ccu: &RegisterBlock) {
         ccu.dram_bgr.modify(|v| v.deassert_reset());
     }
     #[inline]
-    unsafe fn assert_reset_only(ccu: &ccu::RegisterBlock) {
+    unsafe fn assert_reset_only(ccu: &RegisterBlock) {
         ccu.dram_bgr.modify(|v| v.assert_reset());
     }
 }
 
 impl ClockGate for DRAM {
     #[inline]
-    unsafe fn unmask_gate_only(ccu: &ccu::RegisterBlock) {
+    unsafe fn unmask_gate_only(ccu: &RegisterBlock) {
         ccu.dram_bgr.modify(|v| v.gate_pass());
     }
     #[inline]
-    unsafe fn mask_gate_only(ccu: &ccu::RegisterBlock) {
+    unsafe fn mask_gate_only(ccu: &RegisterBlock) {
         ccu.dram_bgr.modify(|v| v.gate_mask());
     }
     #[inline]
-    unsafe fn disable_in(ccu: &ccu::RegisterBlock) {
+    unsafe fn disable_in(ccu: &RegisterBlock) {
         ccu.dram_bgr.modify(|v| v.gate_mask().assert_reset());
     }
     #[inline]
-    unsafe fn enable_in(ccu: &ccu::RegisterBlock) {
+    unsafe fn enable_in(ccu: &RegisterBlock) {
         ccu.dram_bgr.modify(|v| v.gate_pass().deassert_reset());
     }
 }
@@ -1024,7 +963,7 @@ impl ClockConfig for DRAM {
 
     #[inline]
     unsafe fn configure(
-        ccu: &ccu::RegisterBlock,
+        ccu: &RegisterBlock,
         source: Self::Source,
         factor_m: u8,
         factor_n: PeriFactorN,
@@ -1044,11 +983,11 @@ pub struct MBUS;
 
 impl ClockReset for MBUS {
     #[inline]
-    unsafe fn assert_reset_only(ccu: &ccu::RegisterBlock) {
+    unsafe fn assert_reset_only(ccu: &RegisterBlock) {
         ccu.mbus_clock.modify(|v| v.assert_reset());
     }
     #[inline]
-    unsafe fn deassert_reset_only(ccu: &ccu::RegisterBlock) {
+    unsafe fn deassert_reset_only(ccu: &RegisterBlock) {
         ccu.mbus_clock.modify(|v| v.deassert_reset());
     }
 }
@@ -1061,31 +1000,31 @@ pub struct UART<const IDX: usize>;
 
 impl<const I: usize> ClockReset for UART<I> {
     #[inline]
-    unsafe fn assert_reset_only(ccu: &ccu::RegisterBlock) {
+    unsafe fn assert_reset_only(ccu: &RegisterBlock) {
         ccu.uart_bgr.modify(|v| v.assert_reset::<I>());
     }
     #[inline]
-    unsafe fn deassert_reset_only(ccu: &ccu::RegisterBlock) {
+    unsafe fn deassert_reset_only(ccu: &RegisterBlock) {
         ccu.uart_bgr.modify(|v| v.deassert_reset::<I>());
     }
 }
 
 impl<const I: usize> ClockGate for UART<I> {
     #[inline]
-    unsafe fn unmask_gate_only(ccu: &ccu::RegisterBlock) {
+    unsafe fn unmask_gate_only(ccu: &RegisterBlock) {
         ccu.uart_bgr.modify(|v| v.gate_pass::<I>());
     }
     #[inline]
-    unsafe fn mask_gate_only(ccu: &ccu::RegisterBlock) {
+    unsafe fn mask_gate_only(ccu: &RegisterBlock) {
         ccu.uart_bgr.modify(|v| v.gate_mask::<I>());
     }
     #[inline]
-    unsafe fn disable_in(ccu: &ccu::RegisterBlock) {
+    unsafe fn disable_in(ccu: &RegisterBlock) {
         ccu.uart_bgr
             .modify(|v| v.gate_mask::<I>().assert_reset::<I>());
     }
     #[inline]
-    unsafe fn enable_in(ccu: &ccu::RegisterBlock) {
+    unsafe fn enable_in(ccu: &RegisterBlock) {
         ccu.uart_bgr
             .modify(|v| v.gate_pass::<I>().deassert_reset::<I>());
     }
@@ -1097,31 +1036,31 @@ pub struct SPI<const IDX: usize>;
 
 impl<const I: usize> ClockReset for SPI<I> {
     #[inline]
-    unsafe fn assert_reset_only(ccu: &ccu::RegisterBlock) {
+    unsafe fn assert_reset_only(ccu: &RegisterBlock) {
         ccu.spi_bgr.modify(|v| v.assert_reset::<I>());
     }
     #[inline]
-    unsafe fn deassert_reset_only(ccu: &ccu::RegisterBlock) {
+    unsafe fn deassert_reset_only(ccu: &RegisterBlock) {
         ccu.spi_bgr.modify(|v| v.deassert_reset::<I>());
     }
 }
 
 impl<const I: usize> ClockGate for SPI<I> {
     #[inline]
-    unsafe fn unmask_gate_only(ccu: &ccu::RegisterBlock) {
+    unsafe fn unmask_gate_only(ccu: &RegisterBlock) {
         ccu.spi_bgr.modify(|v| v.gate_pass::<I>());
     }
     #[inline]
-    unsafe fn mask_gate_only(ccu: &ccu::RegisterBlock) {
+    unsafe fn mask_gate_only(ccu: &RegisterBlock) {
         ccu.spi_bgr.modify(|v| v.gate_mask::<I>());
     }
     #[inline]
-    unsafe fn disable_in(ccu: &ccu::RegisterBlock) {
+    unsafe fn disable_in(ccu: &RegisterBlock) {
         ccu.spi_bgr
             .modify(|v| v.gate_mask::<I>().assert_reset::<I>());
     }
     #[inline]
-    unsafe fn enable_in(ccu: &ccu::RegisterBlock) {
+    unsafe fn enable_in(ccu: &RegisterBlock) {
         ccu.spi_bgr
             .modify(|v| v.gate_pass::<I>().deassert_reset::<I>());
     }
@@ -1131,7 +1070,7 @@ impl<const I: usize> ClockConfig for SPI<I> {
     type Source = SpiClockSource;
 
     unsafe fn configure(
-        ccu: &ccu::RegisterBlock,
+        ccu: &RegisterBlock,
         source: Self::Source,
         factor_m: u8,
         factor_n: PeriFactorN,
@@ -1380,7 +1319,7 @@ mod tests {
 
         for i in 0..7 as u8 {
             let tmp = match i {
-                0 => CpuClockSource::Osc24M,
+                0 => CpuClockSource::Hosc,
                 1 => CpuClockSource::Clk32K,
                 2 => CpuClockSource::Clk16MRC,
                 3 => CpuClockSource::PllCpu,
@@ -1406,9 +1345,9 @@ mod tests {
             assert_eq!(val.clock_source(), tmp);
         }
 
-        val = val.set_clock_source(CpuClockSource::Osc24M);
+        val = val.set_clock_source(CpuClockSource::Hosc);
         assert_eq!(val.0, 0x00000000);
-        assert_eq!(val.clock_source(), CpuClockSource::Osc24M);
+        assert_eq!(val.clock_source(), CpuClockSource::Hosc);
 
         for i in 0..3 as u8 {
             let tmp = match i {
