@@ -1,5 +1,5 @@
 use crate::soc::d1::{CCU, PHY};
-use allwinner_hal::ccu::{DramClockSource, FactorN};
+use allwinner_hal::ccu::{DramClockSource, PeriFactorN};
 use core::ptr::{read_volatile, write_volatile};
 
 // for verbose prints
@@ -435,7 +435,7 @@ fn ccm_set_pll_ddr_clk(
         ccu.dram_clock.modify(|val| {
             val.set_clock_source(DramClockSource::PllDdr)
                 .set_factor_m(0)
-                .set_factor_n(FactorN::N1)
+                .set_factor_n(PeriFactorN::N1)
                 .unmask_clock()
         });
     }

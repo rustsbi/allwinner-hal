@@ -3,7 +3,7 @@
 mod divide;
 
 pub(crate) use divide::calculate_best_factors_nm;
-pub use divide::{FactorN, FactorP};
+pub use divide::{AxiFactorN, FactorP, PeriFactorN};
 
 use crate::ccu;
 use embedded_time::rate::Hertz;
@@ -471,12 +471,17 @@ impl CpuAxiConfig {
     }
     /// Get AXI CPU clock divide factor N.
     #[inline]
-    pub const fn factor_n(self) -> u8 {
-        ((self.0 & Self::FACTOR_N) >> 8) as u8
+    pub const fn factor_n(self) -> AxiFactorN {
+        match (self.0 & Self::FACTOR_N) >> 8 {
+            0x1 => AxiFactorN::N2,
+            0x2 => AxiFactorN::N3,
+            0x3 => AxiFactorN::N4,
+            _ => unreachable!(),
+        }
     }
     /// Set AXI CPU clock divide factor N.
     #[inline]
-    pub const fn set_factor_n(self, val: u8) -> Self {
+    pub const fn set_factor_n(self, val: AxiFactorN) -> Self {
         Self((self.0 & !Self::FACTOR_N) | ((val as u32) << 8))
     }
     /// Get AXI CPU clock divide factor M.
@@ -573,18 +578,18 @@ impl DramClock {
     }
     /// Get factor n.
     #[inline]
-    pub const fn factor_n(self) -> FactorN {
+    pub const fn factor_n(self) -> PeriFactorN {
         match ((self.0 & Self::DRAM_N) >> 8) as u8 {
-            0x0 => FactorN::N1,
-            0x1 => FactorN::N2,
-            0x2 => FactorN::N4,
-            0x3 => FactorN::N8,
+            0x0 => PeriFactorN::N1,
+            0x1 => PeriFactorN::N2,
+            0x2 => PeriFactorN::N4,
+            0x3 => PeriFactorN::N8,
             _ => unreachable!(),
         }
     }
     /// Set factor n.
     #[inline]
-    pub const fn set_factor_n(self, val: FactorN) -> Self {
+    pub const fn set_factor_n(self, val: PeriFactorN) -> Self {
         Self((self.0 & !Self::DRAM_N) | ((val as u32) << 8))
     }
     /// Get factor m (from 0 to 3).
@@ -693,23 +698,23 @@ impl SpiClock {
     }
     /// Get SPI clock divide factor N.
     #[inline]
-    pub const fn factor_n(self) -> FactorN {
+    pub const fn factor_n(self) -> PeriFactorN {
         match (self.0 & Self::FACTOR_N) >> 8 {
-            0 => FactorN::N1,
-            1 => FactorN::N2,
-            2 => FactorN::N4,
-            3 => FactorN::N8,
+            0 => PeriFactorN::N1,
+            1 => PeriFactorN::N2,
+            2 => PeriFactorN::N4,
+            3 => PeriFactorN::N8,
             _ => unreachable!(),
         }
     }
     /// Set SPI clock divide factor N.
     #[inline]
-    pub const fn set_factor_n(self, val: FactorN) -> Self {
+    pub const fn set_factor_n(self, val: PeriFactorN) -> Self {
         let val = match val {
-            FactorN::N1 => 0,
-            FactorN::N2 => 1,
-            FactorN::N4 => 2,
-            FactorN::N8 => 3,
+            PeriFactorN::N1 => 0,
+            PeriFactorN::N2 => 1,
+            PeriFactorN::N4 => 2,
+            PeriFactorN::N8 => 3,
         };
         Self((self.0 & !Self::FACTOR_N) | (val << 8))
     }
@@ -805,23 +810,23 @@ impl SmhcClock {
     }
     /// Get SMHC clock divide factor N.
     #[inline]
-    pub const fn factor_n(self) -> FactorN {
+    pub const fn factor_n(self) -> PeriFactorN {
         match (self.0 & Self::FACTOR_N) >> 8 {
-            0 => FactorN::N1,
-            1 => FactorN::N2,
-            2 => FactorN::N4,
-            3 => FactorN::N8,
+            0 => PeriFactorN::N1,
+            1 => PeriFactorN::N2,
+            2 => PeriFactorN::N4,
+            3 => PeriFactorN::N8,
             _ => unreachable!(),
         }
     }
     /// Set SMHC clock divide factor N.
     #[inline]
-    pub const fn set_factor_n(self, val: FactorN) -> Self {
+    pub const fn set_factor_n(self, val: PeriFactorN) -> Self {
         let val = match val {
-            FactorN::N1 => 0,
-            FactorN::N2 => 1,
-            FactorN::N4 => 2,
-            FactorN::N8 => 3,
+            PeriFactorN::N1 => 0,
+            PeriFactorN::N2 => 1,
+            PeriFactorN::N4 => 2,
+            PeriFactorN::N8 => 3,
         };
         Self((self.0 & !Self::FACTOR_N) | (val << 8))
     }
@@ -939,7 +944,7 @@ pub trait ClockConfig {
         ccu: &ccu::RegisterBlock,
         source: Self::Source,
         factor_m: u8,
-        factor_n: FactorN,
+        factor_n: PeriFactorN,
     );
     /// Reconfigure peripheral clock by applying clock parameters while asserting reset.
     #[inline]
@@ -947,7 +952,7 @@ pub trait ClockConfig {
         ccu: &ccu::RegisterBlock,
         source: Self::Source,
         factor_m: u8,
-        factor_n: FactorN,
+        factor_n: PeriFactorN,
     ) where
         Self: ClockGate,
     {
@@ -964,7 +969,7 @@ pub trait ClockConfig {
         after_configure: G,
     ) where
         Self: ClockGate,
-        F: FnOnce(&ccu::RegisterBlock) -> (Self::Source, u8, FactorN),
+        F: FnOnce(&ccu::RegisterBlock) -> (Self::Source, u8, PeriFactorN),
         G: FnOnce(&ccu::RegisterBlock),
     {
         let _ = dependency; // does not use value, the type T is used instead
@@ -1022,7 +1027,7 @@ impl ClockConfig for DRAM {
         ccu: &ccu::RegisterBlock,
         source: Self::Source,
         factor_m: u8,
-        factor_n: FactorN,
+        factor_n: PeriFactorN,
     ) {
         let dram_clk = ccu.dram_clock.read();
         ccu.dram_clock.write(
@@ -1129,7 +1134,7 @@ impl<const I: usize> ClockConfig for SPI<I> {
         ccu: &ccu::RegisterBlock,
         source: Self::Source,
         factor_m: u8,
-        factor_n: FactorN,
+        factor_n: PeriFactorN,
     ) {
         let spi_clk = ccu.spi_clk[I].read();
         ccu.spi_clk[I].write(
@@ -1144,8 +1149,9 @@ impl<const I: usize> ClockConfig for SPI<I> {
 #[cfg(test)]
 mod tests {
     use super::{
-        CpuAxiConfig, CpuClockSource, DramBusGating, DramClock, DramClockSource, FactorN, FactorP,
-        MbusClock, PllCpuControl, PllDdrControl, PllPeri0Control, RegisterBlock,
+        AxiFactorN, CpuAxiConfig, CpuClockSource, DramBusGating, DramClock, DramClockSource,
+        FactorP, MbusClock, PeriFactorN, PllCpuControl, PllDdrControl, PllPeri0Control,
+        RegisterBlock,
     };
     use memoffset::offset_of;
     #[test]
@@ -1428,20 +1434,20 @@ mod tests {
         assert_eq!(val.0, 0x00000000);
         assert_eq!(val.factor_p(), FactorP::P1);
 
-        val = val.set_factor_n(0x03);
+        val = val.set_factor_n(AxiFactorN::N4);
         assert_eq!(val.0, 0x00000300);
-        assert_eq!(val.factor_n(), 0x03);
+        assert_eq!(val.factor_n(), AxiFactorN::N4);
 
-        val = val.set_factor_n(0x0);
-        assert_eq!(val.0, 0x00000000);
-        assert_eq!(val.factor_n(), 0x0);
+        val = val.set_factor_n(AxiFactorN::N2);
+        assert_eq!(val.0, 0x00000100);
+        assert_eq!(val.factor_n(), AxiFactorN::N2);
 
         val = val.set_factor_m(0x03);
-        assert_eq!(val.0, 0x00000003);
+        assert_eq!(val.0, 0x00000103);
         assert_eq!(val.factor_m(), 0x03);
 
         val = val.set_factor_m(0x0);
-        assert_eq!(val.0, 0x00000000);
+        assert_eq!(val.0, 0x00000100);
         assert_eq!(val.factor_m(), 0x0);
     }
 
@@ -1496,10 +1502,10 @@ mod tests {
 
         for i in 0..4 as u8 {
             let fn_tmp = match i {
-                0x0 => FactorN::N1,
-                0x1 => FactorN::N2,
-                0x2 => FactorN::N4,
-                0x3 => FactorN::N8,
+                0x0 => PeriFactorN::N1,
+                0x1 => PeriFactorN::N2,
+                0x2 => PeriFactorN::N4,
+                0x3 => PeriFactorN::N8,
                 _ => unreachable!(),
             };
 
@@ -1600,10 +1606,10 @@ mod tests {
 
         for i in 0..4 as u8 {
             let fn_tmp = match i {
-                0x0 => FactorN::N1,
-                0x1 => FactorN::N2,
-                0x2 => FactorN::N4,
-                0x3 => FactorN::N8,
+                0x0 => PeriFactorN::N1,
+                0x1 => PeriFactorN::N2,
+                0x2 => PeriFactorN::N4,
+                0x3 => PeriFactorN::N8,
                 _ => unreachable!(),
             };
 
