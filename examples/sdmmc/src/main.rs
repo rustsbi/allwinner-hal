@@ -4,7 +4,7 @@
 use core::arch::asm;
 
 use allwinner_hal::{
-    ccu::{FactorN, SmhcClockSource},
+    ccu::{PeriFactorN, SmhcClockSource},
     smhc::{BusWidthBits, TransferDirection},
     uart::{Config, Serial},
 };
@@ -228,7 +228,7 @@ fn send_card_command(
 }
 
 #[inline(always)]
-fn calc_clock_factor(freq: Hertz, psi: Hertz) -> (FactorN, u8) {
+fn calc_clock_factor(freq: Hertz, psi: Hertz) -> (PeriFactorN, u8) {
     let mut err = psi;
     let (mut best_n, mut best_m) = (0, 0);
     for m in 1u8..=16 {
@@ -248,10 +248,10 @@ fn calc_clock_factor(freq: Hertz, psi: Hertz) -> (FactorN, u8) {
         }
     }
     let factor_n = match best_n {
-        1 => FactorN::N1,
-        2 => FactorN::N2,
-        4 => FactorN::N4,
-        8 => FactorN::N8,
+        1 => PeriFactorN::N1,
+        2 => PeriFactorN::N2,
+        4 => PeriFactorN::N4,
+        8 => PeriFactorN::N8,
         _ => unreachable!(),
     };
     let factor_m = best_m - 1;
