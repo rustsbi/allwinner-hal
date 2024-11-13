@@ -10,8 +10,8 @@ pub struct RegisterBlock {
     pub clock_control: RW<ClockControl>,
     /// 0x08 - SMC Time Out Register.
     pub timeout: RW<TimeOut>,
-    /// 0x0C - SMC Bus Width Register.
-    pub bus_width: RW<BusWidth>,
+    /// 0x0C - SMC Card Type (Bus Width) Register.
+    pub card_type: RW<CardType>,
     /// 0x10 - SMC Block Size Register.
     pub block_size: RW<BlockSize>,
     /// 0x14 - SMC Byte Count Register.
@@ -257,14 +257,14 @@ impl TimeOut {
     }
 }
 
-/// Bus width register.
+/// Card type register.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-pub struct BusWidth(u32);
+pub struct CardType(u32);
 
 /// Bus width bits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum BusWidthBits {
+pub enum BusWidth {
     /// 1 bit.
     OneBit,
     /// 4 bit.
@@ -273,21 +273,21 @@ pub enum BusWidthBits {
     EightBit,
 }
 
-impl BusWidth {
+impl CardType {
     const CARD_WID: u32 = 0x3 << 0;
     /// Get bus width.
     #[inline]
-    pub const fn bus_width(self) -> BusWidthBits {
+    pub const fn bus_width(self) -> BusWidth {
         match (self.0 & Self::CARD_WID) >> 0 {
-            0x0 => BusWidthBits::OneBit,
-            0x1 => BusWidthBits::FourBit,
-            0x2 | 0x3 => BusWidthBits::EightBit,
+            0x0 => BusWidth::OneBit,
+            0x1 => BusWidth::FourBit,
+            0x2 | 0x3 => BusWidth::EightBit,
             _ => unreachable!(),
         }
     }
     /// Set bus width.
     #[inline]
-    pub const fn set_bus_width(self, width: BusWidthBits) -> Self {
+    pub const fn set_bus_width(self, width: BusWidth) -> Self {
         Self((self.0 & !Self::CARD_WID) | ((width as u32) << 0))
     }
 }
@@ -1045,10 +1045,10 @@ pub trait Data<const I: usize> {}
 #[cfg(test)]
 mod tests {
     use super::{
-        AccessMode, Argument, BlockSize, BurstSize, BusWidth, BusWidthBits, ByteCount,
-        ClockControl, Command, DdcTimingPhase, DdrMode, DriveDelayControl, FifoWaterLevel,
-        GlobalControl, Interrupt, InterruptMask, InterruptStateMasked, InterruptStateRaw,
-        NewTimingSet, NtsTimingPhase, RegisterBlock, Status, TimeOut, TransferDirection,
+        AccessMode, Argument, BlockSize, BurstSize, BusWidth, ByteCount, CardType, ClockControl,
+        Command, DdcTimingPhase, DdrMode, DriveDelayControl, FifoWaterLevel, GlobalControl,
+        Interrupt, InterruptMask, InterruptStateMasked, InterruptStateRaw, NewTimingSet,
+        NtsTimingPhase, RegisterBlock, Status, TimeOut, TransferDirection,
     };
     use memoffset::offset_of;
     #[test]
@@ -1056,7 +1056,7 @@ mod tests {
         assert_eq!(offset_of!(RegisterBlock, global_control), 0x0);
         assert_eq!(offset_of!(RegisterBlock, clock_control), 0x4);
         assert_eq!(offset_of!(RegisterBlock, timeout), 0x08);
-        assert_eq!(offset_of!(RegisterBlock, bus_width), 0x0C);
+        assert_eq!(offset_of!(RegisterBlock, card_type), 0x0C);
         assert_eq!(offset_of!(RegisterBlock, block_size), 0x10);
         assert_eq!(offset_of!(RegisterBlock, byte_count), 0x14);
         assert_eq!(offset_of!(RegisterBlock, command), 0x18);
@@ -1174,18 +1174,18 @@ mod tests {
 
     #[test]
     fn struct_bus_width_functions() {
-        let mut val = BusWidth(0x0);
+        let mut val = CardType(0x0);
 
-        val = val.set_bus_width(BusWidthBits::OneBit);
-        assert_eq!(val.bus_width(), BusWidthBits::OneBit);
+        val = val.set_bus_width(BusWidth::OneBit);
+        assert_eq!(val.bus_width(), BusWidth::OneBit);
         assert_eq!(val.0, 0x00000000);
 
-        val = val.set_bus_width(BusWidthBits::FourBit);
-        assert_eq!(val.bus_width(), BusWidthBits::FourBit);
+        val = val.set_bus_width(BusWidth::FourBit);
+        assert_eq!(val.bus_width(), BusWidth::FourBit);
         assert_eq!(val.0, 0x00000001);
 
-        val = val.set_bus_width(BusWidthBits::EightBit);
-        assert_eq!(val.bus_width(), BusWidthBits::EightBit);
+        val = val.set_bus_width(BusWidth::EightBit);
+        assert_eq!(val.bus_width(), BusWidth::EightBit);
         assert_eq!(val.0, 0x00000002);
     }
 

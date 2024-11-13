@@ -5,7 +5,7 @@ use core::arch::asm;
 
 use allwinner_hal::{
     ccu::{PeriFactorN, SmhcClockSource},
-    smhc::{BusWidthBits, TransferDirection},
+    smhc::{BusWidth, TransferDirection},
     uart::{Config, Serial},
 };
 use allwinner_rt::{entry, Clocks, Peripherals};
@@ -83,8 +83,8 @@ fn main(p: Peripherals, c: Clocks) {
         });
         while !smhc.command.read().is_command_start_cleared() {}
 
-        smhc.bus_width
-            .modify(|val| val.set_bus_width(BusWidthBits::OneBit));
+        smhc.card_type
+            .modify(|val| val.set_bus_width(BusWidth::OneBit));
         smhc.block_size
             .modify(|val| val.set_block_size(Block::LEN as u16));
     }
