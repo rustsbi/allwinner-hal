@@ -204,7 +204,7 @@ fn send_card_command(
     unsafe {
         smhc.argument.modify(|val| val.set_argument(arg));
         smhc.command.write({
-            let mut val = allwinner_hal::smhc::Command::new()
+            let mut val = allwinner_hal::smhc::Command::default()
                 .set_command_start()
                 .set_command_index(cmd)
                 .set_transfer_direction(trans_dir)

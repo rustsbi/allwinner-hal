@@ -1,6 +1,8 @@
 //! SD/MMC Host Controller peripheral.
 use volatile_register::{RO, RW};
 
+use crate::ccu::{self, Clocks, SmhcClockSource};
+
 /// SD/MMC Host Controller registers.
 #[repr(C)]
 pub struct RegisterBlock {
@@ -292,6 +294,13 @@ impl CardType {
     }
 }
 
+impl Default for CardType {
+    #[inline]
+    fn default() -> Self {
+        Self(0x0000_0000)
+    }
+}
+
 /// Block size register.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -308,6 +317,13 @@ impl BlockSize {
     #[inline]
     pub const fn set_block_size(self, size: u16) -> Self {
         Self((self.0 & !Self::BLK_SZ) | ((size as u32) << 0))
+    }
+}
+
+impl Default for BlockSize {
+    #[inline]
+    fn default() -> Self {
+        Self(0x0000_0200)
     }
 }
 
@@ -358,11 +374,6 @@ impl Command {
     const RESP_RCV: u32 = 0x1 << 6;
     const CMD_IDX: u32 = 0x3F << 0;
 
-    /// Create a new command register.
-    #[inline]
-    pub const fn new() -> Self {
-        Self(0)
-    }
     /// Start command.
     #[inline]
     pub const fn set_command_start(self) -> Self {
@@ -531,6 +542,13 @@ impl Command {
     #[inline]
     pub const fn is_command_start_cleared(self) -> bool {
         (self.0 & Self::CMD_LOAD) == 0
+    }
+}
+
+impl Default for Command {
+    #[inline]
+    fn default() -> Self {
+        Self(0x0000_0000)
     }
 }
 
@@ -1028,6 +1046,111 @@ impl SampleDelayControl {
     #[inline]
     pub const fn is_sample_delay_software_enabled(self) -> bool {
         (self.0 & Self::SAMP_DL_SW_EN) != 0
+    }
+}
+
+/// Managed SMHC structure with peripheral and pins.
+pub struct Smhc<SMHC, PADS> {
+    smhc: SMHC,
+    pads: PADS,
+}
+
+impl<SMHC: AsRef<RegisterBlock>, PADS> Smhc<SMHC, PADS> {
+    /// Create an SMHC instance.
+    #[inline]
+    pub fn new(smhc: SMHC, pads: PADS, clocks: &Clocks, ccu: &ccu::RegisterBlock) -> Self {
+        let divider = 2;
+        let (factor_n, factor_m) =
+            ccu::calculate_best_peripheral_factors_nm(clocks.psi.0, 20_000_000);
+        unsafe {
+            smhc.as_ref()
+                .clock_control
+                .modify(|val| val.disable_card_clock());
+        }
+        unsafe {
+            const SMHC_IDX: usize = 0; // TODO
+            ccu.smhc_bgr.modify(|val| val.assert_reset::<SMHC_IDX>());
+            ccu.smhc_bgr.modify(|val| val.gate_mask::<SMHC_IDX>());
+            ccu.smhc_clk[SMHC_IDX].modify(|val| {
+                val.set_clock_source(SmhcClockSource::PllPeri1x)
+                    .set_factor_n(factor_n)
+                    .set_factor_m(factor_m)
+                    .enable_clock_gating()
+            });
+            ccu.smhc_bgr.modify(|val| val.deassert_reset::<SMHC_IDX>());
+            ccu.smhc_bgr.modify(|val| val.gate_pass::<SMHC_IDX>());
+        }
+        unsafe {
+            let smhc = smhc.as_ref();
+            smhc.global_control.modify(|val| val.set_software_reset());
+            while !smhc.global_control.read().is_software_reset_cleared() {
+                core::hint::spin_loop();
+            }
+            smhc.global_control.modify(|val| val.set_fifo_reset());
+            while !smhc.global_control.read().is_fifo_reset_cleared() {
+                core::hint::spin_loop();
+            }
+            smhc.global_control.modify(|val| val.disable_interrupt());
+        }
+        unsafe {
+            let smhc = smhc.as_ref();
+            smhc.command.modify(|val| {
+                val.enable_wait_for_complete()
+                    .enable_change_clock()
+                    .set_command_start()
+            });
+            while !smhc.command.read().is_command_start_cleared() {
+                core::hint::spin_loop();
+            }
+        }
+        unsafe {
+            let smhc = smhc.as_ref();
+            smhc.clock_control
+                .modify(|val| val.set_card_clock_divider(divider - 1));
+            smhc.sample_delay_control.modify(|val| {
+                val.set_sample_delay_software(0)
+                    .enable_sample_delay_software()
+            });
+            smhc.clock_control.modify(|val| val.enable_card_clock());
+        }
+        unsafe {
+            let smhc = smhc.as_ref();
+            smhc.command.modify(|val| {
+                val.enable_wait_for_complete()
+                    .enable_change_clock()
+                    .set_command_start()
+            });
+            while !smhc.command.read().is_command_start_cleared() {
+                core::hint::spin_loop();
+            }
+        }
+        unsafe {
+            let smhc = smhc.as_ref();
+            smhc.card_type
+                .write(CardType::default().set_bus_width(BusWidth::OneBit));
+            smhc.block_size
+                .write(BlockSize::default().set_block_size(512)); // TODO
+        }
+
+        Self { smhc, pads }
+    }
+    /// Get a temporary borrow on the underlying GPIO pads.
+    #[inline]
+    pub fn pads<F, T>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut PADS) -> T,
+    {
+        f(&mut self.pads)
+    }
+    /// Close SMHC and release peripheral.
+    #[inline]
+    pub fn free(self, ccu: &ccu::RegisterBlock) -> (SMHC, PADS) {
+        unsafe {
+            const SMHC_IDX: usize = 0; // TODO
+            ccu.smhc_bgr.modify(|val| val.assert_reset::<SMHC_IDX>());
+            ccu.smhc_bgr.modify(|val| val.gate_mask::<SMHC_IDX>());
+        }
+        (self.smhc, self.pads)
     }
 }
 
