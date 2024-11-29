@@ -17,8 +17,16 @@ pub mod smhc;
 pub mod spi;
 #[doc(hidden)]
 pub mod sysctl;
-#[macro_use]
 pub mod uart;
+
+#[doc(hidden)]
+pub mod prelude {
+    pub use embedded_hal::{
+        digital::{InputPin as _, OutputPin as _, StatefulOutputPin as _},
+        spi::SpiBus as _,
+    };
+    pub use embedded_io::{Read as _, Write as _};
+}
 
 #[allow(unused)]
 macro_rules! impl_pins_trait {
