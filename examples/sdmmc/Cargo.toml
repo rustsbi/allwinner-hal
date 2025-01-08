@@ -11,5 +11,5 @@ allwinner-hal = { path = "../../allwinner-hal" }
 allwinner-rt = { path = "../../allwinner-rt" }
 panic-halt = "0.2.0"
 embedded-io = "0.6.1"
-embedded-sdmmc = "0.5.0"
+embedded-sdmmc = "0.8.1"
 embedded-time = "0.12.1"
