@@ -39,10 +39,10 @@ fn main(p: Peripherals, c: Clocks) {
     };
 
     writeln!(serial, "initialize smhc...").ok();
-    let smhc = Smhc::new::<0>(p.smhc0, sdmmc_pins, &c, &p.ccu);
+    let mut smhc = Smhc::new::<0>(p.smhc0, sdmmc_pins, &c, &p.ccu);
 
     writeln!(serial, "initializing SD card...").ok();
-    let sdcard = match SdCard::new(smhc) {
+    let sdcard = match SdCard::new(&mut smhc) {
         Ok(card) => card,
         Err(e) => {
             writeln!(serial, "Failed to initialize SD card: {:?}", e).ok();
