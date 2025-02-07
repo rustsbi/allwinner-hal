@@ -16,7 +16,7 @@ pub use register::{Eint, PioPow, Port, RegisterBlock};
 
 #[allow(unused)]
 macro_rules! impl_gpio_pins {
-    ($($px: ident:($P: expr, $N: expr, $M: ident);)+) => {
+    ($($px: ident:($P: expr_2021, $N: expr_2021, $M: ident);)+) => {
 /// GPIO pads in current platform.
 pub struct Pads<'a> {
     $(

@@ -30,7 +30,7 @@ pub mod prelude {
 
 #[allow(unused)]
 macro_rules! impl_pins_trait {
-    ($(($p: expr, $i: expr, $f: expr): $Trait: ty;)+) => {
+    ($(($p: expr_2021, $i: expr_2021, $f: expr_2021): $Trait: ty;)+) => {
         $(
 impl<'a> $Trait for $crate::gpio::Function<'a, $p, $i, $f> {}
         )+
