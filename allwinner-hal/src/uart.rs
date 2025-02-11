@@ -4,7 +4,7 @@ use core::cell::UnsafeCell;
 
 use crate::ccu::{self, ClockGate, Clocks};
 use embedded_time::rate::Baud;
-use uart16550::{CharLen, Register, Uart16550, PARITY};
+use uart16550::{CharLen, PARITY, Register, Uart16550};
 
 /// Universal Asynchronous Receiver-Transmitter registers.
 #[repr(C)]

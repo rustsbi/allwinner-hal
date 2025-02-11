@@ -32,8 +32,8 @@ pub const RAM_BASE: usize = 0x40000000;
  */
 
 const SYS_CFG: usize = 0x0300_0000; // 0x0300_0000 - 0x0300_0FFF
-                                    // const VER_REG: usize = SYS_CFG + 0x0024;
-                                    // const EMAC_EPHY_CLK_REG0: usize = SYS_CFG + 0x0030;
+// const VER_REG: usize = SYS_CFG + 0x0024;
+// const EMAC_EPHY_CLK_REG0: usize = SYS_CFG + 0x0030;
 const SYS_LDO_CTRL_REG: usize = SYS_CFG + 0x0150;
 const RES_CAL_CTRL_REG: usize = SYS_CFG + 0x0160;
 const RES240_CTRL_REG: usize = SYS_CFG + 0x0168;

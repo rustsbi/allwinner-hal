@@ -134,7 +134,7 @@ core::arch::global_asm! {
 
 #[cfg(any(feature = "nezha", feature = "lichee"))]
 pub use {
-    self::soc::d1::{Peripherals, __rom_init_params},
+    self::soc::d1::{__rom_init_params, Peripherals},
     allwinner_hal::ccu::Clocks,
 };
 

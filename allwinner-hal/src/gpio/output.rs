@@ -3,7 +3,7 @@ use super::{
     eint::EintPad,
     function::Function,
     input::Input,
-    mode::{borrow_with_mode, set_mode, HasMode},
+    mode::{HasMode, borrow_with_mode, set_mode},
     port_index,
     register::RegisterBlock,
 };

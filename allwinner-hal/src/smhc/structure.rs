@@ -1,8 +1,8 @@
 use super::{
+    ResponseMode, SdCardError, TransferMode,
     register::{
         AccessMode, BlockSize, BusWidth, CardType, Command, RegisterBlock, TransferDirection,
     },
-    ResponseMode, SdCardError, TransferMode,
 };
 use crate::ccu::{self, Clocks, SmhcClockSource};
 use core::arch::asm;

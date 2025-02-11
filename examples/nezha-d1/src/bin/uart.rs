@@ -2,7 +2,7 @@
 #![no_main]
 
 use allwinner_hal::uart::{Config, Serial};
-use allwinner_rt::{entry, Clocks, Peripherals};
+use allwinner_rt::{Clocks, Peripherals, entry};
 use embedded_io::{Read, Write};
 use panic_halt as _;
 

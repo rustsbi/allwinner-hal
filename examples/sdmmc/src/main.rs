@@ -5,7 +5,7 @@ use allwinner_hal::{
     smhc::{SdCard, Smhc},
     uart::{Config, Serial},
 };
-use allwinner_rt::{entry, Clocks, Peripherals};
+use allwinner_rt::{Clocks, Peripherals, entry};
 use embedded_io::Write;
 use embedded_sdmmc::VolumeManager;
 use panic_halt as _;

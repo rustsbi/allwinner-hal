@@ -167,7 +167,7 @@ impl UsbRequest {
 impl From<UsbRequest> for [u8; 36] {
     #[inline]
     fn from(value: UsbRequest) -> Self {
-        unsafe { core::mem::transmute(src) }
+        unsafe { core::mem::transmute(value) }
     }
 }
 

@@ -6,7 +6,7 @@
 #![no_std]
 #![no_main]
 use allwinner_hal::uart::{Config, Serial};
-use allwinner_rt::{entry, Clocks, Peripherals};
+use allwinner_rt::{Clocks, Peripherals, entry};
 use embedded_hal::digital::{InputPin, OutputPin};
 
 #[entry]

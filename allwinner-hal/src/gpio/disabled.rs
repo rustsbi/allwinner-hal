@@ -2,7 +2,7 @@ use super::{
     eint::EintPad,
     function::Function,
     input::Input,
-    mode::{set_mode, HasMode},
+    mode::{HasMode, set_mode},
     output::Output,
     register::RegisterBlock,
 };

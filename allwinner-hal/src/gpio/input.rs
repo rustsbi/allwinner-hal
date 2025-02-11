@@ -2,7 +2,7 @@ use super::{
     disabled::Disabled,
     eint::EintPad,
     function::Function,
-    mode::{borrow_with_mode, set_mode, HasMode},
+    mode::{HasMode, borrow_with_mode, set_mode},
     output::Output,
     port_index,
     register::RegisterBlock,

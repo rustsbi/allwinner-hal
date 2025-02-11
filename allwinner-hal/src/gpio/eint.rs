@@ -2,7 +2,7 @@ use super::{
     disabled::Disabled,
     function::Function,
     input::Input,
-    mode::{set_mode, HasMode},
+    mode::{HasMode, set_mode},
     output::Output,
     port_cfg_index, port_index,
     register::RegisterBlock,
