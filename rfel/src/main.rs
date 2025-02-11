@@ -73,14 +73,18 @@ fn main() {
             let address: usize = match parse_value(address.trim()) {
                 Some(address) => address,
                 None => {
-                    println!("error: invalid address, shoule be hexadecimal like 0x40000000, or decimal like 1073741824");
+                    println!(
+                        "error: invalid address, shoule be hexadecimal like 0x40000000, or decimal like 1073741824"
+                    );
                     return;
                 }
             };
             let length: usize = match parse_value(length.trim()) {
                 Some(address) => address,
                 None => {
-                    println!("error: invalid data, shoule be hexadecimal like 0x40000000, or decimal like 1073741824");
+                    println!(
+                        "error: invalid data, shoule be hexadecimal like 0x40000000, or decimal like 1073741824"
+                    );
                     return;
                 }
             };
@@ -97,7 +101,9 @@ fn main() {
             let address: u32 = match parse_value(address.trim()) {
                 Some(address) => address,
                 None => {
-                    println!("error: invalid address, shoule be hexadecimal like 0x40000000, or decimal like 1073741824");
+                    println!(
+                        "error: invalid address, shoule be hexadecimal like 0x40000000, or decimal like 1073741824"
+                    );
                     return;
                 }
             };
@@ -110,14 +116,18 @@ fn main() {
             let address: u32 = match parse_value(address.trim()) {
                 Some(address) => address,
                 None => {
-                    println!("error: invalid address, shoule be hexadecimal like 0x40000000, or decimal like 1073741824");
+                    println!(
+                        "error: invalid address, shoule be hexadecimal like 0x40000000, or decimal like 1073741824"
+                    );
                     return;
                 }
             };
             let value: u32 = match parse_value(value.trim()) {
                 Some(value) => value,
                 None => {
-                    println!("error: invalid address, shoule be hexadecimal like 0x40000000, or decimal like 1073741824");
+                    println!(
+                        "error: invalid address, shoule be hexadecimal like 0x40000000, or decimal like 1073741824"
+                    );
                     return;
                 }
             };

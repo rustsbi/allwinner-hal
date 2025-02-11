@@ -29,7 +29,9 @@ impl<'a> Fel<'a> {
             }
         }
         let (Some(endpoint_in), Some(endpoint_out)) = (endpoint_in, endpoint_out) else {
-            error!("Malformed device. Allwinner USB FEL device should include exactly one bulk in and one bulk out endpoint.");
+            error!(
+                "Malformed device. Allwinner USB FEL device should include exactly one bulk in and one bulk out endpoint."
+            );
             return Err(());
         };
         debug!(
@@ -50,7 +52,7 @@ impl<'a> Fel<'a> {
             self.send_fel_request(FelRequest::get_version());
             self.usb_read(&mut buf);
             self.read_fel_status();
-            unsafe { core::mem::transmute(buf) }
+            buf.into()
         })
     }
 
@@ -76,7 +78,7 @@ impl<'a> Fel<'a> {
 
     fn send_fel_request(&self, request: FelRequest) {
         trace!("send_fel_request");
-        let buf: [u8; 16] = unsafe { core::mem::transmute(request) };
+        let buf: [u8; 16] = request.into();
         self.usb_write(&buf);
     }
 
@@ -88,8 +90,7 @@ impl<'a> Fel<'a> {
 
     fn usb_read(&self, buf: &mut [u8]) {
         trace!("usb_read");
-        let buf_1: [u8; 36] =
-            unsafe { core::mem::transmute(UsbRequest::usb_read(buf.len() as u32)) };
+        let buf_1: [u8; 36] = UsbRequest::usb_read(buf.len() as u32).into();
         block_on(self.iface.bulk_out(self.endpoint_out, buf_1.to_vec()))
             .status
             .expect("send_usb_request on usb_read transfer");
@@ -109,8 +110,7 @@ impl<'a> Fel<'a> {
 
     fn usb_write(&self, buf: &[u8]) {
         trace!("usb_write");
-        let buf_1: [u8; 36] =
-            unsafe { core::mem::transmute(UsbRequest::usb_write(buf.len() as u32)) };
+        let buf_1: [u8; 36] = UsbRequest::usb_write(buf.len() as u32).into();
         block_on(self.iface.bulk_out(self.endpoint_out, buf_1.to_vec()))
             .status
             .expect("send_usb_request on usb_write transfer");
@@ -164,6 +164,13 @@ impl UsbRequest {
     }
 }
 
+impl From<UsbRequest> for [u8; 36] {
+    #[inline]
+    fn from(value: UsbRequest) -> Self {
+        unsafe { core::mem::transmute(src) }
+    }
+}
+
 /// FEL request.
 #[repr(C)]
 struct FelRequest {
@@ -203,6 +210,13 @@ impl FelRequest {
     }
 }
 
+impl From<FelRequest> for [u8; 16] {
+    #[inline]
+    fn from(value: FelRequest) -> Self {
+        unsafe { core::mem::transmute(value) }
+    }
+}
+
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct Version {
@@ -238,6 +252,13 @@ impl fmt::Debug for Version {
             .entry(&"dlength", &self.dlength)
             .entry(&"scratchpad", &self.scratchpad)
             .finish()
+    }
+}
+
+impl From<[u8; 32]> for Version {
+    #[inline]
+    fn from(value: [u8; 32]) -> Self {
+        unsafe { core::mem::transmute(value) }
     }
 }
 
