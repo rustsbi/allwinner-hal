@@ -479,7 +479,7 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi
 #[cfg(test)]
 mod tests {
     use super::RegisterBlock;
-    use memoffset::offset_of;
+    use core::mem::offset_of;
     #[test]
     fn offset_spi0() {
         assert_eq!(offset_of!(RegisterBlock, ier), 0x10);

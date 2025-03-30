@@ -1054,7 +1054,7 @@ mod tests {
         Interrupt, InterruptMask, InterruptStateMasked, InterruptStateRaw, NewTimingSet,
         NtsTimingPhase, RegisterBlock, Status, TimeOut, TransferDirection,
     };
-    use memoffset::offset_of;
+    use core::mem::offset_of;
     #[test]
     fn offset_smhc() {
         assert_eq!(offset_of!(RegisterBlock, global_control), 0x0);

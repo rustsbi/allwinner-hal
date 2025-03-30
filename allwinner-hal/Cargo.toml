@@ -26,7 +26,6 @@ plic = "0.0.2"
 embedded-sdmmc = "0.8.1"
 
 [dev-dependencies]
-memoffset = "0.8"
 
 [features]
 default = ["d1"]

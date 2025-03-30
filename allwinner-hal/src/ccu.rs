@@ -812,7 +812,7 @@ mod tests {
         AxiFactorN, CpuAxiConfig, CpuClockSource, DramBusGating, DramClock, DramClockSource,
         FactorP, MbusClock, PeriFactorN, RegisterBlock,
     };
-    use memoffset::offset_of;
+    use core::mem::offset_of;
     #[test]
     fn offset_ccu() {
         assert_eq!(offset_of!(RegisterBlock, pll_cpu_control), 0x0);
