@@ -55,7 +55,7 @@ pub struct PioPow {
 #[cfg(test)]
 mod tests {
     use super::{Eint, PioPow, Port, RegisterBlock};
-    use memoffset::offset_of;
+    use core::mem::offset_of;
 
     #[test]
     fn offset_gpio() {

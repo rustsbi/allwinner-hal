@@ -129,7 +129,7 @@ impl RegisterBlock {
 #[cfg(test)]
 mod tests {
     use super::{Datx8, RegisterBlock};
-    use memoffset::offset_of;
+    use core::mem::offset_of;
     #[test]
     fn offset_phy() {
         assert_eq!(offset_of!(RegisterBlock, lp3mr11), 0x2c);
