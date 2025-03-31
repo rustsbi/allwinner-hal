@@ -82,17 +82,6 @@ unsafe extern "C" fn start() -> ! {
         addi    t1, t1, 8
         j       3b
     3:  ",
-            // Prepare data segment
-        "   la      t3, sidata
-        la      t4, sdata
-        la      t5, edata
-    3:  bgeu    t4, t5, 2f
-        ld      t6, 0(t3)
-        sd      t6, 0(t4)
-        addi    t3, t3, 8
-        addi    t4, t4, 8
-        j       3b",
-        "2: ",
             // Start Rust main function
             "call   {main}",
             // Platform halt if main function returns
