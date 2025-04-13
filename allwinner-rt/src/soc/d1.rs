@@ -1,6 +1,6 @@
 //! D1-H, D1s, F133, F133A/B chip platforms.
 
-use allwinner_hal::{ccu::Clocks, gpio::Disabled, wafer::d1::Pads};
+use allwinner_hal::{ccu::Clocks, gpio::Disabled, uart::UartExt, wafer::d1::Pads};
 use embedded_time::rate::Extensions;
 
 /// ROM runtime peripheral ownership and configurations.
@@ -48,6 +48,10 @@ soc! {
     pub struct SPI0 => 0x04025000, allwinner_hal::spi::RegisterBlock;
     /// Platform-local Interrupt Controller.
     pub struct PLIC => 0x10000000, plic::Plic;
+}
+
+impl_uart! {
+    0 => UART0,
 }
 
 #[doc(hidden)]

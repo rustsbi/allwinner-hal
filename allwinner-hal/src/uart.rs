@@ -81,23 +81,39 @@ impl core::ops::Deref for RegisterBlock {
     }
 }
 
-/// Managed serial structure with peripheral and pads.
-#[derive(Debug)]
-pub struct Serial<UART, const I: usize, PADS: Pads<I>> {
-    uart: UART,
-    pads: PADS,
-}
-
-impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> Serial<UART, I, PADS> {
-    /// Create a serial instance.
-    #[inline]
-    pub fn new(
-        uart: UART,
+/// Extend constructor to owned UART register blocks.
+pub trait UartExt<'a, const I: usize> {
+    /// Creates a polling serial instance, without interrupt or DMA configurations.
+    fn serial<PADS>(
+        self,
         pads: PADS,
         config: impl Into<Config>,
         clocks: &Clocks,
         ccu: &ccu::RegisterBlock,
-    ) -> Self {
+    ) -> Serial<'a, PADS>
+    where
+        PADS: Pads<I>;
+}
+
+/// Managed serial structure with peripheral and pads.
+pub struct Serial<'a, PADS> {
+    uart: &'a RegisterBlock,
+    pads: PADS,
+}
+
+impl<'a, PADS> Serial<'a, PADS> {
+    /// Create a serial instance.
+    #[inline]
+    pub fn new<const I: usize>(
+        uart: &'a RegisterBlock,
+        pads: PADS,
+        config: impl Into<Config>,
+        clocks: &Clocks,
+        ccu: &ccu::RegisterBlock,
+    ) -> Self
+    where
+        PADS: Pads<I>,
+    {
         // 1. unwrap parameters
         let Config {
             baudrate,
@@ -111,8 +127,8 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> Serial<UART, I, 
         unsafe { PADS::Clock::reset(ccu) };
         // 3. set interrupt configuration
         // on BT0 stage we disable all uart interrupts
-        let interrupt_types = uart.as_ref().ier().read();
-        uart.as_ref().ier().write(
+        let interrupt_types = uart.ier().read();
+        uart.ier().write(
             interrupt_types
                 .disable_ms()
                 .disable_rda()
@@ -121,7 +137,7 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> Serial<UART, I, 
         );
         // 4. calculate and set baudrate
         let uart_clk = (clocks.apb1.0 + 8 * bps) / (16 * bps);
-        uart.as_ref().write_divisor(uart_clk as u16);
+        uart.write_divisor(uart_clk as u16);
         // 5. additional configurations
         let char_len = match wordlength {
             WordLength::Five => CharLen::FIVE,
@@ -135,8 +151,8 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> Serial<UART, I, 
             Parity::Odd => PARITY::ODD,
             Parity::Even => PARITY::EVEN,
         };
-        let lcr = uart.as_ref().lcr().read();
-        uart.as_ref().lcr().write(
+        let lcr = uart.lcr().read();
+        uart.lcr().write(
             lcr.set_char_len(char_len)
                 .set_one_stop_bit(one_stop_bit)
                 .set_parity(parity),
@@ -154,22 +170,27 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> Serial<UART, I, 
     }
     /// Close uart and release peripheral.
     #[inline]
-    pub fn free(self, ccu: &ccu::RegisterBlock) -> (UART, PADS) {
+    pub fn free<const I: usize>(self, ccu: &ccu::RegisterBlock) -> PADS
+    where
+        PADS: Pads<I>,
+    {
         // clock is closed for self.clock_gate is dropped
         unsafe { PADS::Clock::free(ccu) };
-        (self.uart, self.pads)
+        self.pads
     }
 }
 
-impl<UART: AsRef<RegisterBlock>, const I: usize, TX: Transmit<I>, RX: Receive<I>>
-    Serial<UART, I, (TX, RX)>
-{
+impl<'a, TX, RX> Serial<'a, (TX, RX)> {
     /// Split serial instance into transmit and receive halves.
     #[inline]
-    pub fn split(self) -> (TransmitHalf<UART, I, TX>, ReceiveHalf<UART, I, RX>) {
+    pub fn split<const I: usize>(self) -> (TransmitHalf<'a, TX>, ReceiveHalf<'a, RX>)
+    where
+        TX: Transmit<I>,
+        RX: Receive<I>,
+    {
         (
             TransmitHalf {
-                uart: unsafe { core::ptr::read_volatile(&self.uart) },
+                uart: self.uart,
                 _pads: self.pads.0,
             },
             ReceiveHalf {
@@ -181,16 +202,14 @@ impl<UART: AsRef<RegisterBlock>, const I: usize, TX: Transmit<I>, RX: Receive<I>
 }
 
 /// Transmit half from splitted serial structure.
-#[derive(Debug)]
-pub struct TransmitHalf<UART, const I: usize, PADS: Transmit<I>> {
-    uart: UART,
+pub struct TransmitHalf<'a, PADS> {
+    uart: &'a RegisterBlock,
     _pads: PADS,
 }
 
 /// Receive half from splitted serial structure.
-#[derive(Debug)]
-pub struct ReceiveHalf<UART, const I: usize, PADS: Receive<I>> {
-    uart: UART,
+pub struct ReceiveHalf<'a, PADS> {
+    uart: &'a RegisterBlock,
     _pads: PADS,
 }
 
@@ -200,9 +219,11 @@ pub trait Pads<const I: usize> {
 }
 
 /// Valid transmit pin for UART peripheral.
+#[diagnostic::on_unimplemented(message = "selected pad does not connect to UART{I} TX signal")]
 pub trait Transmit<const I: usize> {}
 
 /// Valid receive pin for UART peripheral.
+#[diagnostic::on_unimplemented(message = "selected pad does not connect to UART{I} RX signal")]
 pub trait Receive<const I: usize> {}
 
 #[inline]
@@ -251,67 +272,53 @@ where
     type Clock = ccu::UART<I>;
 }
 
-impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> embedded_io::ErrorType
-    for Serial<UART, I, PADS>
-{
+impl<'a, PADS> embedded_io::ErrorType for Serial<'a, PADS> {
     type Error = core::convert::Infallible;
 }
 
-impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Transmit<I>> embedded_io::ErrorType
-    for TransmitHalf<UART, I, PADS>
-{
+impl<'a, PADS> embedded_io::ErrorType for TransmitHalf<'a, PADS> {
     type Error = core::convert::Infallible;
 }
 
-impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Receive<I>> embedded_io::ErrorType
-    for ReceiveHalf<UART, I, PADS>
-{
+impl<'a, PADS> embedded_io::ErrorType for ReceiveHalf<'a, PADS> {
     type Error = core::convert::Infallible;
 }
 
-impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> embedded_io::Write
-    for Serial<UART, I, PADS>
-{
+impl<'a, PADS> embedded_io::Write for Serial<'a, PADS> {
     #[inline]
     fn write(&mut self, buffer: &[u8]) -> Result<usize, Self::Error> {
-        uart_write_blocking(self.uart.as_ref(), buffer)
+        uart_write_blocking(self.uart, buffer)
     }
 
     #[inline]
     fn flush(&mut self) -> Result<(), Self::Error> {
-        uart_flush_blocking(self.uart.as_ref())
+        uart_flush_blocking(self.uart)
     }
 }
 
-impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Transmit<I>> embedded_io::Write
-    for TransmitHalf<UART, I, PADS>
-{
+impl<'a, PADS> embedded_io::Write for TransmitHalf<'a, PADS> {
     #[inline]
     fn write(&mut self, buffer: &[u8]) -> Result<usize, Self::Error> {
-        uart_write_blocking(self.uart.as_ref(), buffer)
+        uart_write_blocking(self.uart, buffer)
     }
 
     #[inline]
     fn flush(&mut self) -> Result<(), Self::Error> {
-        uart_flush_blocking(self.uart.as_ref())
+        uart_flush_blocking(self.uart)
     }
 }
 
-impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Pads<I>> embedded_io::Read
-    for Serial<UART, I, PADS>
-{
+impl<'a, PADS> embedded_io::Read for Serial<'a, PADS> {
     #[inline]
     fn read(&mut self, buffer: &mut [u8]) -> Result<usize, Self::Error> {
-        uart_read_blocking(self.uart.as_ref(), buffer)
+        uart_read_blocking(self.uart, buffer)
     }
 }
 
-impl<UART: AsRef<RegisterBlock>, const I: usize, PADS: Receive<I>> embedded_io::Read
-    for ReceiveHalf<UART, I, PADS>
-{
+impl<'a, PADS> embedded_io::Read for ReceiveHalf<'a, PADS> {
     #[inline]
     fn read(&mut self, buffer: &mut [u8]) -> Result<usize, Self::Error> {
-        uart_read_blocking(self.uart.as_ref(), buffer)
+        uart_read_blocking(self.uart, buffer)
     }
 }
 

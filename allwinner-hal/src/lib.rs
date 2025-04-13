@@ -21,6 +21,7 @@ pub mod uart;
 
 #[doc(hidden)]
 pub mod prelude {
+    pub use crate::uart::UartExt as _;
     pub use embedded_hal::{
         digital::{InputPin as _, OutputPin as _, StatefulOutputPin as _},
         spi::SpiBus as _,

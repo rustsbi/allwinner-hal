@@ -5,7 +5,7 @@
 
 #![no_std]
 #![no_main]
-use allwinner_hal::uart::{Config, Serial};
+use allwinner_hal::{prelude::*, uart::Config};
 use allwinner_rt::{Clocks, Peripherals, entry};
 use embedded_hal::digital::{InputPin, OutputPin};
 
@@ -19,7 +19,7 @@ fn main(p: Peripherals, c: Clocks) {
 
     let tx = p.gpio.pb8.into_function::<7>();
     let rx = p.gpio.pb9.into_function::<7>();
-    let mut serial = Serial::new(p.uart0, (tx, rx), Config::default(), &c, &p.ccu);
+    let mut serial = p.uart0.serial((tx, rx), Config::default(), &c, &p.ccu);
 
     let _borrow_input_high = serial.pads(|(_, rx)| rx.with_input(|pad| pad.is_high()));
 }

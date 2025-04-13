@@ -2,8 +2,9 @@
 #![no_main]
 
 use allwinner_hal::{
+    prelude::*,
     smhc::{SdCard, Smhc},
-    uart::{Config, Serial},
+    uart::Config,
 };
 use allwinner_rt::{Clocks, Peripherals, entry};
 use embedded_io::Write;
@@ -23,7 +24,7 @@ impl embedded_sdmmc::TimeSource for MyTimeSource {
 fn main(p: Peripherals, c: Clocks) {
     let tx = p.gpio.pb8.into_function::<6>();
     let rx = p.gpio.pb9.into_function::<6>();
-    let mut serial = Serial::new(p.uart0, (tx, rx), Config::default(), &c, &p.ccu);
+    let mut serial = p.uart0.serial((tx, rx), Config::default(), &c, &p.ccu);
 
     writeln!(serial, "Hello World!").ok();
 
