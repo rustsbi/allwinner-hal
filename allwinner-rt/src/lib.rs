@@ -12,7 +12,6 @@
 //!     /* code */
 //! }
 //! ```
-#![feature(naked_functions)]
 #![no_std]
 
 #[macro_use]
@@ -53,25 +52,24 @@ pub struct EgonHead {
 ///
 /// NOTE: `mxstatus` is a custom T-Head register. Do not confuse with `mstatus`.
 /// It allows for configuring special eXtensions. See further below for details.
-#[naked]
+#[unsafe(naked)]
 #[unsafe(link_section = ".text.entry")]
 unsafe extern "C" fn start() -> ! {
-    unsafe {
-        const STACK_SIZE: usize = 4 * 1024;
-        #[unsafe(link_section = ".bss.uninit")]
-        static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
-        core::arch::naked_asm!(
-            // Enable T-Head ISA extension
-            "li     t1, 1 << 22",
-            "csrs   0x7C0, t1",
-            // Invalidate instruction and data cache, branch history table
-            // and branch target buffer table
-            "li     t1, 0x30013",
-            "csrs   0x7C2, t1",
-            // Disable interrupt
-            "csrw   mie, zero",
-            // Prepare programming language stack
-            "la     sp, {stack}
+    const STACK_SIZE: usize = 4 * 1024;
+    #[unsafe(link_section = ".bss.uninit")]
+    static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
+    core::arch::naked_asm!(
+        // Enable T-Head ISA extension
+        "li     t1, 1 << 22",
+        "csrs   0x7C0, t1",
+        // Invalidate instruction and data cache, branch history table
+        // and branch target buffer table
+        "li     t1, 0x30013",
+        "csrs   0x7C2, t1",
+        // Disable interrupt
+        "csrw   mie, zero",
+        // Prepare programming language stack
+        "la     sp, {stack}
         li      t0, {stack_size}
         add     sp, sp, t0",
             // Clear `.bss` section
@@ -82,16 +80,15 @@ unsafe extern "C" fn start() -> ! {
         addi    t1, t1, 8
         j       3b
     3:  ",
-            // Start Rust main function
-            "call   {main}",
-            // Platform halt if main function returns
-        "3: wfi
-            j       3b",
-            stack      =   sym STACK,
-            stack_size = const STACK_SIZE,
-            main       =   sym main,
-        )
-    }
+        // Start Rust main function
+        "call   {main}",
+        // Platform halt if main function returns
+    "3: wfi
+        j       3b",
+        stack      =   sym STACK,
+        stack_size = const STACK_SIZE,
+        main       =   sym main,
+    )
 }
 
 #[rustfmt::skip]
