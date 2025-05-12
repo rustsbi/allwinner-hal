@@ -4,8 +4,8 @@ use super::{port_cfg_index, register::RegisterBlock};
 #[inline]
 pub fn set_mode<'a, T, U>(value: T) -> U
 where
-    T: HasMode<'a>,
-    U: HasMode<'a>,
+    T: IntoRegisters<'a>,
+    U: FromRegisters<'a>,
 {
     // take ownership of pad
     let gpio = value.gpio();
@@ -17,8 +17,8 @@ where
 #[inline]
 pub fn borrow_with_mode<'a, T, U, F, R>(value: &mut T, f: F) -> R
 where
-    T: HasMode<'a>,
-    U: HasMode<'a>,
+    T: IntoRegisters<'a>,
+    U: FromRegisters<'a>,
     F: FnOnce(&mut U) -> R,
 {
     // take ownership of pad
@@ -33,7 +33,7 @@ where
 }
 
 #[inline]
-unsafe fn write_mode<'a, T: HasMode<'a>, U: HasMode<'a>>(gpio: &RegisterBlock) {
+unsafe fn write_mode<'a, T: IntoRegisters<'a>, U: FromRegisters<'a>>(gpio: &RegisterBlock) {
     // calculate mask, value and register address
     let (mask, value, port_idx, cfg_reg_idx) = const {
         let (port_idx, cfg_reg_idx, cfg_field_idx) = port_cfg_index(T::P, T::N);
@@ -46,10 +46,13 @@ unsafe fn write_mode<'a, T: HasMode<'a>, U: HasMode<'a>>(gpio: &RegisterBlock) {
     unsafe { cfg_reg.modify(|cfg| (cfg & mask) | value) };
 }
 
-pub trait HasMode<'a> {
+pub trait IntoRegisters<'a>: FromRegisters<'a> {
     const P: char;
     const N: u8;
-    const VALUE: u8;
     fn gpio(&self) -> &'a RegisterBlock;
+}
+
+pub trait FromRegisters<'a> {
+    const VALUE: u8;
     unsafe fn from_gpio(gpio: &'a RegisterBlock) -> Self;
 }

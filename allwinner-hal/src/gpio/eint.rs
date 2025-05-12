@@ -1,7 +1,7 @@
 use super::{
     function::Function,
     input::Input,
-    mode::{HasMode, set_mode},
+    mode::{FromRegisters, IntoRegisters, set_mode},
     output::Output,
     port_cfg_index, port_index,
     register::RegisterBlock,
@@ -28,6 +28,22 @@ impl<'a, const P: char, const N: u8> EintPad<'a, P, N> {
     pub fn into_function<const F: u8>(self) -> Function<'a, P, N, F> {
         set_mode(self)
     }
+    // Macro internal function for ROM runtime; DO NOT USE.
+    #[doc(hidden)]
+    #[inline]
+    pub unsafe fn __new(gpio: &'a RegisterBlock) -> Self {
+        Self { gpio }
+    }
+}
+
+/// External interrupt event.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Event {
+    PositiveEdge,
+    NegativeEdge,
+    HighLevel,
+    LowLevel,
+    BothEdges,
 }
 
 impl<'a, const P: char, const N: u8> EintPad<'a, P, N> {
@@ -69,26 +85,19 @@ impl<'a, const P: char, const N: u8> EintPad<'a, P, N> {
     }
 }
 
-impl<'a, const P: char, const N: u8> HasMode<'a> for EintPad<'a, P, N> {
+impl<'a, const P: char, const N: u8> IntoRegisters<'a> for EintPad<'a, P, N> {
     const P: char = P;
     const N: u8 = N;
-    const VALUE: u8 = 14;
     #[inline]
     fn gpio(&self) -> &'a RegisterBlock {
         self.gpio
     }
+}
+
+impl<'a, const P: char, const N: u8> FromRegisters<'a> for EintPad<'a, P, N> {
+    const VALUE: u8 = 14;
     #[inline]
     unsafe fn from_gpio(gpio: &'a RegisterBlock) -> Self {
         Self { gpio }
     }
-}
-
-/// External interrupt event.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Event {
-    PositiveEdge,
-    NegativeEdge,
-    HighLevel,
-    LowLevel,
-    BothEdges,
 }

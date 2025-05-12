@@ -4,7 +4,6 @@ mod function;
 mod input;
 mod mode;
 mod output;
-mod pad;
 mod pad_ext;
 mod register;
 
@@ -12,21 +11,11 @@ pub use eint::{EintPad, Event};
 pub use function::Function;
 pub use input::Input;
 pub use output::Output;
-pub use pad::Pad;
 pub use pad_ext::PadExt;
 pub use register::{Eint, PioPow, Port, RegisterBlock};
 
-#[allow(unused)]
-macro_rules! impl_gpio_pins {
-    ($($px: ident:($P: expr_2021, $N: expr_2021, $M: ident);)+) => {
-/// GPIO pads in current platform.
-pub struct Pads<'a> {
-    $(
-    pub $px: $crate::gpio::$M<'a, $P, $N>,
-    )+
-}
-    };
-}
+#[doc(hidden)]
+pub use mode::{FromRegisters, IntoRegisters, borrow_with_mode};
 
 #[inline]
 const fn port_index(p: char) -> usize {

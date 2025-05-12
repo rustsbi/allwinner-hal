@@ -1,7 +1,7 @@
 use super::{
     eint::EintPad,
     function::Function,
-    mode::{HasMode, borrow_with_mode, set_mode},
+    mode::{FromRegisters, IntoRegisters, borrow_with_mode, set_mode},
     output::Output,
     port_index,
     register::RegisterBlock,
@@ -44,6 +44,12 @@ impl<'a, const P: char, const N: u8> Input<'a, P, N> {
     {
         borrow_with_mode(self, f)
     }
+    // Macro internal function for ROM runtime; DO NOT USE.
+    #[doc(hidden)]
+    #[inline]
+    pub unsafe fn __new(gpio: &'a RegisterBlock) -> Self {
+        Self { gpio }
+    }
 }
 
 impl<'a, const P: char, const N: u8> embedded_hal::digital::ErrorType for Input<'a, P, N> {
@@ -61,14 +67,17 @@ impl<'a, const P: char, const N: u8> embedded_hal::digital::InputPin for Input<'
     }
 }
 
-impl<'a, const P: char, const N: u8> HasMode<'a> for Input<'a, P, N> {
+impl<'a, const P: char, const N: u8> IntoRegisters<'a> for Input<'a, P, N> {
     const P: char = P;
     const N: u8 = N;
-    const VALUE: u8 = 0;
     #[inline]
     fn gpio(&self) -> &'a RegisterBlock {
         self.gpio
     }
+}
+
+impl<'a, const P: char, const N: u8> FromRegisters<'a> for Input<'a, P, N> {
+    const VALUE: u8 = 0;
     #[inline]
     unsafe fn from_gpio(gpio: &'a RegisterBlock) -> Self {
         Self { gpio }
