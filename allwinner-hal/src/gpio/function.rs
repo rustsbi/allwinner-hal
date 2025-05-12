@@ -1,5 +1,4 @@
 use super::{
-    disabled::Disabled,
     eint::EintPad,
     input::Input,
     mode::{HasMode, borrow_with_mode, set_mode},
@@ -33,11 +32,6 @@ impl<'a, const P: char, const N: u8, const F: u8> Function<'a, P, N, F> {
     /// Configures the pad to operate as an external interrupt pad.
     #[inline]
     pub fn into_eint(self) -> EintPad<'a, P, N> {
-        set_mode(self)
-    }
-    /// Configures the pad to operate as a disabled pad.
-    #[inline]
-    pub fn into_disabled(self) -> Disabled<'a, P, N> {
         set_mode(self)
     }
     /// Borrows the pad to temporarily use it as an input pad.

@@ -1,17 +1,19 @@
 //! Allwinner GPIO controller.
-mod disabled;
 mod eint;
 mod function;
 mod input;
 mod mode;
 mod output;
+mod pad;
+mod pad_ext;
 mod register;
 
-pub use disabled::Disabled;
 pub use eint::{EintPad, Event};
 pub use function::Function;
 pub use input::Input;
 pub use output::Output;
+pub use pad::Pad;
+pub use pad_ext::PadExt;
 pub use register::{Eint, PioPow, Port, RegisterBlock};
 
 #[allow(unused)]

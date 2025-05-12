@@ -1,5 +1,4 @@
 use super::{
-    disabled::Disabled,
     function::Function,
     input::Input,
     mode::{HasMode, set_mode},
@@ -27,11 +26,6 @@ impl<'a, const P: char, const N: u8> EintPad<'a, P, N> {
     /// Configures the pad to operate as an alternate function pad.
     #[inline]
     pub fn into_function<const F: u8>(self) -> Function<'a, P, N, F> {
-        set_mode(self)
-    }
-    /// Configures the pad to operate as a disabled pad.
-    #[inline]
-    pub fn into_disabled(self) -> Disabled<'a, P, N> {
         set_mode(self)
     }
 }
