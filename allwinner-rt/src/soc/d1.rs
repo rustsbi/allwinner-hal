@@ -59,6 +59,15 @@ pub struct Pad<const P: char, const N: u8> {
     _private: (),
 }
 
+impl<const P: char, const N: u8> Pad<P, N> {
+    /// Macro internal constructor.
+    #[doc(hidden)]
+    #[inline]
+    pub const fn __new() -> Self {
+        Self { _private: () }
+    }
+}
+
 impl<'a, const P: char, const N: u8> allwinner_hal::gpio::PadExt<'a, P, N> for &'a mut Pad<P, N> {
     #[inline]
     fn into_input(self) -> allwinner_hal::gpio::Input<'a> {
