@@ -13,7 +13,7 @@ const LINKER_ALLWINNER_D1: &[u8] = b"
 OUTPUT_ARCH(riscv)
 ENTRY(head_jump)
 MEMORY {
-    SRAM : ORIGIN = 0x00020000, LENGTH = 128K
+    SRAM : ORIGIN = 0x00020000, LENGTH = 160K
 }
 SECTIONS {
     .head : {
