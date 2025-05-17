@@ -1,100 +1,87 @@
 use super::{
-    eint::EintPad,
-    function::Function,
     input::Input,
-    mode::{FromRegisters, IntoRegisters, borrow_with_mode, set_mode},
+    mode::{FromRegisters, PortAndNumber, borrow_with_mode, set_mode},
     port_index,
     register::RegisterBlock,
 };
 
 /// Output mode pad.
-pub struct Output<'a, const P: char, const N: u8> {
+pub struct Output<'a> {
+    port: char,
+    number: u8,
     gpio: &'a RegisterBlock,
 }
 
-impl<'a, const P: char, const N: u8> Output<'a, P, N> {
-    /// Configures the pad to operate as an input pad.
-    #[inline]
-    pub fn into_input(self) -> Input<'a, P, N> {
-        set_mode(self)
-    }
-    /// Configures the pad to operate as an alternate function pad.
-    #[inline]
-    pub fn into_function<const F: u8>(self) -> Function<'a, P, N, F> {
-        set_mode(self)
-    }
-    /// Configures the pad to operate as an external interrupt pad.
-    #[inline]
-    pub fn into_eint(self) -> EintPad<'a, P, N> {
-        set_mode(self)
-    }
+impl<'a> Output<'a> {
     /// Borrows the pad to temporarily use it as an input pad.
     #[inline]
     pub fn with_input<F, T>(&mut self, f: F) -> T
     where
-        F: FnOnce(&mut Input<'a, P, N>) -> T,
-    {
-        borrow_with_mode(self, f)
-    }
-    /// Borrows the pad to temporarily use it an alternate function pad.
-    #[inline]
-    pub fn with_function<const G: u8, F, T>(&mut self, f: F) -> T
-    where
-        F: FnOnce(&mut Function<'a, P, N, G>) -> T,
+        F: FnOnce(&mut Input<'a>) -> T,
     {
         borrow_with_mode(self, f)
     }
     // Macro internal function for ROM runtime; DO NOT USE.
     #[doc(hidden)]
     #[inline]
-    pub unsafe fn __new(gpio: &'a RegisterBlock) -> Self {
-        Self { gpio }
+    pub unsafe fn __new(port: char, number: u8, gpio: &'a RegisterBlock) -> Self {
+        set_mode(Self { gpio, port, number })
     }
 }
 
-impl<'a, const P: char, const N: u8> embedded_hal::digital::ErrorType for Output<'a, P, N> {
+impl<'a> embedded_hal::digital::ErrorType for Output<'a> {
     type Error = core::convert::Infallible;
 }
 
-impl<'a, const P: char, const N: u8> embedded_hal::digital::OutputPin for Output<'a, P, N> {
+impl<'a> embedded_hal::digital::OutputPin for Output<'a> {
     #[inline]
     fn set_low(&mut self) -> Result<(), Self::Error> {
-        let idx = const { port_index(P) };
-        unsafe { self.gpio.port[idx].dat.modify(|value| value & !(1 << N)) };
+        let idx = port_index(self.port);
+        unsafe {
+            self.gpio.port[idx]
+                .dat
+                .modify(|value| value & !(1 << self.number))
+        };
         Ok(())
     }
     #[inline]
     fn set_high(&mut self) -> Result<(), Self::Error> {
-        let idx = const { port_index(P) };
-        unsafe { self.gpio.port[idx].dat.modify(|value| value | (1 << N)) };
+        let idx = port_index(self.port);
+        unsafe {
+            self.gpio.port[idx]
+                .dat
+                .modify(|value| value | (1 << self.number))
+        };
         Ok(())
     }
 }
 
-impl<'a, const P: char, const N: u8> embedded_hal::digital::StatefulOutputPin for Output<'a, P, N> {
+impl<'a> embedded_hal::digital::StatefulOutputPin for Output<'a> {
     #[inline]
     fn is_set_high(&mut self) -> Result<bool, Self::Error> {
-        Ok(self.gpio.port[const { port_index(P) }].dat.read() & (1 << N) != 0)
+        Ok(self.gpio.port[port_index(self.port)].dat.read() & (1 << self.number) != 0)
     }
     #[inline]
     fn is_set_low(&mut self) -> Result<bool, Self::Error> {
-        Ok(self.gpio.port[const { port_index(P) }].dat.read() & (1 << N) == 0)
+        Ok(self.gpio.port[port_index(self.port)].dat.read() & (1 << self.number) == 0)
     }
 }
 
-impl<'a, const P: char, const N: u8> IntoRegisters<'a> for Output<'a, P, N> {
-    const P: char = P;
-    const N: u8 = N;
+impl<'a> PortAndNumber<'a> for Output<'a> {
     #[inline]
-    fn gpio(&self) -> &'a RegisterBlock {
+    fn port_number(&self) -> (char, u8) {
+        (self.port, self.number)
+    }
+    #[inline]
+    fn register_block(&self) -> &'a RegisterBlock {
         self.gpio
     }
 }
 
-impl<'a, const P: char, const N: u8> FromRegisters<'a> for Output<'a, P, N> {
+impl<'a> FromRegisters<'a> for Output<'a> {
     const VALUE: u8 = 1;
     #[inline]
-    unsafe fn from_gpio(gpio: &'a RegisterBlock) -> Self {
-        Self { gpio }
+    unsafe fn from_gpio(port: char, number: u8, gpio: &'a RegisterBlock) -> Self {
+        Self { port, number, gpio }
     }
 }

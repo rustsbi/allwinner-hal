@@ -14,9 +14,6 @@ pub use output::Output;
 pub use pad_ext::PadExt;
 pub use register::{Eint, PioPow, Port, RegisterBlock};
 
-#[doc(hidden)]
-pub use mode::{FromRegisters, IntoRegisters, borrow_with_mode};
-
 #[inline]
 const fn port_index(p: char) -> usize {
     assert!(p as usize >= b'B' as usize && p as usize <= b'G' as usize);
