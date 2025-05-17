@@ -38,6 +38,20 @@ macro_rules! soc {
 macro_rules! impl_uart {
     ($($i:expr => $UARTi:ident,)+) => {
         $(
+            impl allwinner_hal::uart::Instance<'static> for $UARTi {
+                #[inline]
+                fn register_block(self) -> &'static allwinner_hal::uart::RegisterBlock {
+                    unsafe { &*Self::ptr() }
+                }
+            }
+
+            impl<'a> allwinner_hal::uart::Instance<'a> for &'a mut $UARTi {
+                #[inline]
+                fn register_block(self) -> &'a allwinner_hal::uart::RegisterBlock {
+                    &*self
+                }
+            }
+
             impl<'a> UartExt<'a, $i> for &'a mut $UARTi {
                 fn serial<PADS>(
                     self,
@@ -64,8 +78,7 @@ macro_rules! impl_uart {
                 where
                     PADS: allwinner_hal::uart::Pads<$i>,
                 {
-                    let uart = unsafe { &*$UARTi::ptr() };
-                    allwinner_hal::uart::Serial::new(uart, pads, config, clocks, ccu)
+                    allwinner_hal::uart::Serial::new(self, pads, config, clocks, ccu)
                 }
             }
 

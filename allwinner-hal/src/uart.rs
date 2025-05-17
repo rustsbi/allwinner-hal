@@ -95,6 +95,12 @@ pub trait UartExt<'a, const I: usize> {
         PADS: Pads<I>;
 }
 
+/// Peripheral instance of UART.
+pub trait Instance<'a> {
+    /// Retrieve register block for this instance.
+    fn register_block(self) -> &'a RegisterBlock;
+}
+
 /// Managed serial structure with peripheral and pads.
 pub struct Serial<'a, PADS> {
     uart: &'a RegisterBlock,
@@ -105,7 +111,7 @@ impl<'a, PADS> Serial<'a, PADS> {
     /// Create a serial instance.
     #[inline]
     pub fn new<const I: usize>(
-        uart: &'a RegisterBlock,
+        uart: impl Instance<'a>,
         pads: PADS,
         config: impl Into<Config>,
         clocks: &Clocks,
@@ -127,6 +133,7 @@ impl<'a, PADS> Serial<'a, PADS> {
         unsafe { PADS::Clock::reset(ccu) };
         // 3. set interrupt configuration
         // on BT0 stage we disable all uart interrupts
+        let uart = uart.register_block();
         let interrupt_types = uart.ier().read();
         uart.ier().write(
             interrupt_types
