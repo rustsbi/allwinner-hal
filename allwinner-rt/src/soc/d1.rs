@@ -1,12 +1,12 @@
 //! D1-H, D1s, F133, F133A/B chip platforms.
 
-use allwinner_hal::{ccu::Clocks, gpio::Disabled, uart::UartExt, wafer::d1::Pads};
+use allwinner_hal::{ccu::Clocks, uart::UartExt};
 use embedded_time::rate::Extensions;
 
 /// ROM runtime peripheral ownership and configurations.
-pub struct Peripherals<'a> {
+pub struct Peripherals {
     /// General Purpose Input/Output peripheral.
-    pub gpio: Pads<'a>,
+    pub gpio: Pads,
     /// Clock control unit peripheral.
     pub ccu: CCU,
     /// Universal Asynchronous Receiver/Transmitter 0.
@@ -54,101 +54,169 @@ impl_uart! {
     0 => UART0,
 }
 
+/// Ownership of a GPIO pad.
+pub struct Pad<const P: char, const N: u8> {
+    _private: (),
+}
+
+impl<'a, const P: char, const N: u8> allwinner_hal::gpio::PadExt<'a, P, N> for &'a mut Pad<P, N> {
+    #[inline]
+    fn into_input(self) -> allwinner_hal::gpio::Input<'a> {
+        unsafe { allwinner_hal::gpio::Input::__new(P, N, &GPIO { _private: () }) }
+    }
+    #[inline]
+    fn into_output(self) -> allwinner_hal::gpio::Output<'a> {
+        unsafe { allwinner_hal::gpio::Output::__new(P, N, &GPIO { _private: () }) }
+    }
+    #[inline]
+    fn into_function<const F: u8>(self) -> allwinner_hal::gpio::Function<'a, P, N, F> {
+        unsafe { allwinner_hal::gpio::Function::__new(&GPIO { _private: () }) }
+    }
+    #[inline]
+    fn into_eint(self) -> allwinner_hal::gpio::EintPad<'a> {
+        unsafe { allwinner_hal::gpio::EintPad::__new(P, N, &GPIO { _private: () }) }
+    }
+}
+
+impl<const P: char, const N: u8> allwinner_hal::gpio::PadExt<'static, P, N> for Pad<P, N> {
+    #[inline]
+    fn into_input(self) -> allwinner_hal::gpio::Input<'static> {
+        unsafe { allwinner_hal::gpio::Input::__new(P, N, &GPIO { _private: () }) }
+    }
+    #[inline]
+    fn into_output(self) -> allwinner_hal::gpio::Output<'static> {
+        unsafe { allwinner_hal::gpio::Output::__new(P, N, &GPIO { _private: () }) }
+    }
+    #[inline]
+    fn into_function<const F: u8>(self) -> allwinner_hal::gpio::Function<'static, P, N, F> {
+        unsafe { allwinner_hal::gpio::Function::__new(&GPIO { _private: () }) }
+    }
+    #[inline]
+    fn into_eint(self) -> allwinner_hal::gpio::EintPad<'static> {
+        unsafe { allwinner_hal::gpio::EintPad::__new(P, N, &GPIO { _private: () }) }
+    }
+}
+
+#[allow(unused)]
+macro_rules! impl_gpio_pins {
+    ($($px: ident:($P: expr, $N: expr);)+) => {
+/// GPIO pads in current platform.
+pub struct Pads {
+    $(
+    pub $px: $crate::soc::d1::Pad<$P, $N>,
+    )+
+}
+
+impl Pads {
+    #[doc(hidden)]
+    #[inline]
+    pub fn __new() -> Self {
+        Self {
+            $(
+            $px: $crate::soc::d1::Pad { _private: () },
+            )+
+        }
+    }
+}
+    };
+}
+
+impl_gpio_pins! {
+    pb0: ('B', 0);
+    pb1: ('B', 1);
+    pb2: ('B', 2);
+    pb3: ('B', 3);
+    pb4: ('B', 4);
+    pb5: ('B', 5);
+    pb6: ('B', 6);
+    pb7: ('B', 7);
+    pb8: ('B', 8);
+    pb9: ('B', 9);
+    pb10: ('B', 10);
+    pb11: ('B', 11);
+    pb12: ('B', 12);
+    pc0: ('C', 0);
+    pc1: ('C', 1);
+    pc2: ('C', 2);
+    pc3: ('C', 3);
+    pc4: ('C', 4);
+    pc5: ('C', 5);
+    pc6: ('C', 6);
+    pc7: ('C', 7);
+    pd0: ('D', 0);
+    pd1: ('D', 1);
+    pd2: ('D', 2);
+    pd3: ('D', 3);
+    pd4: ('D', 4);
+    pd5: ('D', 5);
+    pd6: ('D', 6);
+    pd7: ('D', 7);
+    pd8: ('D', 8);
+    pd9: ('D', 9);
+    pd10: ('D', 10);
+    pd11: ('D', 11);
+    pd12: ('D', 12);
+    pd13: ('D', 13);
+    pd14: ('D', 14);
+    pd15: ('D', 15);
+    pd16: ('D', 16);
+    pd17: ('D', 17);
+    pd18: ('D', 18);
+    pd19: ('D', 19);
+    pd20: ('D', 20);
+    pd21: ('D', 21);
+    pd22: ('D', 22);
+    pe0: ('E', 0);
+    pe1: ('E', 1);
+    pe2: ('E', 2);
+    pe3: ('E', 3);
+    pe4: ('E', 4);
+    pe5: ('E', 5);
+    pe6: ('E', 6);
+    pe7: ('E', 7);
+    pe8: ('E', 8);
+    pe9: ('E', 9);
+    pe10: ('E', 10);
+    pe11: ('E', 11);
+    pe12: ('E', 12);
+    pe13: ('E', 13);
+    pe14: ('E', 14);
+    pe15: ('E', 15);
+    pe16: ('E', 16);
+    pe17: ('E', 17);
+    pf0: ('F', 0);
+    pf1: ('F', 1);
+    pf2: ('F', 2);
+    pf3: ('F', 3);
+    pf4: ('F', 4);
+    pf5: ('F', 5);
+    pf6: ('F', 6);
+    pg0: ('G', 0);
+    pg1: ('G', 1);
+    pg2: ('G', 2);
+    pg3: ('G', 3);
+    pg4: ('G', 4);
+    pg5: ('G', 5);
+    pg6: ('G', 6);
+    pg7: ('G', 7);
+    pg8: ('G', 8);
+    pg9: ('G', 9);
+    pg10: ('G', 10);
+    pg11: ('G', 11);
+    pg12: ('G', 12);
+    pg13: ('G', 13);
+    pg14: ('G', 14);
+    pg15: ('G', 15);
+    pg16: ('G', 16);
+    pg17: ('G', 17);
+    pg18: ('G', 18);
+}
+
 #[doc(hidden)]
 #[inline]
-pub fn __rom_init_params() -> (Peripherals<'static>, Clocks) {
-    static _GPIO: GPIO = GPIO { _private: () };
+pub fn __rom_init_params() -> (Peripherals, Clocks) {
     let peripherals = Peripherals {
-        gpio: Pads {
-            pb0: unsafe { Disabled::__new(&_GPIO) },
-            pb1: unsafe { Disabled::__new(&_GPIO) },
-            pb2: unsafe { Disabled::__new(&_GPIO) },
-            pb3: unsafe { Disabled::__new(&_GPIO) },
-            pb4: unsafe { Disabled::__new(&_GPIO) },
-            pb5: unsafe { Disabled::__new(&_GPIO) },
-            pb6: unsafe { Disabled::__new(&_GPIO) },
-            pb7: unsafe { Disabled::__new(&_GPIO) },
-            pb8: unsafe { Disabled::__new(&_GPIO) },
-            pb9: unsafe { Disabled::__new(&_GPIO) },
-            pb10: unsafe { Disabled::__new(&_GPIO) },
-            pb11: unsafe { Disabled::__new(&_GPIO) },
-            pb12: unsafe { Disabled::__new(&_GPIO) },
-            pc0: unsafe { Disabled::__new(&_GPIO) },
-            pc1: unsafe { Disabled::__new(&_GPIO) },
-            pc2: unsafe { Disabled::__new(&_GPIO) },
-            pc3: unsafe { Disabled::__new(&_GPIO) },
-            pc4: unsafe { Disabled::__new(&_GPIO) },
-            pc5: unsafe { Disabled::__new(&_GPIO) },
-            pc6: unsafe { Disabled::__new(&_GPIO) },
-            pc7: unsafe { Disabled::__new(&_GPIO) },
-            pd0: unsafe { Disabled::__new(&_GPIO) },
-            pd1: unsafe { Disabled::__new(&_GPIO) },
-            pd2: unsafe { Disabled::__new(&_GPIO) },
-            pd3: unsafe { Disabled::__new(&_GPIO) },
-            pd4: unsafe { Disabled::__new(&_GPIO) },
-            pd5: unsafe { Disabled::__new(&_GPIO) },
-            pd6: unsafe { Disabled::__new(&_GPIO) },
-            pd7: unsafe { Disabled::__new(&_GPIO) },
-            pd8: unsafe { Disabled::__new(&_GPIO) },
-            pd9: unsafe { Disabled::__new(&_GPIO) },
-            pd10: unsafe { Disabled::__new(&_GPIO) },
-            pd11: unsafe { Disabled::__new(&_GPIO) },
-            pd12: unsafe { Disabled::__new(&_GPIO) },
-            pd13: unsafe { Disabled::__new(&_GPIO) },
-            pd14: unsafe { Disabled::__new(&_GPIO) },
-            pd15: unsafe { Disabled::__new(&_GPIO) },
-            pd16: unsafe { Disabled::__new(&_GPIO) },
-            pd17: unsafe { Disabled::__new(&_GPIO) },
-            pd18: unsafe { Disabled::__new(&_GPIO) },
-            pd19: unsafe { Disabled::__new(&_GPIO) },
-            pd20: unsafe { Disabled::__new(&_GPIO) },
-            pd21: unsafe { Disabled::__new(&_GPIO) },
-            pd22: unsafe { Disabled::__new(&_GPIO) },
-            pe0: unsafe { Disabled::__new(&_GPIO) },
-            pe1: unsafe { Disabled::__new(&_GPIO) },
-            pe2: unsafe { Disabled::__new(&_GPIO) },
-            pe3: unsafe { Disabled::__new(&_GPIO) },
-            pe4: unsafe { Disabled::__new(&_GPIO) },
-            pe5: unsafe { Disabled::__new(&_GPIO) },
-            pe6: unsafe { Disabled::__new(&_GPIO) },
-            pe7: unsafe { Disabled::__new(&_GPIO) },
-            pe8: unsafe { Disabled::__new(&_GPIO) },
-            pe9: unsafe { Disabled::__new(&_GPIO) },
-            pe10: unsafe { Disabled::__new(&_GPIO) },
-            pe11: unsafe { Disabled::__new(&_GPIO) },
-            pe12: unsafe { Disabled::__new(&_GPIO) },
-            pe13: unsafe { Disabled::__new(&_GPIO) },
-            pe14: unsafe { Disabled::__new(&_GPIO) },
-            pe15: unsafe { Disabled::__new(&_GPIO) },
-            pe16: unsafe { Disabled::__new(&_GPIO) },
-            pe17: unsafe { Disabled::__new(&_GPIO) },
-            pf0: unsafe { Disabled::__new(&_GPIO) },
-            pf1: unsafe { Disabled::__new(&_GPIO) },
-            pf2: unsafe { Disabled::__new(&_GPIO) },
-            pf3: unsafe { Disabled::__new(&_GPIO) },
-            pf4: unsafe { Disabled::__new(&_GPIO) },
-            pf5: unsafe { Disabled::__new(&_GPIO) },
-            pf6: unsafe { Disabled::__new(&_GPIO) },
-            pg0: unsafe { Disabled::__new(&_GPIO) },
-            pg1: unsafe { Disabled::__new(&_GPIO) },
-            pg2: unsafe { Disabled::__new(&_GPIO) },
-            pg3: unsafe { Disabled::__new(&_GPIO) },
-            pg4: unsafe { Disabled::__new(&_GPIO) },
-            pg5: unsafe { Disabled::__new(&_GPIO) },
-            pg6: unsafe { Disabled::__new(&_GPIO) },
-            pg7: unsafe { Disabled::__new(&_GPIO) },
-            pg8: unsafe { Disabled::__new(&_GPIO) },
-            pg9: unsafe { Disabled::__new(&_GPIO) },
-            pg10: unsafe { Disabled::__new(&_GPIO) },
-            pg11: unsafe { Disabled::__new(&_GPIO) },
-            pg12: unsafe { Disabled::__new(&_GPIO) },
-            pg13: unsafe { Disabled::__new(&_GPIO) },
-            pg14: unsafe { Disabled::__new(&_GPIO) },
-            pg15: unsafe { Disabled::__new(&_GPIO) },
-            pg16: unsafe { Disabled::__new(&_GPIO) },
-            pg17: unsafe { Disabled::__new(&_GPIO) },
-            pg18: unsafe { Disabled::__new(&_GPIO) },
-        },
+        gpio: Pads::__new(),
         ccu: CCU { _private: () },
         uart0: UART0 { _private: () },
         com: COM { _private: () },
