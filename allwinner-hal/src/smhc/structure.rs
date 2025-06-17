@@ -1,8 +1,8 @@
 use super::{
-    ResponseMode, SdCardError, TransferMode,
     register::{
         AccessMode, BlockSize, BusWidth, CardType, Command, RegisterBlock, TransferDirection,
     },
+    ResponseMode, SdCardError, TransferMode,
 };
 use crate::ccu::{self, Clocks, SmhcClockSource};
 use core::arch::asm;
@@ -281,9 +281,44 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
     /// Read a block from the SD card.
     #[inline]
     pub fn read_block(&self, block: &mut Block, block_idx: u32) {
-        self.smhc
-            .send_card_command(17, block_idx, TransferMode::Read, ResponseMode::Short, true);
-        self.smhc.read_data(&mut block.contents);
+        loop {
+            let smhc = self.smhc.smhc.as_ref();
+            unsafe {
+                smhc.global_control.modify(|val| val.set_fifo_reset());
+                while !smhc.global_control.read().is_fifo_reset_cleared() {
+                    core::hint::spin_loop();
+                }
+                smhc.global_control
+                    .modify(|val| val.set_access_mode(AccessMode::Ahb));
+                self.smhc.smhc.as_ref().fifo_water_level.modify(|val| {
+                    use super::register::BurstSize;
+                    val.set_burst_size(BurstSize::SixteenBit)
+                        .set_receive_trigger_level(15)
+                        .set_transmit_trigger_level(240)
+                });
+            }
+            self.smhc.send_card_command(
+                17,
+                block_idx,
+                TransferMode::Read,
+                ResponseMode::Short,
+                true,
+            );
+            self.smhc.read_data(&mut block.contents);
+            loop {
+                use super::register::Interrupt;
+                let status = self.smhc.smhc.as_ref().interrupt_state_raw.read();
+                if status.has_interrupt(Interrupt::CommandComplete) {
+                    break;
+                }
+                Self::sleep(100);
+            }
+            use super::register::Interrupt;
+            let status = self.smhc.smhc.as_ref().interrupt_state_raw.read();
+            if status.has_interrupt(Interrupt::DataTransferComplete) {
+                break;
+            }
+        }
     }
     /// Parse CSD register version 2.
     #[inline]
