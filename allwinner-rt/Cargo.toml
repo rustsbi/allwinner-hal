@@ -26,5 +26,8 @@ plic = "0.0.2"
 
 [features]
 default = ["nezha"]
+d1 = []
+v821 = []
+
 nezha = []
 lichee = []

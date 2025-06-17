@@ -35,6 +35,29 @@ macro_rules! soc {
     };
 }
 
+macro_rules! impl_gpio_pins {
+    ($($px: ident:($P: expr, $N: expr);)+) => {
+/// GPIO pads in current platform.
+pub struct Pads {
+    $(
+    pub $px: Pad<$P, $N>,
+    )+
+}
+
+impl Pads {
+    #[doc(hidden)]
+    #[inline]
+    pub fn __new() -> Self {
+        Self {
+            $(
+            $px: Pad::__new(),
+            )+
+        }
+    }
+}
+    };
+}
+
 macro_rules! impl_uart {
     ($($i:expr => $UARTi:ident,)+) => {
         $(
