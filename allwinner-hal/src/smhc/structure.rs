@@ -1,8 +1,8 @@
 use super::{
+    ResponseMode, SdCardError, TransferMode,
     register::{
         AccessMode, BlockSize, BusWidth, CardType, Command, RegisterBlock, TransferDirection,
     },
-    ResponseMode, SdCardError, TransferMode,
 };
 use crate::ccu::{self, Clocks, SmhcClockSource};
 use core::arch::asm;
@@ -59,7 +59,7 @@ impl<SMHC: AsRef<RegisterBlock>, PADS> Smhc<SMHC, PADS> {
             let smhc = smhc.as_ref();
             smhc.command.modify(|val| {
                 val.enable_wait_for_complete()
-                    .enable_change_clock()
+                    .enable_change_card_clock()
                     .set_command_start()
             });
             while !smhc.command.read().is_command_start_cleared() {
@@ -80,7 +80,7 @@ impl<SMHC: AsRef<RegisterBlock>, PADS> Smhc<SMHC, PADS> {
             let smhc = smhc.as_ref();
             smhc.command.modify(|val| {
                 val.enable_wait_for_complete()
-                    .enable_change_clock()
+                    .enable_change_card_clock()
                     .set_command_start()
             });
             while !smhc.command.read().is_command_start_cleared() {
@@ -138,13 +138,13 @@ impl<SMHC: AsRef<RegisterBlock>, PADS> Smhc<SMHC, PADS> {
         let smhc = self.smhc.as_ref();
         if data_trans {
             unsafe {
-                smhc.byte_count.modify(|w| w.set_byte_count(512)); // TODO
+                smhc.byte_count.write(512); // TODO
                 smhc.global_control
                     .modify(|w| w.set_access_mode(AccessMode::Ahb));
             }
         }
         unsafe {
-            smhc.argument.modify(|val| val.set_argument(arg));
+            smhc.argument.write(arg);
             smhc.command.write({
                 let mut val = Command::default()
                     .set_command_start()
@@ -215,8 +215,26 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
         // -> CMD55+ACMD41(init and read OCR)
         smhc.send_card_command(0, 0, TransferMode::Disable, ResponseMode::Disable, false);
         Self::sleep(100); // TODO: wait for interrupt instead of sleep
-        smhc.send_card_command(8, 0x1AA, TransferMode::Disable, ResponseMode::Short, true);
-        Self::sleep(100);
+
+        const MAX_RETRIES: u8 = 10;
+        let mut attempts = 0;
+        let mut success = false;
+
+        while attempts < MAX_RETRIES {
+            smhc.send_card_command(8, 0x1AA, TransferMode::Disable, ResponseMode::Short, true);
+            Self::sleep(100);
+            let data = smhc.read_response();
+            if data == 0x1AA {
+                success = true;
+                break;
+            }
+            attempts += 1;
+        }
+
+        if !success {
+            return Err(SdCardError::UnexpectedResponse(8, smhc.read_response()));
+        }
+
         let data = smhc.read_response();
         if data != 0x1AA {
             return Err(SdCardError::UnexpectedResponse(8, data));
