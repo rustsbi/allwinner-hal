@@ -36,11 +36,15 @@ macro_rules! soc {
 }
 
 macro_rules! impl_gpio_pins {
-    ($($px: ident:($P: expr, $N: expr);)+) => {
-/// GPIO pads in current platform.
+    (
+        $(
+        $px: ident: ($PadTy:ty, $P: expr, $N: expr);
+        )+
+    ) => {
+/// GPIO pads in the current platform.
 pub struct Pads {
     $(
-    pub $px: Pad<$P, $N>,
+    pub $px: $PadTy<$P, $N>,
     )+
 }
 
@@ -50,7 +54,7 @@ impl Pads {
     pub fn __new() -> Self {
         Self {
             $(
-            $px: Pad::__new(),
+            $px: $PadTy::__new(),
             )+
         }
     }
