@@ -3,13 +3,12 @@ use volatile_register::RW;
 /// Generic Purpose Input/Output registers.
 #[repr(C)]
 pub struct RegisterBlock {
-    _reserved0: [u32; 12],
     /// Gpio port register group.
-    pub port: [Port; 6],
+    pub port: [Port; 7],
     _reserved1: [u32; 52],
     /// External interrupt register group.
-    pub eint: [Eint; 6],
-    _reserved2: [u32; 24],
+    pub eint: [Eint; 7],
+    _reserved2: [u32; 16],
     /// Input/output power register group.
     pub pio_pow: PioPow,
 }
@@ -59,7 +58,7 @@ mod tests {
 
     #[test]
     fn offset_gpio() {
-        assert_eq!(offset_of!(RegisterBlock, port), 0x30);
+        assert_eq!(offset_of!(RegisterBlock, port), 0x0);
         assert_eq!(offset_of!(RegisterBlock, eint), 0x220);
         assert_eq!(offset_of!(RegisterBlock, pio_pow), 0x340);
     }
