@@ -20,6 +20,9 @@ pub struct Peripherals {
 soc! {
     /// General Purpose Input/Output peripheral for PA, PC, PD and PL pads.
     pub struct GPIO => 0x42000000, allwinner_hal::gpio::RegisterBlock;
+    // TODO pub struct CCU => 0x42001000
+    // TODO pub struct GPADC => 0x42009000
+    // TODO pub struct TMR => 0x42050000
     /// Universal Asynchronous Receiver/Transmitter 0.
     pub struct UART0 => 0x42500000, allwinner_hal::uart::RegisterBlock;
     /// Universal Asynchronous Receiver/Transmitter 1.
@@ -28,6 +31,15 @@ soc! {
     pub struct UART2 => 0x42500800, allwinner_hal::uart::RegisterBlock;
     /// Universal Asynchronous Receiver/Transmitter 3.
     pub struct UART3 => 0x42500C00, allwinner_hal::uart::RegisterBlock;
+    // TODO pub struct TWI0 => 0x42502000
+    // TODO pub struct TWI1 => 0x42502400
+    // TODO pub struct TWI2 => 0x42502800
+    // TODO pub struct DMAC => 0x43001000
+    // TODO pub struct WDT => 0x43031000
+    // TODO pub struct RTC => 0x4A000C00
+    // TODO pub struct WUPTIMER => 0x4A000400
+    // TODO pub struct RTC_WDG => 0x4A001000
+    // TODO pub struct AON_CCU => 0x4A010000
 }
 
 // TODO GPIO_R logic in allwinner-hal
