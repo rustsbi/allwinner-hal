@@ -4,11 +4,11 @@ use volatile_register::RW;
 #[repr(C)]
 pub struct RegisterBlock {
     /// System domain GPIO port register group.
-    pub sys_port: [Port; 7],
-    _reserved1: [u32; 44],
+    pub sys_port: [Port; 9],
+    _reserved1: [u32; 20],
     /// System domain external interrupt register group.
-    pub sys_eint: [Eint; 7],
-    _reserved2: [u32; 24],
+    pub sys_eint: [Eint; 9],
+    _reserved2: [u32; 8],
     /// System domain input/output power register group.
     pub sys_pio_pow: PioPow,
     _reserved3: [u32; 123],
@@ -22,18 +22,18 @@ pub struct RegisterBlock {
 impl RegisterBlock {
     #[inline]
     pub(crate) const fn port(&self, p: char) -> &Port {
-        assert!((p as usize >= b'A' as usize && p as usize <= b'G' as usize) || p == 'L');
+        assert!((p as usize >= b'A' as usize && p as usize <= b'I' as usize) || p == 'L');
         match p {
-            'A'..='G' => &self.sys_port[p as usize - b'A' as usize],
+            'A'..='I' => &self.sys_port[p as usize - b'A' as usize],
             'L' => &self.rtc_port,
             _ => unreachable!(),
         }
     }
     #[inline]
     pub(crate) const fn eint(&self, p: char) -> &Eint {
-        assert!((p as usize >= b'A' as usize && p as usize <= b'G' as usize) || p == 'L');
+        assert!((p as usize >= b'A' as usize && p as usize <= b'I' as usize) || p == 'L');
         match p {
-            'A'..='G' => &self.sys_eint[p as usize - b'A' as usize],
+            'A'..='I' => &self.sys_eint[p as usize - b'A' as usize],
             'L' => &self.rtc_eint,
             _ => unreachable!(),
         }
@@ -107,6 +107,8 @@ mod tests {
             ('E', 0xC0, 0x280),
             ('F', 0xF0, 0x2A0),
             ('G', 0x120, 0x2C0),
+            ('H', 0x150, 0x2E0),
+            ('I', 0x180, 0x300),
             ('L', 0x540, 0x580),
         ];
 

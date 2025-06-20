@@ -31,6 +31,7 @@ pub use allwinner_rt_macros::entry;
 pub mod soc {
     pub mod d1;
     pub mod v821;
+    pub mod v853;
 }
 
 /// Jump over head data to executable code.

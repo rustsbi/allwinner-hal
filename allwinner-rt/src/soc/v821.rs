@@ -32,7 +32,7 @@ soc! {
 
 // TODO GPIO_R logic in allwinner-hal
 
-/// Ownership of a V821 system domain GPIO pad.
+/// Ownership of a V821 GPIO pad.
 pub struct Pad<const P: char, const N: u8> {
     _private: (),
 }
