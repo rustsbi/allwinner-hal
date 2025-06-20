@@ -3,14 +3,41 @@ use volatile_register::RW;
 /// Generic Purpose Input/Output registers.
 #[repr(C)]
 pub struct RegisterBlock {
-    /// Gpio port register group.
-    pub port: [Port; 7],
-    _reserved1: [u32; 52],
-    /// External interrupt register group.
-    pub eint: [Eint; 7],
-    _reserved2: [u32; 16],
-    /// Input/output power register group.
-    pub pio_pow: PioPow,
+    /// System domain GPIO port register group.
+    pub sys_port: [Port; 7],
+    _reserved1: [u32; 44],
+    /// System domain external interrupt register group.
+    pub sys_eint: [Eint; 7],
+    _reserved2: [u32; 24],
+    /// System domain input/output power register group.
+    pub sys_pio_pow: PioPow,
+    _reserved3: [u32; 123],
+    /// RTC domain GPIO port register group.
+    pub rtc_port: Port,
+    _reserved4: [u32; 4],
+    /// RTC domain external interrupt register group.
+    pub rtc_eint: Eint,
+}
+
+impl RegisterBlock {
+    #[inline]
+    pub(crate) const fn port(&self, p: char) -> &Port {
+        assert!((p as usize >= b'A' as usize && p as usize <= b'G' as usize) || p == 'L');
+        match p {
+            'A'..='G' => &self.sys_port[p as usize - b'A' as usize],
+            'L' => &self.rtc_port,
+            _ => unreachable!(),
+        }
+    }
+    #[inline]
+    pub(crate) const fn eint(&self, p: char) -> &Eint {
+        assert!((p as usize >= b'A' as usize && p as usize <= b'G' as usize) || p == 'L');
+        match p {
+            'A'..='G' => &self.sys_eint[p as usize - b'A' as usize],
+            'L' => &self.rtc_eint,
+            _ => unreachable!(),
+        }
+    }
 }
 
 /// Gpio port register group.
@@ -58,9 +85,48 @@ mod tests {
 
     #[test]
     fn offset_gpio() {
-        assert_eq!(offset_of!(RegisterBlock, port), 0x0);
-        assert_eq!(offset_of!(RegisterBlock, eint), 0x220);
-        assert_eq!(offset_of!(RegisterBlock, pio_pow), 0x340);
+        assert_eq!(offset_of!(RegisterBlock, sys_port), 0x0);
+        assert_eq!(offset_of!(RegisterBlock, sys_eint), 0x200);
+        assert_eq!(offset_of!(RegisterBlock, sys_pio_pow), 0x340);
+        assert_eq!(offset_of!(RegisterBlock, rtc_port), 0x540);
+        assert_eq!(offset_of!(RegisterBlock, rtc_eint), 0x580);
+    }
+
+    #[test]
+    fn offset_get_gpio_port_eint() {
+        use core::mem::MaybeUninit;
+        let block = MaybeUninit::<RegisterBlock>::uninit();
+        let block_ptr = block.as_ptr() as *const RegisterBlock;
+        let base_addr = block_ptr as *const u8;
+
+        let test_cases = [
+            ('A', 0, 0x200),
+            ('B', 0x30, 0x220),
+            ('C', 0x60, 0x240),
+            ('D', 0x90, 0x260),
+            ('E', 0xC0, 0x280),
+            ('F', 0xF0, 0x2A0),
+            ('G', 0x120, 0x2C0),
+            ('L', 0x540, 0x580),
+        ];
+
+        for (p, port_offset, eint_offset) in test_cases {
+            let port_ref = unsafe { (*block_ptr).port(p) };
+            let offset = unsafe { (port_ref as *const _ as *const u8).offset_from(base_addr) };
+            assert_eq!(
+                offset, port_offset,
+                "port offset for port {} should be 0x{:0x}",
+                p, port_offset
+            );
+
+            let eint_ref = unsafe { (*block_ptr).eint(p) };
+            let offset = unsafe { (eint_ref as *const _ as *const u8).offset_from(base_addr) };
+            assert_eq!(
+                offset, eint_offset,
+                "eint offset for port {} should be 0x{:0x}",
+                p, eint_offset
+            );
+        }
     }
 
     #[test]

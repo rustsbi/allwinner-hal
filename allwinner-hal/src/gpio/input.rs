@@ -1,7 +1,6 @@
 use super::{
     mode::{FromRegisters, PortAndNumber, borrow_with_mode, set_mode},
     output::Output,
-    port_index,
     register::RegisterBlock,
 };
 
@@ -36,11 +35,11 @@ impl<'a> embedded_hal::digital::ErrorType for Input<'a> {
 impl<'a> embedded_hal::digital::InputPin for Input<'a> {
     #[inline]
     fn is_high(&mut self) -> Result<bool, Self::Error> {
-        Ok(self.gpio.port[port_index(self.port)].dat.read() & (1 << self.number) != 0)
+        Ok(self.gpio.port(self.port).dat.read() & (1 << self.number) != 0)
     }
     #[inline]
     fn is_low(&mut self) -> Result<bool, Self::Error> {
-        Ok(self.gpio.port[port_index(self.port)].dat.read() & (1 << self.number) == 0)
+        Ok(self.gpio.port(self.port).dat.read() & (1 << self.number) == 0)
     }
 }
 
