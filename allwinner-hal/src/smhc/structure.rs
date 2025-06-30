@@ -59,7 +59,7 @@ impl<SMHC: AsRef<RegisterBlock>, PADS> Smhc<SMHC, PADS> {
             let smhc = smhc.as_ref();
             smhc.command.modify(|val| {
                 val.enable_wait_for_complete()
-                    .enable_change_clock()
+                    .enable_change_card_clock()
                     .set_command_start()
             });
             while !smhc.command.read().is_command_start_cleared() {
@@ -80,7 +80,7 @@ impl<SMHC: AsRef<RegisterBlock>, PADS> Smhc<SMHC, PADS> {
             let smhc = smhc.as_ref();
             smhc.command.modify(|val| {
                 val.enable_wait_for_complete()
-                    .enable_change_clock()
+                    .enable_change_card_clock()
                     .set_command_start()
             });
             while !smhc.command.read().is_command_start_cleared() {
@@ -138,13 +138,13 @@ impl<SMHC: AsRef<RegisterBlock>, PADS> Smhc<SMHC, PADS> {
         let smhc = self.smhc.as_ref();
         if data_trans {
             unsafe {
-                smhc.byte_count.modify(|w| w.set_byte_count(512)); // TODO
+                smhc.byte_count.write(512); // TODO
                 smhc.global_control
                     .modify(|w| w.set_access_mode(AccessMode::Ahb));
             }
         }
         unsafe {
-            smhc.argument.modify(|val| val.set_argument(arg));
+            smhc.argument.write(arg);
             smhc.command.write({
                 let mut val = Command::default()
                     .set_command_start()
@@ -215,8 +215,26 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
         // -> CMD55+ACMD41(init and read OCR)
         smhc.send_card_command(0, 0, TransferMode::Disable, ResponseMode::Disable, false);
         Self::sleep(100); // TODO: wait for interrupt instead of sleep
-        smhc.send_card_command(8, 0x1AA, TransferMode::Disable, ResponseMode::Short, true);
-        Self::sleep(100);
+
+        const MAX_RETRIES: u8 = 10;
+        let mut attempts = 0;
+        let mut success = false;
+
+        while attempts < MAX_RETRIES {
+            smhc.send_card_command(8, 0x1AA, TransferMode::Disable, ResponseMode::Short, true);
+            Self::sleep(100);
+            let data = smhc.read_response();
+            if data == 0x1AA {
+                success = true;
+                break;
+            }
+            attempts += 1;
+        }
+
+        if !success {
+            return Err(SdCardError::UnexpectedResponse(8, smhc.read_response()));
+        }
+
         let data = smhc.read_response();
         if data != 0x1AA {
             return Err(SdCardError::UnexpectedResponse(8, data));
@@ -281,9 +299,44 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
     /// Read a block from the SD card.
     #[inline]
     pub fn read_block(&self, block: &mut Block, block_idx: u32) {
-        self.smhc
-            .send_card_command(17, block_idx, TransferMode::Read, ResponseMode::Short, true);
-        self.smhc.read_data(&mut block.contents);
+        loop {
+            let smhc = self.smhc.smhc.as_ref();
+            unsafe {
+                smhc.global_control.modify(|val| val.set_fifo_reset());
+                while !smhc.global_control.read().is_fifo_reset_cleared() {
+                    core::hint::spin_loop();
+                }
+                smhc.global_control
+                    .modify(|val| val.set_access_mode(AccessMode::Ahb));
+                self.smhc.smhc.as_ref().fifo_water_level.modify(|val| {
+                    use super::register::BurstSize;
+                    val.set_burst_size(BurstSize::SixteenBit)
+                        .set_receive_trigger_level(15)
+                        .set_transmit_trigger_level(240)
+                });
+            }
+            self.smhc.send_card_command(
+                17,
+                block_idx,
+                TransferMode::Read,
+                ResponseMode::Short,
+                true,
+            );
+            self.smhc.read_data(&mut block.contents);
+            loop {
+                use super::register::Interrupt;
+                let status = self.smhc.smhc.as_ref().interrupt_state_raw.read();
+                if status.has_interrupt(Interrupt::CommandComplete) {
+                    break;
+                }
+                Self::sleep(100);
+            }
+            use super::register::Interrupt;
+            let status = self.smhc.smhc.as_ref().interrupt_state_raw.read();
+            if status.has_interrupt(Interrupt::DataTransferComplete) {
+                break;
+            }
+        }
     }
     /// Parse CSD register version 2.
     #[inline]

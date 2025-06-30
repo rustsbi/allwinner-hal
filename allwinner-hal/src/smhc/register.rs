@@ -14,11 +14,11 @@ pub struct RegisterBlock {
     /// 0x10 - SMC Block Size Register.
     pub block_size: RW<BlockSize>,
     /// 0x14 - SMC Byte Count Register.
-    pub byte_count: RW<ByteCount>,
+    pub byte_count: RW<u32>,
     /// 0x18 - SMC Command Register.
     pub command: RW<Command>,
     /// 0x1C - SMC Argument Register.
-    pub argument: RW<Argument>,
+    pub argument: RW<u32>,
     /// 0x20 ..= 0x2C - SMC Response Registers 0..=3.
     pub responses: [RO<u32>; 4],
     /// 0x30 - SMC Interrupt Mask Register.
@@ -31,27 +31,62 @@ pub struct RegisterBlock {
     pub status: RO<Status>,
     /// 0x40 - SMC FIFO Water Level Register.
     pub fifo_water_level: RW<FifoWaterLevel>,
-    _reserved0: [u32; 6],
-    /// 0x5c - SMC New Timing Set Register.
+    /// 0x44 - SMC FIFO Function Select Register.
+    pub fifo_function: RW<FifoFunction>,
+    /// 0x48 - SMC Transferred Byte Count Between Controller And Card.
+    /// This register should be accessed in full to avoid read-coherency problems,
+    ///  and read only after the data transfer completes.
+    pub transferred_byte_count0: RO<u32>,
+    /// 0x4C - SMC Transferred Byte Count Between Host And FIFO.
+    /// This register should be accessed in full to avoid read-coherency problems,
+    ///  and read only after the data transfer completes.
+    pub transferred_byte_count1: RO<u32>,
+    /// 0x50 - SMC Debug Control Register.
+    pub debug_control: RW<DebugControl>,
+    /// 0x54 - SMC CRC Status Detect Control Register.
+    pub crc_status_detect: RW<CrcStatusDetect>,
+    /// 0x58 - SMC Auto Command 12 Argument Register.
+    pub auto_cmd12_arg: RW<AutoCmd12Arg>,
+    /// 0x5C - SMC New Timing Set Register.
     pub new_timing_set: RW<NewTimingSet>,
-    _reserved1: [u32; 8],
+    _reserved0: [u8; 24],
+    /// 0x78 - SMC Hardware Reset Register.
+    pub hardware_reset: RW<HardWareReset>,
+    _reserved1: [u32; 1],
     /// 0x80 - SMC IDMAC Control Register.
-    pub dma_control: RW<u32>,
+    pub dma_control: RW<DmaControl>,
     /// 0x84 - SMC IDMAC Descriptor List Base Address Register.
     pub dma_descriptor_base: RW<u32>,
     /// 0x88 - SMC IDMAC Status Register.
-    pub dma_state: RW<u32>,
+    pub dma_state: RW<DmaState>,
     /// 0x8C - SMC IDMAC Interrupt Enable Register.
-    pub dma_interrupt_enable: RW<u32>,
-    _reserved2: [u32; 44],
-    /// 0x140 - Drive Delay Control register.
+    pub dma_interrupt_enable: RW<DmaInterruptEnable>,
+    _reserved2: [u8; 110],
+    /// 0x100 - SMC Card Threshold Control Register.
+    pub card_threshold_control: RW<CardThresholdControl>,
+    /// 0x104 - SMC Sample Fifo Control Register.
+    pub sample_fifo_control: RW<SampleFifoControl>,
+    /// 0x108 - SMC Auto Command 23 Argument Register.
+    pub auto_cmd23_arg: RW<u32>,
+    /// 0x10c - SMC eMMC4.5 DDR Start Bit Detection Control Register.
+    pub ddr_start_bit_detection: RW<DdrStartBitDetectionControl>,
+    _reserved3: [u32; 10],
+    /// 0x138 - SMC Extended Command Register.
+    pub extended_command: RW<ExtendedCommand>,
+    /// 0x13c - SMC Extended Response Register (for auto cmd 23).
+    pub extended_response: RW<u32>,
+    /// 0x140 - SMC Drive Delay Control Register.
     pub drive_delay_control: RW<DriveDelayControl>,
-    /// 0x144 - Sample Delay Control Register
+    /// 0x144 - SMC Sample Delay Control Register.
     pub sample_delay_control: RW<SampleDelayControl>,
-    _reserved3: [u32; 15],
-    /// 0x184 - deskew control control register.
+    /// 0x148 - SMC Data Strobe Delay Control Register.
+    pub data_strobe_delay_control: RW<DataStrobeDelayControl>,
+    /// 0x14c - SMC HS400 Delay Control Register.
+    pub hs400_delay_control: RW<Hs400DelayControl>,
+    _reserved4: [u32; 13],
+    /// 0x184 - SMC Deskew Control register.
     pub skew_control: RW<u32>,
-    _reserved4: [u32; 30],
+    _reserved5: [u32; 30],
     /// 0x200 - SMC FIFO Access Address.
     pub fifo: RW<u32>,
 }
@@ -79,16 +114,28 @@ pub enum DdrMode {
     Ddr,
 }
 
+/// Card clock time uint.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TimeUnit {
+    /// 1 card clock period.
+    Clk1,
+    /// 256 card clock period.
+    Clk256,
+}
+
 impl GlobalControl {
     const FIFO_AC_MOD: u32 = 1 << 31;
+    const TIME_UNIT_CMD: u32 = 1 << 12;
+    const TIME_UNIT_DAT: u32 = 1 << 11;
     const DDR_MOD: u32 = 1 << 10;
+    const CARD_DE_BOUNCE: u32 = 1 << 8;
     const DMA_ENB: u32 = 1 << 5;
     const INT_ENB: u32 = 1 << 4;
     const DMA_RST: u32 = 1 << 2;
     const FIFO_RST: u32 = 1 << 1;
     const SOFT_RST: u32 = 1 << 0;
 
-    /// Get FIFO access mode.
+    /// Get fifo access mode.
     #[inline]
     pub const fn access_mode(self) -> AccessMode {
         match (self.0 & Self::FIFO_AC_MOD) >> 31 {
@@ -97,7 +144,7 @@ impl GlobalControl {
             _ => unreachable!(),
         }
     }
-    /// Set FIFO access mode.
+    /// Set fifo access mode.
     #[inline]
     pub const fn set_access_mode(self, mode: AccessMode) -> Self {
         let mode = match mode {
@@ -105,6 +152,49 @@ impl GlobalControl {
             AccessMode::Ahb => 0x1,
         };
         Self((self.0 & !Self::FIFO_AC_MOD) | (mode << 31))
+    }
+    /// Set time unit for command.
+    #[inline]
+    pub const fn set_time_unit_cmd(self, unit: TimeUnit) -> Self {
+        Self((self.0 & !Self::TIME_UNIT_CMD) | (Self::TIME_UNIT_CMD & ((unit as u32) << 12)))
+    }
+    /// Get time unit for command.
+    #[inline]
+    pub const fn time_unit_cmd(self) -> TimeUnit {
+        match (self.0 & Self::TIME_UNIT_CMD) >> 12 {
+            0x0 => TimeUnit::Clk1,
+            0x1 => TimeUnit::Clk256,
+            _ => unreachable!(),
+        }
+    }
+    /// Set time unit for data.
+    #[inline]
+    pub const fn set_time_unit_data(self, unit: TimeUnit) -> Self {
+        Self((self.0 & !Self::TIME_UNIT_DAT) | (Self::TIME_UNIT_DAT & ((unit as u32) << 11)))
+    }
+    /// Get time unit for data.
+    #[inline]
+    pub const fn time_unit_data(self) -> TimeUnit {
+        match (self.0 & Self::TIME_UNIT_DAT) >> 11 {
+            0x0 => TimeUnit::Clk1,
+            0x1 => TimeUnit::Clk256,
+            _ => unreachable!(),
+        }
+    }
+    /// Enable card de-bounce.
+    #[inline]
+    pub const fn enable_card_debounce(self) -> Self {
+        Self(self.0 | Self::CARD_DE_BOUNCE)
+    }
+    /// Disable card de-bounce.
+    #[inline]
+    pub const fn disable_card_debounce(self) -> Self {
+        Self(self.0 & !Self::CARD_DE_BOUNCE)
+    }
+    /// Check if card de-bounce is enabled.
+    #[inline]
+    pub const fn is_card_debounce_enabled(self) -> bool {
+        self.0 & Self::CARD_DE_BOUNCE != 0
     }
     /// Get DDR mode.
     #[inline]
@@ -186,6 +276,15 @@ impl GlobalControl {
     }
 }
 
+/// Card clock mode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CardClockMode {
+    /// Always on.
+    AlwaysOn,
+    /// Turn off card clock when FSM is in IDLE state.
+    TurnOffConditionally,
+}
+
 /// Clock control register.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -193,7 +292,8 @@ pub struct ClockControl(u32);
 
 impl ClockControl {
     const MASK_DATA0: u32 = 1 << 31;
-    const CCLK_CTRL: u32 = 1 << 16;
+    const CCLK_CTRL: u32 = 1 << 17;
+    const CCLK_ENB: u32 = 1 << 16;
     const CCLK_DIV: u32 = 0xFF << 0;
     /// If mask data0 is enabled.
     #[inline]
@@ -210,19 +310,33 @@ impl ClockControl {
     pub const fn disable_mask_data0(self) -> Self {
         Self(self.0 & !Self::MASK_DATA0)
     }
+    /// Set card clock mode.
+    #[inline]
+    pub const fn set_card_clock_mode(self, mode: CardClockMode) -> Self {
+        Self((self.0 & !Self::CCLK_CTRL) | (Self::CCLK_CTRL & ((mode as u32) << 17)))
+    }
+    /// Get card clock mode.
+    #[inline]
+    pub const fn card_clock_mode(self) -> CardClockMode {
+        match (self.0 & Self::CCLK_CTRL) >> 17 {
+            0x0 => CardClockMode::AlwaysOn,
+            0x1 => CardClockMode::TurnOffConditionally,
+            _ => unreachable!(),
+        }
+    }
     /// If card clock is enabled.
     pub const fn is_card_clock_enabled(self) -> bool {
-        self.0 & Self::CCLK_CTRL != 0
+        self.0 & Self::CCLK_ENB != 0
     }
     /// Enable card clock.
     #[inline]
     pub const fn enable_card_clock(self) -> Self {
-        Self(self.0 | Self::CCLK_CTRL)
+        Self(self.0 | Self::CCLK_ENB)
     }
     /// Disable card clock.
     #[inline]
     pub const fn disable_card_clock(self) -> Self {
-        Self(self.0 & !Self::CCLK_CTRL)
+        Self(self.0 & !Self::CCLK_ENB)
     }
     /// Get card clock divider.
     #[inline]
@@ -243,6 +357,7 @@ pub struct TimeOut(u32);
 
 impl TimeOut {
     const DTO_LMT: u32 = 0xFFFFFF << 8;
+    const RESP_LMT: u32 = 0xFF;
 
     /// Get data timeout limit.
     #[inline]
@@ -253,6 +368,16 @@ impl TimeOut {
     #[inline]
     pub const fn set_data_timeout_limit(self, limit: u32) -> Self {
         Self((self.0 & !Self::DTO_LMT) | (limit << 8))
+    }
+    /// Set response timeout limit.
+    #[inline]
+    pub const fn set_response_timeout_limit(self, limit: u8) -> Self {
+        Self((self.0 & !Self::RESP_LMT) | (Self::RESP_LMT & (limit as u32)))
+    }
+    /// Get response timeout limit.
+    #[inline]
+    pub const fn response_timeout_limit(self) -> u8 {
+        (self.0 & Self::RESP_LMT) as u8
     }
 }
 
@@ -313,7 +438,7 @@ impl BlockSize {
     /// Set block size.
     #[inline]
     pub const fn set_block_size(self, size: u16) -> Self {
-        Self((self.0 & !Self::BLK_SZ) | ((size as u32) << 0))
+        Self((self.0 & !Self::BLK_SZ) | (Self::BLK_SZ & (size as u32)))
     }
 }
 
@@ -324,29 +449,14 @@ impl Default for BlockSize {
     }
 }
 
-/// Byte count register.
+/// Voltage switch.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct ByteCount(u32);
-
-impl ByteCount {
-    const BYTE_CNT: u32 = 0xFFFFFFFF << 0;
-    /// Get byte count.
-    #[inline]
-    pub const fn byte_count(self) -> u32 {
-        (self.0 & Self::BYTE_CNT) >> 0
-    }
-    /// Set byte count.
-    #[inline]
-    pub const fn set_byte_count(self, count: u32) -> Self {
-        Self((self.0 & !Self::BYTE_CNT) | (count << 0))
-    }
+pub enum VoltageSwitch {
+    /// Normal command.
+    Normal,
+    /// Voltage switch command, set for CMD11 only.
+    Switch,
 }
-
-/// Command register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct Command(u32);
 
 /// Transfer direction.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -357,13 +467,43 @@ pub enum TransferDirection {
     Write,
 }
 
+/// Boot mode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BootMode {
+    /// Normal command.
+    NormalCmd,
+    /// Mandatory boot operation.
+    MandatoryBoot,
+    /// Alternative boot operation.
+    AlternativeBoot,
+}
+
+/// Transfer mode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TransferMode {
+    /// Block data transfer.
+    Block,
+    /// Stream data transfer.
+    Stream,
+}
+
+/// Command register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct Command(u32);
+
 impl Command {
     const CMD_LOAD: u32 = 0x1 << 31;
+    const VOL_SW: u32 = 0x1 << 28;
+    const BOOT_ABT: u32 = 0x1 << 27;
+    const EXP_BOOT_ACK: u32 = 0x1 << 26;
+    const BOOT_MOD: u32 = 0x3 << 24;
     const PRG_CLK: u32 = 0x1 << 21;
     const SEND_INIT_SEQ: u32 = 0x1 << 15;
     const STOP_ABT_CMD: u32 = 0x1 << 14;
     const WAIT_PRE_OVER: u32 = 0x1 << 13;
     const STOP_CMD_FLAG: u32 = 0x1 << 12;
+    const TRANS_MOD: u32 = 0x1 << 11;
     const TRANS_DIR: u32 = 0x1 << 10;
     const DATA_TRANS: u32 = 0x1 << 9;
     const CHK_RESP_CRC: u32 = 0x1 << 8;
@@ -376,20 +516,74 @@ impl Command {
     pub const fn set_command_start(self) -> Self {
         Self(self.0 | Self::CMD_LOAD)
     }
-    /// If change clock is enabled.
+    /// Set voltage switch mode.
     #[inline]
-    pub const fn is_change_clock_enabled(self) -> bool {
-        (self.0 & Self::PRG_CLK) != 0
+    pub const fn set_voltage_switch(self, mode: VoltageSwitch) -> Self {
+        Self((self.0 & !Self::VOL_SW) | (Self::VOL_SW & ((mode as u32) << 28)))
     }
-    /// Enable change clock.
+    /// Get voltage switch mode.
     #[inline]
-    pub const fn enable_change_clock(self) -> Self {
+    pub const fn voltage_switch(self) -> VoltageSwitch {
+        match (self.0 & Self::VOL_SW) >> 28 {
+            0x0 => VoltageSwitch::Normal,
+            0x1 => VoltageSwitch::Switch,
+            _ => unreachable!(),
+        }
+    }
+    /// Abort boot operation.
+    #[inline]
+    pub const fn abort_boot(self) -> Self {
+        Self(self.0 | Self::BOOT_ABT)
+    }
+    /// Check if boot operation is aborted.
+    #[inline]
+    pub const fn is_boot_aborted(self) -> bool {
+        (self.0 & Self::BOOT_ABT) != 0
+    }
+    /// Enable boot ack expected.
+    #[inline]
+    pub const fn enable_boot_ack_expected(self) -> Self {
+        Self(self.0 | Self::EXP_BOOT_ACK)
+    }
+    /// Disable boot ack expected.
+    #[inline]
+    pub const fn disable_boot_ack_expected(self) -> Self {
+        Self(self.0 & !Self::EXP_BOOT_ACK)
+    }
+    /// Check if boot ack is received.
+    #[inline]
+    pub const fn is_boot_ack_received(self) -> bool {
+        (self.0 & Self::EXP_BOOT_ACK) != 0
+    }
+    /// Set boot mode.
+    #[inline]
+    pub const fn set_boot_mode(self, mode: BootMode) -> Self {
+        Self((self.0 & !Self::BOOT_MOD) | ((mode as u32) << 24))
+    }
+    /// Get boot mode.
+    #[inline]
+    pub const fn boot_mode(self) -> BootMode {
+        match (self.0 & Self::BOOT_MOD) >> 24 {
+            0x0 => BootMode::NormalCmd,
+            0x1 => BootMode::MandatoryBoot,
+            0x2 => BootMode::AlternativeBoot,
+            _ => unreachable!(),
+        }
+    }
+    /// Enable change card clock command.
+    #[inline]
+    pub const fn enable_change_card_clock(self) -> Self {
         Self(self.0 | Self::PRG_CLK)
     }
-    /// Disable change clock.
+    /// Disable change card clock command.
     #[inline]
-    pub const fn disable_change_clock(self) -> Self {
+    pub const fn disable_change_card_clock(self) -> Self {
         Self(self.0 & !Self::PRG_CLK)
+    }
+    /// Check if change card clock command is enabled.
+    #[inline]
+    pub const fn is_change_card_clock_enabled(self) -> bool {
+        (self.0 & Self::PRG_CLK) != 0
     }
     /// If send init sequence is enabled.
     #[inline]
@@ -436,20 +630,34 @@ impl Command {
     pub const fn disable_wait_for_complete(self) -> Self {
         Self(self.0 & !Self::WAIT_PRE_OVER)
     }
-    /// If auto stop is enabled.
+    /// If auto stop (cmd12) is enabled.
     #[inline]
     pub const fn is_auto_stop_enabled(self) -> bool {
         (self.0 & Self::STOP_CMD_FLAG) != 0
     }
-    /// Enable auto stop.
+    /// Enable auto stop (cmd12).
     #[inline]
     pub const fn enable_auto_stop(self) -> Self {
         Self(self.0 | Self::STOP_CMD_FLAG)
     }
-    /// Disable auto stop.
+    /// Disable auto stop (cmd12).
     #[inline]
     pub const fn disable_auto_stop(self) -> Self {
         Self(self.0 & !Self::STOP_CMD_FLAG)
+    }
+    /// Set transfer data mode.
+    #[inline]
+    pub const fn set_transfer_mode(self, mode: TransferMode) -> Self {
+        Self((self.0 & !Self::TRANS_MOD) | ((mode as u32) << 11))
+    }
+    /// Get transfer data mode.
+    #[inline]
+    pub const fn transfer_mode(self) -> TransferMode {
+        match (self.0 & Self::TRANS_MOD) >> 11 {
+            0 => TransferMode::Block,
+            1 => TransferMode::Stream,
+            _ => unreachable!(),
+        }
     }
     /// Get transfer direction.
     #[inline]
@@ -549,26 +757,6 @@ impl Default for Command {
     }
 }
 
-/// Argument register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct Argument(u32);
-
-impl Argument {
-    const CMD_ARG: u32 = 0xFFFFFFFF << 0;
-
-    /// Get argument.
-    #[inline]
-    pub const fn argument(self) -> u32 {
-        (self.0 & Self::CMD_ARG) as u32 >> 0
-    }
-    /// Set argument.
-    #[inline]
-    pub const fn set_argument(self, arg: u32) -> Self {
-        Self((self.0 & !Self::CMD_ARG) | ((arg as u32) << 0))
-    }
-}
-
 /// Interrupt mask register.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -577,23 +765,41 @@ pub struct InterruptMask(u32);
 /// Interrupt type.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Interrupt {
+    /// Card removed.
     CardRemoved,
+    /// Card inserted.
     CardInserted,
+    /// Sdio interrupt.
     Sdio,
+    /// Data end bit error.
     DataEndBitError,
+    /// Auto command done.
     AutoCommandDone,
+    /// Data start error.
     DataStartError,
+    /// Command busy and illegal write.
     CommandBusyAndIllegalWrite,
+    /// Fifo underrun or overflow.
     FifoUnderrunOrOverflow,
+    /// Data starvation timeout or 1.8V switch done.
     DataStarvationTimeout1V8SwitchDone,
+    /// Data timeout or boot data start.
     DataTimeoutBootDataStart,
+    /// Response timeout or boot ack received.
     ResponseTimeoutBootAckReceived,
+    /// Data CRC error.
     DataCrcError,
+    /// Response CRC error.
     ResponseCrcError,
+    /// Data receive request.
     DataReceiveRequest,
+    /// Data transmit request.
     DataTransmitRequest,
+    /// Data transfer complete.
     DataTransferComplete,
+    /// Command complete.
     CommandComplete,
+    /// Response error.
     ResponseError,
 }
 
@@ -816,6 +1022,43 @@ impl InterruptStateRaw {
     }
 }
 
+/// Command FSM states.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CmdFsmState {
+    /// Idle.
+    Idle,
+    /// Send init sequence.
+    SendInitSeq,
+    /// Tx command start bit.
+    TxCmdStartBit,
+    /// TX command tx bit.
+    TxCmdTxBit,
+    /// Tx command index + arggument.
+    TxCmdIdxArg,
+    /// Tx command CRC7.
+    TxCmdCrc7,
+    /// Tx command end bit.
+    TxCmdEndBit,
+    /// Rx response start bit.
+    RxRespStartBit,
+    /// Rx response irq response.
+    RxRespIrqResp,
+    /// Rx response tx bit.
+    RxRespTxBit,
+    /// Rx response command index.
+    RxRespCmdIdx,
+    /// Rx response data.
+    RxRespData,
+    /// Rx response CRC7.
+    RxRespCrc7,
+    /// Rx response end bit.
+    RxRespEndBit,
+    /// Command path wait NCC.
+    WaitNcc,
+    /// Wait; CMD-to-response turn around.
+    WaitCmdToResp,
+}
+
 /// State register.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -823,20 +1066,70 @@ impl InterruptStateRaw {
 pub struct Status(u32);
 
 impl Status {
+    const DMA_REQ: u32 = 1 << 31;
     const FIFO_LEVEL: u32 = 0x1FF << 17;
+    const RESP_IDX: u32 = 0x3F << 11;
+    const FSM_BUSY: u32 = 1 << 10;
     const CARD_BUSY: u32 = 1 << 9;
+    const CARD_PRESENT: u32 = 1 << 8;
+    const FSM_STA: u32 = 0xF << 4;
     const FIFO_FULL: u32 = 1 << 3;
     const FIFO_EMPTY: u32 = 1 << 2;
+    const FIFO_TX_LEVEL: u32 = 1 << 1;
+    const FIFO_RX_LEVEL: u32 = 1 << 0;
 
+    /// Check if dma request occurs.
+    #[inline]
+    pub const fn if_dma_request_occurs(self) -> bool {
+        self.0 & Self::DMA_REQ != 0
+    }
     /// Get FIFO level.
     #[inline]
     pub const fn fifo_level(self) -> u16 {
         ((self.0 & Self::FIFO_LEVEL) >> 17) as u16
     }
+    /// Get previous response index.
+    #[inline]
+    pub const fn response_index(self) -> u8 {
+        ((self.0 & Self::RESP_IDX) >> 11) as u8
+    }
+    /// Check if the FSM (data transfer state machine) is busy.
+    #[inline]
+    pub const fn fsm_busy(self) -> bool {
+        self.0 & Self::FSM_BUSY != 0
+    }
     /// Is the card busy?
     #[inline]
     pub const fn card_busy(self) -> bool {
         self.0 & Self::CARD_BUSY != 0
+    }
+    /// Check if card is present.
+    #[inline]
+    pub const fn card_present(self) -> bool {
+        self.0 & Self::CARD_PRESENT != 0
+    }
+    /// Get the current FSM state.
+    #[inline]
+    pub const fn fsm_state(self) -> CmdFsmState {
+        match (self.0 & Self::FSM_STA) >> 4 {
+            0 => CmdFsmState::Idle,
+            1 => CmdFsmState::SendInitSeq,
+            2 => CmdFsmState::TxCmdStartBit,
+            3 => CmdFsmState::TxCmdTxBit,
+            4 => CmdFsmState::TxCmdIdxArg,
+            5 => CmdFsmState::TxCmdCrc7,
+            6 => CmdFsmState::TxCmdEndBit,
+            7 => CmdFsmState::RxRespStartBit,
+            8 => CmdFsmState::RxRespIrqResp,
+            9 => CmdFsmState::RxRespTxBit,
+            10 => CmdFsmState::RxRespCmdIdx,
+            11 => CmdFsmState::RxRespData,
+            12 => CmdFsmState::RxRespCrc7,
+            13 => CmdFsmState::RxRespEndBit,
+            14 => CmdFsmState::WaitNcc,
+            15 => CmdFsmState::WaitCmdToResp,
+            _ => unreachable!(),
+        }
     }
     /// Is the FIFO full?
     #[inline]
@@ -847,6 +1140,16 @@ impl Status {
     #[inline]
     pub const fn fifo_empty(self) -> bool {
         self.0 & Self::FIFO_EMPTY != 0
+    }
+    /// Check if the FIFO reaches the transmit level.
+    #[inline]
+    pub const fn fifo_tx_level(self) -> bool {
+        self.0 & Self::FIFO_TX_LEVEL != 0
+    }
+    /// Check if the FIFO reaches the receive level.
+    #[inline]
+    pub const fn fifo_rx_level(self) -> bool {
+        self.0 & Self::FIFO_RX_LEVEL != 0
     }
 }
 
@@ -911,6 +1214,123 @@ impl FifoWaterLevel {
     }
 }
 
+/// FIFO function select register
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct FifoFunction(u32);
+
+impl FifoFunction {
+    const ABT_RDATA: u32 = 1 << 2;
+    const READ_WAIT: u32 = 1 << 1;
+    const HOST_IRQRESQ: u32 = 1;
+
+    /// Abort read data.
+    #[inline]
+    pub const fn abort_read_data(self) -> Self {
+        Self(self.0 | Self::ABT_RDATA)
+    }
+    /// Clear abort read data.
+    #[inline]
+    pub const fn clear_abort_read_data(self) -> Self {
+        Self(self.0 & !Self::ABT_RDATA)
+    }
+    /// Check if abort read data is set.
+    #[inline]
+    pub const fn is_abort_read_data_set(self) -> bool {
+        (self.0 & Self::ABT_RDATA) != 0
+    }
+    /// Enable read wait.
+    #[inline]
+    pub const fn enable_read_wait(self) -> Self {
+        Self(self.0 | Self::READ_WAIT)
+    }
+    /// Disable read wait.
+    #[inline]
+    pub const fn disable_read_wait(self) -> Self {
+        Self(self.0 & !Self::READ_WAIT)
+    }
+    /// Check if read wait is enabled.
+    #[inline]
+    pub const fn is_read_wait_enabled(self) -> bool {
+        (self.0 & Self::READ_WAIT) != 0
+    }
+    /// Enable host send mmc irq request.
+    #[inline]
+    pub const fn enable_host_irq_request(self) -> Self {
+        Self(self.0 | Self::HOST_IRQRESQ)
+    }
+    /// Disable host send mmc irq request.
+    #[inline]
+    pub const fn disable_host_irq_request(self) -> Self {
+        Self(self.0 & !Self::HOST_IRQRESQ)
+    }
+    /// Check if host send mmc irq request is enabled.
+    #[inline]
+    pub const fn is_host_irq_request_enabled(self) -> bool {
+        (self.0 & Self::HOST_IRQRESQ) != 0
+    }
+}
+
+/// Debug control register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct DebugControl(u32);
+
+impl DebugControl {}
+
+/// Crc mode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CrcMode {
+    /// Other mode.
+    Other = 3,
+    /// Hs400 mode.
+    Hs400 = 6,
+}
+
+/// Crc status detect control register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct CrcStatusDetect(u32);
+
+impl CrcStatusDetect {
+    const CRC_MODE: u32 = 0x7 << 28;
+
+    /// Set the CRC mode.
+    #[inline]
+    pub const fn set_crc_mode(self, mode: CrcMode) -> Self {
+        Self((self.0 & !Self::CRC_MODE) | ((mode as u32) << 28))
+    }
+    /// Get the current CRC mode.
+    #[inline]
+    pub const fn crc_mode(self) -> CrcMode {
+        match (self.0 & Self::CRC_MODE) >> 28 {
+            3 => CrcMode::Other,
+            6 => CrcMode::Hs400,
+            _ => unreachable!(),
+        }
+    }
+}
+
+/// Auto command 12 argument register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct AutoCmd12Arg(u32);
+
+impl AutoCmd12Arg {
+    const ARG: u32 = 0xFFFF;
+
+    /// Get the argument.
+    #[inline]
+    pub const fn argument(self) -> u32 {
+        (self.0 & Self::ARG) >> 0
+    }
+    /// Set the argument.
+    #[inline]
+    pub const fn set_argument(self, arg: u16) -> Self {
+        Self((self.0 & !Self::ARG) | (arg as u32))
+    }
+}
+
 /// New timing set register.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -927,9 +1347,16 @@ pub enum NtsTimingPhase {
 
 impl NewTimingSet {
     const MODE_SELECT: u32 = 1 << 31;
+    const CMD_DAT_RX_PHASE_CLR: u32 = 0x1 << 24;
+    const DAT_CRC_STATUS_RX_PHASE_CLR: u32 = 0x1 << 22;
+    const DAT_TRANS_RX_PHASE_CLR: u32 = 0x1 << 21;
+    const DAT_RECV_RX_PHASE_CLR: u32 = 0x1 << 20;
+    const CMD_SEND_RX_PHASE_CLR: u32 = 0x1 << 16;
     const DAT_SAMPLE_TIMING_PHASE: u32 = 0x3 << 8;
+    const CMD_SAMPLE_TIMING_PHASE: u32 = 0x3 << 4;
+    const HS400_NEW_SAMPLE_EN: u32 = 1;
 
-    /// If new mode is enabled.
+    /// Check if new mode is enabled.
     #[inline]
     pub const fn is_new_mode_enabled(self) -> bool {
         (self.0 & Self::MODE_SELECT) != 0
@@ -944,9 +1371,96 @@ impl NewTimingSet {
     pub const fn disable_new_mode(self) -> Self {
         Self(self.0 & !Self::MODE_SELECT)
     }
-    /// Get timing phase.
+    /// Enable clear the input phase of cmd and dat lines during
+    /// the update clock operation.
     #[inline]
-    pub const fn sample_timing_phase(self) -> NtsTimingPhase {
+    pub fn enable_rx_dat_cmd_clear(self) -> Self {
+        Self(self.0 | Self::CMD_DAT_RX_PHASE_CLR)
+    }
+    /// Disable clear the input phase of cmd and dat lines during
+    /// the update clock operation.
+    #[inline]
+    pub fn disable_rx_dat_cmd_clear(self) -> Self {
+        Self(self.0 & !Self::CMD_DAT_RX_PHASE_CLR)
+    }
+    /// Check if clear the input phase of cmd and dat lines during
+    /// the update clock operation is enabled.
+    #[inline]
+    pub const fn is_rx_dat_cmd_clear_enabled(self) -> bool {
+        (self.0 & Self::CMD_DAT_RX_PHASE_CLR) != 0
+    }
+    /// Enable clear the input phase of dat before receiving
+    /// CRC status.
+    #[inline]
+    pub fn enable_rx_dat_crc_status_clear(self) -> Self {
+        Self(self.0 | Self::DAT_CRC_STATUS_RX_PHASE_CLR)
+    }
+    /// Disable clear the input phase of dat before receiving
+    /// CRC status.
+    #[inline]
+    pub fn disable_rx_dat_crc_status_clear(self) -> Self {
+        Self(self.0 & !Self::DAT_CRC_STATUS_RX_PHASE_CLR)
+    }
+    /// Check if clear the input phase of dat before receiving
+    /// CRC status is enabled.
+    #[inline]
+    pub const fn is_rx_dat_crc_status_clear_enabled(self) -> bool {
+        (self.0 & Self::DAT_CRC_STATUS_RX_PHASE_CLR) != 0
+    }
+    /// Enable clear the input phase of dat before transfering
+    /// data.
+    #[inline]
+    pub fn enable_rx_dat_trans_clear(self) -> Self {
+        Self(self.0 | Self::DAT_TRANS_RX_PHASE_CLR)
+    }
+    /// Disable clear the input phase of dat before transfering
+    /// data.
+    #[inline]
+    pub fn disable_rx_dat_trans_clear(self) -> Self {
+        Self(self.0 & !Self::DAT_TRANS_RX_PHASE_CLR)
+    }
+    /// Check if clear the input phase of dat before transfering
+    /// data.
+    #[inline]
+    pub fn is_rx_dat_trans_clear_enabled(self) -> bool {
+        (self.0 & Self::DAT_TRANS_RX_PHASE_CLR) != 0
+    }
+    /// Enable clear the input phase of dat before receiving
+    /// data.
+    #[inline]
+    pub fn enable_rx_dat_recv_clear(self) -> Self {
+        Self(self.0 | Self::DAT_RECV_RX_PHASE_CLR)
+    }
+    /// Disable clear the input phase of dat before receiving
+    /// data.
+    #[inline]
+    pub fn disable_rx_dat_recv_clear(self) -> Self {
+        Self(self.0 & !Self::DAT_RECV_RX_PHASE_CLR)
+    }
+    /// Check if clear the input phase of dat before receiving
+    /// data is enabled.
+    #[inline]
+    pub fn is_rx_dat_recv_clear_enabled(self) -> bool {
+        (self.0 & Self::DAT_RECV_RX_PHASE_CLR) != 0
+    }
+    /// Enable clear cmd rx phase before sending cmd.
+    #[inline]
+    pub fn enable_rx_cmd_send_clear(self) -> Self {
+        Self(self.0 | Self::CMD_SEND_RX_PHASE_CLR)
+    }
+    /// Disable clear cmd rx phase before sending cmd.
+    #[inline]
+    pub fn disable_rx_cmd_send_clear(self) -> Self {
+        Self(self.0 & !Self::CMD_SEND_RX_PHASE_CLR)
+    }
+    /// Check if clear cmd rx phase before sending cmd is enabled.
+    #[inline]
+    pub fn is_rx_cmd_send_clear_enabled(self) -> bool {
+        (self.0 & Self::CMD_SEND_RX_PHASE_CLR) != 0
+    }
+    /// Get data sample timing phase.
+    #[inline]
+    pub const fn dat_sample_timing_phase(self) -> NtsTimingPhase {
         match (self.0 & Self::DAT_SAMPLE_TIMING_PHASE) >> 8 {
             0x0 => NtsTimingPhase::Offset90,
             0x1 => NtsTimingPhase::Offset180,
@@ -955,10 +1469,507 @@ impl NewTimingSet {
             _ => unreachable!(),
         }
     }
-    /// Set timing phase.
+    /// Set data sample timing phase.
     #[inline]
-    pub const fn set_sample_timing_phase(self, phase: NtsTimingPhase) -> Self {
+    pub const fn set_dat_sample_timing_phase(self, phase: NtsTimingPhase) -> Self {
         Self((self.0 & !Self::DAT_SAMPLE_TIMING_PHASE) | ((phase as u32) << 8))
+    }
+    /// Get command sample timing phase (except offset0).
+    #[inline]
+    pub const fn cmd_sample_timing_phase(self) -> NtsTimingPhase {
+        match (self.0 & Self::CMD_SAMPLE_TIMING_PHASE) >> 4 {
+            0x0 => NtsTimingPhase::Offset90,
+            0x1 => NtsTimingPhase::Offset180,
+            0x2 => NtsTimingPhase::Offset270,
+            _ => unreachable!(),
+        }
+    }
+    /// Set command sample timing phase (except offset0).
+    #[inline]
+    pub const fn set_cmd_sample_timing_phase(self, phase: NtsTimingPhase) -> Self {
+        Self((self.0 & !Self::CMD_SAMPLE_TIMING_PHASE) | ((phase as u32) << 4))
+    }
+    /// Enable hs400 new sample method.
+    #[inline]
+    pub const fn enable_hs400_new_sample(self) -> Self {
+        Self(self.0 | Self::HS400_NEW_SAMPLE_EN)
+    }
+    /// Disable hs400 new sample method.
+    #[inline]
+    pub const fn disable_hs400_new_sample(self) -> Self {
+        Self(self.0 & !Self::HS400_NEW_SAMPLE_EN)
+    }
+    /// Check if hs400 new sample method is enabled.
+    #[inline]
+    pub const fn is_hs400_new_sample_enabled(self) -> bool {
+        (self.0 & Self::HS400_NEW_SAMPLE_EN) != 0
+    }
+}
+
+/// Hardware reset register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct HardWareReset(u32);
+
+impl HardWareReset {
+    const HW_RESET: u32 = 1;
+
+    /// Reset the hardware.
+    #[inline]
+    pub const fn reset_hardware(self) -> Self {
+        Self(self.0 | Self::HW_RESET)
+    }
+    /// Active the hardware.
+    #[inline]
+    pub const fn active_hardware(self) -> Self {
+        Self(self.0 & !Self::HW_RESET)
+    }
+    /// Check if hardware is reset.
+    #[inline]
+    pub const fn is_hardware_reset_cleared(self) -> bool {
+        (self.0 & Self::HW_RESET) == 0
+    }
+}
+
+/// IDMAC control register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct DmaControl(u32);
+
+impl DmaControl {
+    const DES_LOAD_CTRL: u32 = 0x1 << 31;
+    const IDMAC_ENB: u32 = 0x1 << 7;
+    const FIX_BURST_CTRL: u32 = 0x1 << 1;
+    const IDMAC_RST: u32 = 0x1;
+
+    /// Enable dma descripter refetch.
+    #[inline]
+    pub const fn enable_dma_desc_refetch(self) -> Self {
+        Self(self.0 | Self::DES_LOAD_CTRL)
+    }
+    /// Disable dma descripter refetch.
+    #[inline]
+    pub const fn disable_dma_desc_refetch(self) -> Self {
+        Self(self.0 & !Self::DES_LOAD_CTRL)
+    }
+    /// Check if dma descripter refetch is enabled.
+    #[inline]
+    pub const fn is_dma_desc_refetch_enable(self) -> bool {
+        (self.0 & Self::DES_LOAD_CTRL) != 0
+    }
+    /// Enable dma.
+    #[inline]
+    pub const fn enable_dma(self) -> Self {
+        Self(self.0 | Self::IDMAC_ENB)
+    }
+    /// Disable dma.
+    #[inline]
+    pub const fn disable_dma(self) -> Self {
+        Self(self.0 & !Self::IDMAC_ENB)
+    }
+    /// Check if dma is enabled.
+    #[inline]
+    pub const fn is_dma_enabled(self) -> bool {
+        (self.0 & Self::IDMAC_ENB) != 0
+    }
+    /// Enable fix burst size.
+    #[inline]
+    pub const fn enable_fix_burst_size(self) -> Self {
+        Self(self.0 | Self::FIX_BURST_CTRL)
+    }
+    /// Disable fix burst size.
+    #[inline]
+    pub const fn disable_fix_burst_size(self) -> Self {
+        Self(self.0 & !Self::FIX_BURST_CTRL)
+    }
+    /// Check if fix burst size is enabled.
+    #[inline]
+    pub const fn is_fix_burst_size_enabled(self) -> bool {
+        (self.0 & Self::FIX_BURST_CTRL) != 0
+    }
+    /// Reset dma.
+    #[inline]
+    pub const fn reset_dma(self) -> Self {
+        Self(self.0 | Self::IDMAC_RST)
+    }
+    /// Check if dma is reset.
+    pub const fn is_dma_reset(self) -> bool {
+        (self.0 & Self::IDMAC_RST) == 0
+    }
+}
+
+/// Dma abort state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum DmaAbortState {
+    /// Host abort received during the transmission.
+    Tx = 1,
+    /// Host abort received during the reception.
+    Rx = 2,
+}
+
+/// IDMAC state register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct DmaState(u32);
+
+impl DmaState {
+    const IDMAC_ERR_STA: u32 = 0x7 << 10;
+    const ABN_INT_SUM: u32 = 0x1 << 9;
+    const NOR_INT_SUM: u32 = 0x1 << 8;
+    const ERR_FLAG_SUM: u32 = 0x1 << 5;
+    const DES_UNAVL_INT: u32 = 0x1 << 4;
+    const FATAL_BERR_INT: u32 = 0x1 << 2;
+    const RX_INT: u32 = 0x1 << 1;
+    const TX_INT: u32 = 0x1;
+
+    /// Get dma error status.
+    #[inline]
+    pub const fn dma_error_status(self) -> DmaAbortState {
+        match (self.0 & Self::IDMAC_ERR_STA) >> 10 {
+            1 => DmaAbortState::Tx,
+            2 => DmaAbortState::Rx,
+            _ => unreachable!(),
+        }
+    }
+    /// Check if abnormal interrupt summary occurs.
+    #[inline]
+    pub const fn abn_int_sum_occurs(self) -> bool {
+        (self.0 & Self::ABN_INT_SUM) != 0
+    }
+    /// Clear abnormal interrupt summary.
+    #[inline]
+    pub const fn clear_abn_int_sum(self) -> Self {
+        Self(self.0 | Self::ABN_INT_SUM)
+    }
+    /// Check if normal interrupt summary occurs.
+    #[inline]
+    pub const fn nor_int_sum_occurs(self) -> bool {
+        (self.0 & Self::NOR_INT_SUM) != 0
+    }
+    /// Clear normal interrupt summary.
+    #[inline]
+    pub const fn clear_nor_int_sum(self) -> Self {
+        Self(self.0 | Self::NOR_INT_SUM)
+    }
+    /// Check if card error summary occurs.
+    #[inline]
+    pub const fn card_err_sum_occurs(self) -> bool {
+        (self.0 & Self::ERR_FLAG_SUM) != 0
+    }
+    /// Clear card error summary.
+    #[inline]
+    pub const fn clear_card_err_sum(self) -> Self {
+        Self(self.0 | Self::ERR_FLAG_SUM)
+    }
+    /// Check if descriptor unavailable interrupt occurs.
+    #[inline]
+    pub const fn des_unavl_int_occurs(self) -> bool {
+        (self.0 & Self::DES_UNAVL_INT) != 0
+    }
+    /// Clear descriptor unavailable interrupt.
+    #[inline]
+    pub const fn clear_des_unavl_int(self) -> Self {
+        Self(self.0 | Self::DES_UNAVL_INT)
+    }
+    /// Check if fatal bus error interrupt occurs.
+    #[inline]
+    pub const fn fatal_berr_int_occurs(self) -> bool {
+        (self.0 & Self::FATAL_BERR_INT) != 0
+    }
+    /// Clear fatal bus error interrupt.
+    #[inline]
+    pub const fn clear_fatal_berr_int(self) -> Self {
+        Self(self.0 | Self::FATAL_BERR_INT)
+    }
+    /// Check if receive interrupt occurs.
+    #[inline]
+    pub const fn rx_int_occurs(self) -> bool {
+        (self.0 & Self::RX_INT) != 0
+    }
+    /// Clear receive interrupt.
+    #[inline]
+    pub const fn clear_rx_int(self) -> Self {
+        Self(self.0 | Self::RX_INT)
+    }
+    /// Check if transmit interrupt occurs.
+    #[inline]
+    pub const fn tx_int_occurs(self) -> bool {
+        (self.0 & Self::TX_INT) != 0
+    }
+    /// Clear transmit interrupt.
+    #[inline]
+    pub const fn clear_tx_int(self) -> Self {
+        Self(self.0 | Self::TX_INT)
+    }
+}
+
+/// IDMAC interrupt enable register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct DmaInterruptEnable(u32);
+
+impl DmaInterruptEnable {
+    const ERR_SUM_INT_ENB: u32 = 0x1 << 5;
+    const DES_UNAVL_INT_ENB: u32 = 0x1 << 4;
+    const FATAL_BERR_INT_ENB: u32 = 0x1 << 2;
+    const RX_INT_ENB: u32 = 0x1 << 1;
+    const TX_INT_ENB: u32 = 0x1;
+
+    /// Enable card error summary interrupt.
+    #[inline]
+    pub const fn enable_card_err_sum_int(self) -> Self {
+        Self(self.0 | Self::ERR_SUM_INT_ENB)
+    }
+    /// Disable card error summary interrupt.
+    #[inline]
+    pub const fn disable_card_err_sum_int(self) -> Self {
+        Self(self.0 & !Self::ERR_SUM_INT_ENB)
+    }
+    /// Check if card error summary interrupt is enabled.
+    #[inline]
+    pub const fn is_card_err_sum_int_enabled(self) -> bool {
+        (self.0 & Self::ERR_SUM_INT_ENB) != 0
+    }
+    /// Enable descriptor unavailable interrupt.
+    #[inline]
+    pub const fn enable_des_unavl_int(self) -> Self {
+        Self(self.0 | Self::DES_UNAVL_INT_ENB)
+    }
+    /// Disable descriptor unavailable interrupt.
+    #[inline]
+    pub const fn disable_des_unavl_int(self) -> Self {
+        Self(self.0 & !Self::DES_UNAVL_INT_ENB)
+    }
+    /// Check if descriptor unavailable interrupt is enabled.
+    #[inline]
+    pub const fn is_des_unavl_int_enabled(self) -> bool {
+        (self.0 & Self::DES_UNAVL_INT_ENB) != 0
+    }
+    /// Enable fatal bus error interrupt.
+    #[inline]
+    pub const fn enable_fatal_berr_int(self) -> Self {
+        Self(self.0 | Self::FATAL_BERR_INT_ENB)
+    }
+    /// Disable fatal bus error interrupt.
+    #[inline]
+    pub const fn disable_fatal_berr_int(self) -> Self {
+        Self(self.0 & !Self::FATAL_BERR_INT_ENB)
+    }
+    /// Check if fatal bus error interrupt is enabled.
+    #[inline]
+    pub const fn is_fatal_berr_int_enabled(self) -> bool {
+        (self.0 & Self::FATAL_BERR_INT_ENB) != 0
+    }
+    /// Enable receive interrupt.
+    #[inline]
+    pub const fn enable_rx_int(self) -> Self {
+        Self(self.0 | Self::RX_INT_ENB)
+    }
+    /// Disable receive interrupt.
+    #[inline]
+    pub const fn disable_rx_int(self) -> Self {
+        Self(self.0 & !Self::RX_INT_ENB)
+    }
+    /// Check if receive interrupt is enabled.
+    #[inline]
+    pub const fn is_rx_int_enabled(self) -> bool {
+        (self.0 & Self::RX_INT_ENB) != 0
+    }
+    /// Enable transmit interrupt.
+    #[inline]
+    pub const fn enable_tx_int(self) -> Self {
+        Self(self.0 | Self::TX_INT_ENB)
+    }
+    /// Disable transmit interrupt.
+    #[inline]
+    pub const fn disable_tx_int(self) -> Self {
+        Self(self.0 & !Self::TX_INT_ENB)
+    }
+    /// Check if transmit interrupt is enabled.
+    #[inline]
+    pub const fn is_tx_int_enabled(self) -> bool {
+        (self.0 & Self::TX_INT_ENB) != 0
+    }
+}
+
+/// Card threshold control register..
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct CardThresholdControl(u32);
+
+impl CardThresholdControl {
+    const CARD_WR_THLD_MASK: u32 = 0xFFF << 16;
+    const CARD_WR_THLD_ENB: u32 = 1 << 2;
+    const BCIG: u32 = 1 << 1;
+    const CARD_RD_THLD_ENB: u32 = 1 << 0;
+
+    /// Set card write/read threshold value.
+    #[inline]
+    pub const fn set_card_wr_thld(self, value: u16) -> Self {
+        Self(
+            (self.0 & !Self::CARD_WR_THLD_MASK)
+                | (Self::CARD_WR_THLD_MASK & ((value as u32) << 16)),
+        )
+    }
+    /// Get card write/read threshold value.
+    #[inline]
+    pub const fn card_wr_thld(self) -> u16 {
+        ((self.0 & Self::CARD_WR_THLD_MASK) >> 16) as u16
+    }
+    /// Enable card write threshold.
+    #[inline]
+    pub const fn enable_card_write_threshold(self) -> Self {
+        Self(self.0 | Self::CARD_WR_THLD_ENB)
+    }
+    /// Disable card write threshold.
+    #[inline]
+    pub const fn disable_card_write_threshold(self) -> Self {
+        Self(self.0 & !Self::CARD_WR_THLD_ENB)
+    }
+    /// Check if card write threshold is enabled.
+    #[inline]
+    pub const fn is_card_write_threshold_enabled(self) -> bool {
+        (self.0 & Self::CARD_WR_THLD_ENB) != 0
+    }
+    /// Enable busy clear interrupt generation.
+    #[inline]
+    pub const fn enable_busy_clear(self) -> Self {
+        Self(self.0 | Self::BCIG)
+    }
+    /// Disable busy clear interrupt generation.
+    #[inline]
+    pub const fn disable_busy_clear(self) -> Self {
+        Self(self.0 & !Self::BCIG)
+    }
+    /// Check if busy clear interrupt generation is enabled.
+    #[inline]
+    pub const fn is_busy_clear_enabled(self) -> bool {
+        (self.0 & Self::BCIG) != 0
+    }
+    /// Enable card read threshold.
+    #[inline]
+    pub const fn enable_card_read_threshold(self) -> Self {
+        Self(self.0 | Self::CARD_RD_THLD_ENB)
+    }
+    /// Disable card read threshold.
+    #[inline]
+    pub const fn disable_card_read_threshold(self) -> Self {
+        Self(self.0 & !Self::CARD_RD_THLD_ENB)
+    }
+    /// Check if card read threshold is enabled.
+    #[inline]
+    pub const fn is_card_read_threshold_enabled(self) -> bool {
+        (self.0 & Self::CARD_RD_THLD_ENB) != 0
+    }
+}
+
+/// Sample fifo control register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct SampleFifoControl(u32);
+
+impl SampleFifoControl {
+    const STOP_CLK_CTRL_MASK: u32 = 0xF << 1;
+    const BYPASS_EN: u32 = 1 << 0;
+
+    /// Set stop clock control value.
+    #[inline]
+    pub const fn set_stop_clk_ctrl(self, value: u8) -> Self {
+        Self(
+            (self.0 & !Self::STOP_CLK_CTRL_MASK)
+                | (Self::STOP_CLK_CTRL_MASK & ((value as u32) << 1)),
+        )
+    }
+    /// Get stop clock control value.
+    #[inline]
+    pub const fn stop_clk_ctrl(self) -> u8 {
+        ((self.0 & Self::STOP_CLK_CTRL_MASK) >> 1) as u8
+    }
+    /// Enable bypass (data not using FIFO).
+    #[inline]
+    pub const fn enable_bypass(self) -> Self {
+        Self(self.0 | Self::BYPASS_EN)
+    }
+    /// Disable bypass (data goes through FIFO).
+    #[inline]
+    pub const fn disable_bypass(self) -> Self {
+        Self(self.0 & !Self::BYPASS_EN)
+    }
+    /// Check if bypass is enabled.
+    #[inline]
+    pub const fn is_bypass_enabled(self) -> bool {
+        (self.0 & Self::BYPASS_EN) != 0
+    }
+}
+
+/// Ddr start bit detection control register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct DdrStartBitDetectionControl(u32);
+
+impl DdrStartBitDetectionControl {
+    const HS400_MD_EN: u32 = 0x1 << 31;
+    const HALF_START_BIT: u32 = 0x1;
+
+    /// Enable HS400 mode.
+    #[inline]
+    pub const fn enable_hs400_mode(self) -> Self {
+        Self((self.0 & !Self::HS400_MD_EN) | (Self::HS400_MD_EN & 0xFFFF_FFFF))
+    }
+    /// Disable HS400 mode.
+    #[inline]
+    pub const fn disable_hs400_mode(self) -> Self {
+        Self(self.0 & !Self::HS400_MD_EN)
+    }
+    /// Check if HS400 mode is enabled.
+    #[inline]
+    pub const fn is_hs400_mode_enabled(self) -> bool {
+        (self.0 & Self::HS400_MD_EN) != 0
+    }
+    /// Set start bit detection to less than one full cycle.
+    #[inline]
+    pub const fn set_half_start_bit_less(self) -> Self {
+        Self(self.0 | Self::HALF_START_BIT)
+    }
+    /// Set start bit detection to full cycle.
+    #[inline]
+    pub const fn set_half_start_bit_full(self) -> Self {
+        Self(self.0 & !Self::HALF_START_BIT)
+    }
+    /// Check if start bit detection is less than one full cycle.
+    #[inline]
+    pub const fn is_half_start_bit_less(self) -> bool {
+        (self.0 & Self::HALF_START_BIT) != 0
+    }
+    /// Check if start bit detection is full cycle.
+    #[inline]
+    pub const fn is_half_start_bit_full(self) -> bool {
+        (self.0 & Self::HALF_START_BIT) == 0
+    }
+}
+
+/// Extended command register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct ExtendedCommand(u32);
+
+impl ExtendedCommand {
+    const AUTO_CMD23_EN: u32 = 0x1;
+
+    /// Enable Auto CMD23.
+    #[inline]
+    pub const fn enable_auto_cmd23(self) -> Self {
+        Self(self.0 | Self::AUTO_CMD23_EN)
+    }
+    /// Disable Auto CMD23.
+    #[inline]
+    pub const fn disable_auto_cmd23(self) -> Self {
+        Self(self.0 & !Self::AUTO_CMD23_EN)
+    }
+    /// Check if Auto CMD23 is enabled.
+    #[inline]
+    pub const fn is_auto_cmd23_enabled(self) -> bool {
+        (self.0 & Self::AUTO_CMD23_EN) != 0
     }
 }
 
@@ -1016,18 +2027,31 @@ impl DriveDelayControl {
 pub struct SampleDelayControl(u32);
 
 impl SampleDelayControl {
+    const SAMP_DL_CAL_START: u32 = 0x1 << 15;
+    const SAMP_DL_CAL_DONE: u32 = 0x1 << 14;
+    const SAMP_DL: u32 = 0x3F << 8;
+    const SAMP_DL_SW_EN: u32 = 0x1 << 7;
     const SAMP_DL_SW: u32 = 0x3F << 0;
-    const SAMP_DL_SW_EN: u32 = 1 << 7;
 
-    /// Set sample delay software.
+    /// Start sample delay calibration.
     #[inline]
-    pub const fn set_sample_delay_software(self, delay: u8) -> Self {
-        Self((self.0 & !Self::SAMP_DL_SW) | ((delay as u32) << 0))
+    pub const fn start_sample_delay_cal(self) -> Self {
+        Self(self.0 | Self::SAMP_DL_CAL_START)
     }
-    /// Get sample delay software.
+    /// Stop sample delay calibration.
     #[inline]
-    pub const fn sample_delay_software(self) -> u8 {
-        ((self.0 & Self::SAMP_DL_SW) >> 0) as u8
+    pub const fn stop_sample_delay_cal(self) -> Self {
+        Self(self.0 & !Self::SAMP_DL_CAL_START)
+    }
+    /// Check if sample delay calibration is done.
+    #[inline]
+    pub const fn is_sample_delay_cal_done(self) -> bool {
+        (self.0 & Self::SAMP_DL_CAL_DONE) != 0
+    }
+    /// Get sample delay value.
+    #[inline]
+    pub const fn sample_delay(self) -> u8 {
+        ((self.0 & Self::SAMP_DL) >> 8) as u8
     }
     /// Enable sample delay software.
     #[inline]
@@ -1044,15 +2068,148 @@ impl SampleDelayControl {
     pub const fn is_sample_delay_software_enabled(self) -> bool {
         (self.0 & Self::SAMP_DL_SW_EN) != 0
     }
+    /// Set sample delay software.
+    #[inline]
+    pub const fn set_sample_delay_software(self, delay: u8) -> Self {
+        Self((self.0 & !Self::SAMP_DL_SW) | ((delay as u32) << 0))
+    }
+    /// Get sample delay software.
+    #[inline]
+    pub const fn sample_delay_software(self) -> u8 {
+        ((self.0 & Self::SAMP_DL_SW) >> 0) as u8
+    }
+}
+
+/// Data strobe delay control register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct DataStrobeDelayControl(u32);
+
+impl DataStrobeDelayControl {
+    const DS_DL_CAL_START: u32 = 0x1 << 15;
+    const DS_DL_CAL_DONE: u32 = 0x1 << 14;
+    const DS_DL: u32 = 0x3F << 8;
+    const DS_DL_SW_EN: u32 = 0x1 << 7;
+    const DS_DL_SW: u32 = 0x3F;
+
+    /// Start data strobe delay calibration.
+    #[inline]
+    pub const fn start_data_strobe_delay_cal(self) -> Self {
+        Self(self.0 | Self::DS_DL_CAL_START)
+    }
+    /// Stop data strobe delay calibration.
+    #[inline]
+    pub const fn stop_data_strobe_delay_cal(self) -> Self {
+        Self(self.0 & !Self::DS_DL_CAL_START)
+    }
+    /// Check if data strobe delay calibration is done.
+    #[inline]
+    pub const fn is_data_strobe_delay_cal_done(self) -> bool {
+        (self.0 & Self::DS_DL_CAL_DONE) != 0
+    }
+    /// Get data strobe delay value.
+    #[inline]
+    pub const fn data_strobe_delay(self) -> u8 {
+        ((self.0 & Self::DS_DL) >> 8) as u8
+    }
+    /// Enable data strobe delay software.
+    #[inline]
+    pub const fn enable_data_strobe_delay_software(self) -> Self {
+        Self(self.0 | Self::DS_DL_SW_EN)
+    }
+    /// Disable data strobe delay software.
+    #[inline]
+    pub const fn disable_data_strobe_delay_software(self) -> Self {
+        Self(self.0 & !Self::DS_DL_SW_EN)
+    }
+    /// Get if data strobe delay software is enabled.
+    #[inline]
+    pub const fn is_data_strobe_delay_software_enabled(self) -> bool {
+        (self.0 & Self::DS_DL_SW_EN) != 0
+    }
+    /// Set data strobe delay software.
+    #[inline]
+    pub const fn set_data_strobe_delay_software(self, delay: u8) -> Self {
+        Self((self.0 & !Self::DS_DL_SW) | ((delay as u32) << 0))
+    }
+    /// Get data strobe delay software.
+    #[inline]
+    pub const fn data_strobe_delay_software(self) -> u8 {
+        ((self.0 & Self::DS_DL_SW) >> 0) as u8
+    }
+}
+
+/// Hs400 delay control register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct Hs400DelayControl(u32);
+
+impl Hs400DelayControl {
+    const HS400_DL_CAL_START: u32 = 0x1 << 15;
+    const HS400_DL_CAL_DONE: u32 = 0x1 << 14;
+    const HS400_DL: u32 = 0xF << 8;
+    const HS400_DL_SW_EN: u32 = 0x1 << 7;
+    const HS400_DL_SW: u32 = 0xF;
+
+    /// Start HS400 delay calibration.
+    #[inline]
+    pub const fn start_hs400_delay_cal(self) -> Self {
+        Self(self.0 | Self::HS400_DL_CAL_START)
+    }
+    /// Stop HS400 delay calibration.
+    #[inline]
+    pub const fn stop_hs400_delay_cal(self) -> Self {
+        Self(self.0 & !Self::HS400_DL_CAL_START)
+    }
+    /// Check if HS400 delay calibration is done.
+    #[inline]
+    pub const fn is_hs400_delay_cal_done(self) -> bool {
+        (self.0 & Self::HS400_DL_CAL_DONE) != 0
+    }
+    /// Get HS400 delay value.
+    #[inline]
+    pub const fn hs400_delay(self) -> u8 {
+        ((self.0 & Self::HS400_DL) >> 8) as u8
+    }
+    /// Enable HS400 delay software.
+    #[inline]
+    pub const fn enable_hs400_delay_software(self) -> Self {
+        Self(self.0 | Self::HS400_DL_SW_EN)
+    }
+    /// Disable HS400 delay software.
+    #[inline]
+    pub const fn disable_hs400_delay_software(self) -> Self {
+        Self(self.0 & !Self::HS400_DL_SW_EN)
+    }
+    /// Check if HS400 delay software is enabled.
+    #[inline]
+    pub const fn is_hs400_delay_software_enabled(self) -> bool {
+        (self.0 & Self::HS400_DL_SW_EN) != 0
+    }
+    /// Set HS400 delay software.
+    #[inline]
+    pub const fn set_hs400_delay_software(self, delay: u8) -> Self {
+        Self((self.0 & !Self::HS400_DL_SW) | (delay as u32 & Self::HS400_DL_SW))
+    }
+    /// Get HS400 delay software.
+    #[inline]
+    pub const fn hs400_delay_software(self) -> u8 {
+        (self.0 & Self::HS400_DL_SW) as u8
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        AccessMode, Argument, BlockSize, BurstSize, BusWidth, ByteCount, CardType, ClockControl,
-        Command, DdcTimingPhase, DdrMode, DriveDelayControl, FifoWaterLevel, GlobalControl,
-        Interrupt, InterruptMask, InterruptStateMasked, InterruptStateRaw, NewTimingSet,
-        NtsTimingPhase, RegisterBlock, Status, TimeOut, TransferDirection,
+        AccessMode, AutoCmd12Arg, BlockSize, BootMode, BurstSize, BusWidth, CardClockMode,
+        CardThresholdControl, CardType, ClockControl, CmdFsmState, Command, CrcMode,
+        CrcStatusDetect, DataStrobeDelayControl, DdcTimingPhase, DdrMode,
+        DdrStartBitDetectionControl, DmaAbortState, DmaControl, DmaInterruptEnable, DmaState,
+        DriveDelayControl, ExtendedCommand, FifoFunction, FifoWaterLevel, GlobalControl,
+        HardWareReset, Hs400DelayControl, Interrupt, InterruptMask, InterruptStateMasked,
+        InterruptStateRaw, NewTimingSet, NtsTimingPhase, RegisterBlock, SampleDelayControl,
+        SampleFifoControl, Status, TimeOut, TimeUnit, TransferDirection, TransferMode,
+        VoltageSwitch,
     };
     use core::mem::offset_of;
     #[test]
@@ -1071,13 +2228,28 @@ mod tests {
         assert_eq!(offset_of!(RegisterBlock, interrupt_state_raw), 0x38);
         assert_eq!(offset_of!(RegisterBlock, status), 0x3C);
         assert_eq!(offset_of!(RegisterBlock, fifo_water_level), 0x40);
+        assert_eq!(offset_of!(RegisterBlock, fifo_function), 0x44);
+        assert_eq!(offset_of!(RegisterBlock, transferred_byte_count0), 0x48);
+        assert_eq!(offset_of!(RegisterBlock, transferred_byte_count1), 0x4C);
+        assert_eq!(offset_of!(RegisterBlock, debug_control), 0x50);
+        assert_eq!(offset_of!(RegisterBlock, crc_status_detect), 0x54);
+        assert_eq!(offset_of!(RegisterBlock, auto_cmd12_arg), 0x58);
         assert_eq!(offset_of!(RegisterBlock, new_timing_set), 0x5C);
+        assert_eq!(offset_of!(RegisterBlock, hardware_reset), 0x78);
         assert_eq!(offset_of!(RegisterBlock, dma_control), 0x80);
         assert_eq!(offset_of!(RegisterBlock, dma_descriptor_base), 0x84);
         assert_eq!(offset_of!(RegisterBlock, dma_state), 0x88);
         assert_eq!(offset_of!(RegisterBlock, dma_interrupt_enable), 0x8C);
+        assert_eq!(offset_of!(RegisterBlock, card_threshold_control), 0x100);
+        assert_eq!(offset_of!(RegisterBlock, sample_fifo_control), 0x104);
+        assert_eq!(offset_of!(RegisterBlock, auto_cmd23_arg), 0x108);
+        assert_eq!(offset_of!(RegisterBlock, ddr_start_bit_detection), 0x10C);
+        assert_eq!(offset_of!(RegisterBlock, extended_command), 0x138);
+        assert_eq!(offset_of!(RegisterBlock, extended_response), 0x13C);
         assert_eq!(offset_of!(RegisterBlock, drive_delay_control), 0x140);
         assert_eq!(offset_of!(RegisterBlock, sample_delay_control), 0x144);
+        assert_eq!(offset_of!(RegisterBlock, data_strobe_delay_control), 0x148);
+        assert_eq!(offset_of!(RegisterBlock, hs400_delay_control), 0x14C);
         assert_eq!(offset_of!(RegisterBlock, skew_control), 0x184);
         assert_eq!(offset_of!(RegisterBlock, fifo), 0x200);
     }
@@ -1092,6 +2264,30 @@ mod tests {
 
         val = val.set_access_mode(AccessMode::Dma);
         assert_eq!(val.access_mode(), AccessMode::Dma);
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.set_time_unit_cmd(TimeUnit::Clk256);
+        assert_eq!(val.time_unit_cmd(), TimeUnit::Clk256);
+        assert_eq!(val.0, 0x00001000);
+
+        val = val.set_time_unit_cmd(TimeUnit::Clk1);
+        assert_eq!(val.time_unit_cmd(), TimeUnit::Clk1);
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.set_time_unit_data(TimeUnit::Clk256);
+        assert_eq!(val.time_unit_data(), TimeUnit::Clk256);
+        assert_eq!(val.0, 0x00000800);
+
+        val = val.set_time_unit_data(TimeUnit::Clk1);
+        assert_eq!(val.time_unit_data(), TimeUnit::Clk1);
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.enable_card_debounce();
+        assert!(val.is_card_debounce_enabled());
+        assert_eq!(val.0, 0x00000100);
+
+        val = val.disable_card_debounce();
+        assert!(!val.is_card_debounce_enabled());
         assert_eq!(val.0, 0x00000000);
 
         val = val.set_ddr_mode(DdrMode::Ddr);
@@ -1112,11 +2308,11 @@ mod tests {
 
         val = val.enable_interrupt();
         assert!(val.is_interrupt_enabled());
-        assert_eq!(val.0, 0x000000010);
+        assert_eq!(val.0, 0x00000010);
 
         val = val.disable_interrupt();
         assert!(!val.is_interrupt_enabled());
-        assert_eq!(val.0, 0x000000000);
+        assert_eq!(val.0, 0x00000000);
 
         val = val.set_dma_reset();
         assert!(!val.is_dma_reset_cleared());
@@ -1125,7 +2321,6 @@ mod tests {
         val = GlobalControl(0x0);
         assert!(val.is_dma_reset_cleared());
 
-        val = GlobalControl(0x0);
         val = val.set_fifo_reset();
         assert!(!val.is_fifo_reset_cleared());
         assert_eq!(val.0, 0x00000002);
@@ -1133,7 +2328,6 @@ mod tests {
         val = GlobalControl(0x0);
         assert!(val.is_fifo_reset_cleared());
 
-        val = GlobalControl(0x0);
         val = val.set_software_reset();
         assert!(!val.is_software_reset_cleared());
         assert_eq!(val.0, 0x00000001);
@@ -1154,6 +2348,14 @@ mod tests {
         assert!(!val.is_mask_data0_enabled());
         assert_eq!(val.0, 0x00000000);
 
+        val = val.set_card_clock_mode(CardClockMode::TurnOffConditionally);
+        assert_eq!(val.card_clock_mode(), CardClockMode::TurnOffConditionally);
+        assert_eq!(val.0, 0x00020000);
+
+        val = val.set_card_clock_mode(CardClockMode::AlwaysOn);
+        assert_eq!(val.card_clock_mode(), CardClockMode::AlwaysOn);
+        assert_eq!(val.0, 0x00000000);
+
         val = val.enable_card_clock();
         assert!(val.is_card_clock_enabled());
         assert_eq!(val.0, 0x00010000);
@@ -1165,6 +2367,10 @@ mod tests {
         val = val.set_card_clock_divider(0xFF);
         assert_eq!(val.card_clock_divider(), 0xFF);
         assert_eq!(val.0, 0x000000FF);
+
+        val = val.set_card_clock_divider(0x00);
+        assert_eq!(val.card_clock_divider(), 0x00);
+        assert_eq!(val.0, 0x00000000);
     }
 
     #[test]
@@ -1174,6 +2380,18 @@ mod tests {
         val = val.set_data_timeout_limit(0xFFFFFF);
         assert_eq!(val.data_timeout_limit(), 0xFFFFFF);
         assert_eq!(val.0, 0xFFFFFF00);
+
+        val = val.set_data_timeout_limit(0x000000);
+        assert_eq!(val.data_timeout_limit(), 0x000000);
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.set_response_timeout_limit(0xFF);
+        assert_eq!(val.response_timeout_limit(), 0xFF);
+        assert_eq!(val.0, 0x000000FF);
+
+        val = val.set_response_timeout_limit(0x00);
+        assert_eq!(val.response_timeout_limit(), 0x00);
+        assert_eq!(val.0, 0x00000000);
     }
 
     #[test]
@@ -1203,15 +2421,6 @@ mod tests {
     }
 
     #[test]
-    fn struct_byte_count_functions() {
-        let mut val = ByteCount(0x0);
-
-        val = val.set_byte_count(0xFFFFFFFF);
-        assert_eq!(val.byte_count(), 0xFFFFFFFF);
-        assert_eq!(val.0, 0xFFFFFFFF);
-    }
-
-    #[test]
     fn struct_command_functions() {
         let mut val = Command(0x0);
 
@@ -1220,15 +2429,45 @@ mod tests {
         assert_eq!(val.0, 0x80000000);
 
         val = Command(0x0);
-        assert!(val.is_command_start_cleared());
+        val = val.set_voltage_switch(VoltageSwitch::Switch);
+        assert_eq!(val.voltage_switch(), VoltageSwitch::Switch);
+        assert_eq!(val.0, 0x10000000);
+
+        val = val.set_voltage_switch(VoltageSwitch::Normal);
+        assert_eq!(val.voltage_switch(), VoltageSwitch::Normal);
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.abort_boot();
+        assert!(val.is_boot_aborted());
+        assert_eq!(val.0, 0x08000000);
 
         val = Command(0x0);
-        val = val.enable_change_clock();
-        assert!(val.is_change_clock_enabled());
+        val = val.enable_boot_ack_expected();
+        assert!(val.is_boot_ack_received());
+        assert_eq!(val.0, 0x04000000);
+
+        val = val.disable_boot_ack_expected();
+        assert!(!val.is_boot_ack_received());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.set_boot_mode(BootMode::AlternativeBoot);
+        assert_eq!(val.boot_mode(), BootMode::AlternativeBoot);
+        assert_eq!(val.0, 0x02000000);
+
+        val = val.set_boot_mode(BootMode::MandatoryBoot);
+        assert_eq!(val.boot_mode(), BootMode::MandatoryBoot);
+        assert_eq!(val.0, 0x01000000);
+
+        val = val.set_boot_mode(BootMode::NormalCmd);
+        assert_eq!(val.boot_mode(), BootMode::NormalCmd);
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.enable_change_card_clock();
+        assert!(val.is_change_card_clock_enabled());
         assert_eq!(val.0, 0x00200000);
 
-        val = val.disable_change_clock();
-        assert!(!val.is_change_clock_enabled());
+        val = val.disable_change_card_clock();
+        assert!(!val.is_change_card_clock_enabled());
         assert_eq!(val.0, 0x00000000);
 
         val = val.enable_send_init_seq();
@@ -1261,6 +2500,14 @@ mod tests {
 
         val = val.disable_auto_stop();
         assert!(!val.is_auto_stop_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.set_transfer_mode(TransferMode::Stream);
+        assert_eq!(val.transfer_mode(), TransferMode::Stream);
+        assert_eq!(val.0, 0x00000800);
+
+        val = val.set_transfer_mode(TransferMode::Block);
+        assert_eq!(val.transfer_mode(), TransferMode::Block);
         assert_eq!(val.0, 0x00000000);
 
         val = val.set_transfer_direction(TransferDirection::Write);
@@ -1306,15 +2553,10 @@ mod tests {
         val = val.set_command_index(0x3F);
         assert_eq!(val.command_index(), 0x3F);
         assert_eq!(val.0, 0x0000003F);
-    }
 
-    #[test]
-    fn struct_argument_functions() {
-        let mut val = Argument(0x0);
-
-        val = val.set_argument(0xFFFFFFFF);
-        assert_eq!(val.argument(), 0xFFFFFFFF);
-        assert_eq!(val.0, 0xFFFFFFFF);
+        val = val.set_command_index(0x00);
+        assert_eq!(val.command_index(), 0x00);
+        assert_eq!(val.0, 0x00000000);
     }
 
     #[test]
@@ -1486,17 +2728,92 @@ mod tests {
 
     #[test]
     fn struct_status_functions() {
-        let mut val = Status(0x03FE0000);
+        let val = Status(0x80000000);
+        assert!(val.if_dma_request_occurs());
+
+        let val = Status(0x00000000);
+        assert!(!val.if_dma_request_occurs());
+
+        let val = Status(0x03FE0000);
         assert_eq!(val.fifo_level(), 0x1FF);
 
-        val = Status(0x00000200);
+        let val = Status(0x00000000);
+        assert_eq!(val.fifo_level(), 0x00);
+
+        let val = Status(0x0000F800);
+        assert_eq!(val.response_index(), 0x1F);
+
+        let val = Status(0x00000000);
+        assert_eq!(val.response_index(), 0x00);
+
+        let val = Status(0x00000400);
+        assert!(val.fsm_busy());
+
+        let val = Status(0x00000000);
+        assert!(!val.fsm_busy());
+
+        let val = Status(0x00000200);
         assert!(val.card_busy());
 
-        val = Status(0x00000008);
+        let val = Status(0x00000000);
+        assert!(!val.card_busy());
+
+        let val = Status(0x00000100);
+        assert!(val.card_present());
+
+        let val = Status(0x00000000);
+        assert!(!val.card_present());
+
+        for i in 0..=15 {
+            let state_val = i << 4;
+            let val = Status(state_val);
+
+            let expected_state = match i {
+                0 => CmdFsmState::Idle,
+                1 => CmdFsmState::SendInitSeq,
+                2 => CmdFsmState::TxCmdStartBit,
+                3 => CmdFsmState::TxCmdTxBit,
+                4 => CmdFsmState::TxCmdIdxArg,
+                5 => CmdFsmState::TxCmdCrc7,
+                6 => CmdFsmState::TxCmdEndBit,
+                7 => CmdFsmState::RxRespStartBit,
+                8 => CmdFsmState::RxRespIrqResp,
+                9 => CmdFsmState::RxRespTxBit,
+                10 => CmdFsmState::RxRespCmdIdx,
+                11 => CmdFsmState::RxRespData,
+                12 => CmdFsmState::RxRespCrc7,
+                13 => CmdFsmState::RxRespEndBit,
+                14 => CmdFsmState::WaitNcc,
+                15 => CmdFsmState::WaitCmdToResp,
+                _ => unreachable!(),
+            };
+
+            assert_eq!(val.fsm_state(), expected_state);
+        }
+
+        let val = Status(0x00000008);
         assert!(val.fifo_full());
 
-        val = Status(0x00000004);
+        let val = Status(0x00000000);
+        assert!(!val.fifo_full());
+
+        let val = Status(0x00000004);
         assert!(val.fifo_empty());
+
+        let val = Status(0x00000000);
+        assert!(!val.fifo_empty());
+
+        let val = Status(0x00000002);
+        assert!(val.fifo_tx_level());
+
+        let val = Status(0x00000000);
+        assert!(!val.fifo_tx_level());
+
+        let val = Status(0x00000001);
+        assert!(val.fifo_rx_level());
+
+        let val = Status(0x00000000);
+        assert!(!val.fifo_rx_level());
     }
 
     #[test]
@@ -1537,6 +2854,61 @@ mod tests {
     }
 
     #[test]
+    fn struct_fifo_function_functions() {
+        let mut val = FifoFunction(0x0);
+
+        val = val.abort_read_data();
+        assert!(val.is_abort_read_data_set());
+        assert_eq!(val.0, 0x00000004);
+
+        val = val.clear_abort_read_data();
+        assert!(!val.is_abort_read_data_set());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.enable_read_wait();
+        assert!(val.is_read_wait_enabled());
+        assert_eq!(val.0, 0x00000002);
+
+        val = val.disable_read_wait();
+        assert!(!val.is_read_wait_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.enable_host_irq_request();
+        assert!(val.is_host_irq_request_enabled());
+        assert_eq!(val.0, 0x00000001);
+
+        val = val.disable_host_irq_request();
+        assert!(!val.is_host_irq_request_enabled());
+        assert_eq!(val.0, 0x00000000);
+    }
+
+    #[test]
+    fn struct_auto_cmd12_arg_functions() {
+        let mut val = AutoCmd12Arg(0x0);
+
+        val = val.set_argument(0xFFFF);
+        assert_eq!(val.argument(), 0xFFFF);
+        assert_eq!(val.0, 0x0000FFFF);
+
+        val = val.set_argument(0x1234);
+        assert_eq!(val.argument(), 0x1234);
+        assert_eq!(val.0, 0x00001234);
+    }
+
+    #[test]
+    fn struct_crc_status_detect_functions() {
+        let mut val = CrcStatusDetect(0x0);
+
+        val = val.set_crc_mode(CrcMode::Other);
+        assert_eq!(val.crc_mode(), CrcMode::Other);
+        assert_eq!(val.0, 0x30000000);
+
+        val = val.set_crc_mode(CrcMode::Hs400);
+        assert_eq!(val.crc_mode(), CrcMode::Hs400);
+        assert_eq!(val.0, 0x60000000);
+    }
+
+    #[test]
     fn struct_new_timing_set_functions() {
         let mut val = NewTimingSet(0x0);
 
@@ -1548,27 +2920,340 @@ mod tests {
         assert!(!val.is_new_mode_enabled());
         assert_eq!(val.0, 0x00000000);
 
-        for i in 0..4 as u8 {
-            let tp_tmp = match i {
-                0x0 => NtsTimingPhase::Offset90,
-                0x1 => NtsTimingPhase::Offset180,
-                0x2 => NtsTimingPhase::Offset270,
-                0x3 => NtsTimingPhase::Offset0,
+        val = val.enable_rx_dat_cmd_clear();
+        assert!(val.is_rx_dat_cmd_clear_enabled());
+        assert_eq!(val.0, 0x01000000);
+
+        val = val.disable_rx_dat_cmd_clear();
+        assert!(!val.is_rx_dat_cmd_clear_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.enable_rx_dat_crc_status_clear();
+        assert!(val.is_rx_dat_crc_status_clear_enabled());
+        assert_eq!(val.0, 0x00400000);
+
+        val = val.disable_rx_dat_crc_status_clear();
+        assert!(!val.is_rx_dat_crc_status_clear_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.enable_rx_dat_trans_clear();
+        assert!(val.is_rx_dat_trans_clear_enabled());
+        assert_eq!(val.0, 0x00200000);
+
+        val = val.disable_rx_dat_trans_clear();
+        assert!(!val.is_rx_dat_trans_clear_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.enable_rx_dat_recv_clear();
+        assert!(val.is_rx_dat_recv_clear_enabled());
+        assert_eq!(val.0, 0x00100000);
+
+        val = val.disable_rx_dat_recv_clear();
+        assert!(!val.is_rx_dat_recv_clear_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.enable_rx_cmd_send_clear();
+        assert!(val.is_rx_cmd_send_clear_enabled());
+        assert_eq!(val.0, 0x00010000);
+
+        val = val.disable_rx_cmd_send_clear();
+        assert!(!val.is_rx_cmd_send_clear_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        for i in 0..4 {
+            let phase = match i {
+                0 => NtsTimingPhase::Offset90,
+                1 => NtsTimingPhase::Offset180,
+                2 => NtsTimingPhase::Offset270,
+                3 => NtsTimingPhase::Offset0,
                 _ => unreachable!(),
             };
 
-            let val_tmp = match i {
-                0x0 => 0x00000000,
-                0x1 => 0x00000100,
-                0x2 => 0x00000200,
-                0x3 => 0x00000300,
-                _ => unreachable!(),
-            };
-
-            val = val.set_sample_timing_phase(tp_tmp);
-            assert_eq!(val.sample_timing_phase(), tp_tmp);
-            assert_eq!(val.0, val_tmp);
+            val = NewTimingSet(0x0);
+            val = val.set_dat_sample_timing_phase(phase);
+            assert_eq!(val.dat_sample_timing_phase(), phase);
+            assert_eq!(val.0, (i as u32) << 8);
         }
+
+        for i in 0..3 {
+            let phase = match i {
+                0 => NtsTimingPhase::Offset90,
+                1 => NtsTimingPhase::Offset180,
+                2 => NtsTimingPhase::Offset270,
+                _ => unreachable!(),
+            };
+
+            val = NewTimingSet(0x0);
+            val = val.set_cmd_sample_timing_phase(phase);
+            assert_eq!(val.cmd_sample_timing_phase(), phase);
+            assert_eq!(val.0, (i as u32) << 4);
+        }
+
+        val = NewTimingSet(0x0);
+        val = val.enable_hs400_new_sample();
+        assert!(val.is_hs400_new_sample_enabled());
+        assert_eq!(val.0, 0x00000001);
+
+        val = val.disable_hs400_new_sample();
+        assert!(!val.is_hs400_new_sample_enabled());
+        assert_eq!(val.0, 0x00000000);
+    }
+
+    #[test]
+    fn struct_hardware_reset_functions() {
+        let mut val = HardWareReset(0x0);
+
+        val = val.reset_hardware();
+        assert!(!val.is_hardware_reset_cleared());
+        assert_eq!(val.0, 0x00000001);
+
+        val = val.active_hardware();
+        assert!(val.is_hardware_reset_cleared());
+        assert_eq!(val.0, 0x00000000);
+    }
+
+    #[test]
+    fn struct_dma_control_functions() {
+        let mut val = DmaControl(0x0);
+
+        val = val.enable_dma_desc_refetch();
+        assert!(val.is_dma_desc_refetch_enable());
+        assert_eq!(val.0, 0x80000000);
+
+        val = val.disable_dma_desc_refetch();
+        assert!(!val.is_dma_desc_refetch_enable());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.enable_dma();
+        assert!(val.is_dma_enabled());
+        assert_eq!(val.0, 0x00000080);
+
+        val = val.disable_dma();
+        assert!(!val.is_dma_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.enable_fix_burst_size();
+        assert!(val.is_fix_burst_size_enabled());
+        assert_eq!(val.0, 0x00000002);
+
+        val = val.disable_fix_burst_size();
+        assert!(!val.is_fix_burst_size_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.reset_dma();
+        assert!(!val.is_dma_reset());
+        assert_eq!(val.0, 0x00000001);
+
+        val = DmaControl(0x0);
+        assert!(val.is_dma_reset());
+    }
+
+    #[test]
+    fn struct_dma_state_functions() {
+        let mut val = DmaState(0x00000400);
+        assert_eq!(val.dma_error_status(), DmaAbortState::Tx);
+
+        val = DmaState(0x00000800);
+        assert_eq!(val.dma_error_status(), DmaAbortState::Rx);
+
+        val = DmaState(0x00000200);
+        assert!(val.abn_int_sum_occurs());
+
+        val = DmaState(0x00000000);
+        assert!(!val.abn_int_sum_occurs());
+
+        val = val.clear_abn_int_sum();
+        assert_eq!(val.0, 0x00000200);
+
+        val = DmaState(0x00000100);
+        assert!(val.nor_int_sum_occurs());
+
+        val = DmaState(0x00000000);
+        assert!(!val.nor_int_sum_occurs());
+
+        val = val.clear_nor_int_sum();
+        assert_eq!(val.0, 0x00000100);
+
+        val = DmaState(0x00000020);
+        assert!(val.card_err_sum_occurs());
+
+        val = DmaState(0x00000000);
+        assert!(!val.card_err_sum_occurs());
+
+        val = val.clear_card_err_sum();
+        assert_eq!(val.0, 0x00000020);
+
+        val = DmaState(0x00000010);
+        assert!(val.des_unavl_int_occurs());
+
+        val = DmaState(0x00000000);
+        assert!(!val.des_unavl_int_occurs());
+
+        val = val.clear_des_unavl_int();
+        assert_eq!(val.0, 0x00000010);
+
+        val = DmaState(0x00000004);
+        assert!(val.fatal_berr_int_occurs());
+
+        val = DmaState(0x00000000);
+        assert!(!val.fatal_berr_int_occurs());
+
+        val = val.clear_fatal_berr_int();
+        assert_eq!(val.0, 0x00000004);
+
+        val = DmaState(0x00000002);
+        assert!(val.rx_int_occurs());
+
+        val = DmaState(0x00000000);
+        assert!(!val.rx_int_occurs());
+
+        val = val.clear_rx_int();
+        assert_eq!(val.0, 0x00000002);
+
+        val = DmaState(0x00000001);
+        assert!(val.tx_int_occurs());
+
+        val = DmaState(0x00000000);
+        assert!(!val.tx_int_occurs());
+
+        val = val.clear_tx_int();
+        assert_eq!(val.0, 0x00000001);
+    }
+
+    #[test]
+    fn struct_dma_interrupt_enable_functions() {
+        let mut val = DmaInterruptEnable(0x0);
+
+        val = val.enable_card_err_sum_int();
+        assert!(val.is_card_err_sum_int_enabled());
+        assert_eq!(val.0, 0x00000020);
+
+        val = val.disable_card_err_sum_int();
+        assert!(!val.is_card_err_sum_int_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.enable_des_unavl_int();
+        assert!(val.is_des_unavl_int_enabled());
+        assert_eq!(val.0, 0x00000010);
+
+        val = val.disable_des_unavl_int();
+        assert!(!val.is_des_unavl_int_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.enable_fatal_berr_int();
+        assert!(val.is_fatal_berr_int_enabled());
+        assert_eq!(val.0, 0x00000004);
+
+        val = val.disable_fatal_berr_int();
+        assert!(!val.is_fatal_berr_int_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.enable_rx_int();
+        assert!(val.is_rx_int_enabled());
+        assert_eq!(val.0, 0x00000002);
+
+        val = val.disable_rx_int();
+        assert!(!val.is_rx_int_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.enable_tx_int();
+        assert!(val.is_tx_int_enabled());
+        assert_eq!(val.0, 0x00000001);
+
+        val = val.disable_tx_int();
+        assert!(!val.is_tx_int_enabled());
+        assert_eq!(val.0, 0x00000000);
+    }
+
+    #[test]
+    fn struct_card_threshold_control_functions() {
+        let mut val = CardThresholdControl(0x00000000);
+
+        val = val.set_card_wr_thld(0xFFF);
+        assert_eq!(val.card_wr_thld(), 0xFFF);
+        assert_eq!(val.0, 0x0FFF0000);
+
+        val = CardThresholdControl(0x00000000);
+        val = val.enable_card_write_threshold();
+        assert!(val.is_card_write_threshold_enabled());
+        assert_eq!(val.0, 0x00000004);
+
+        val = val.disable_card_write_threshold();
+        assert!(!val.is_card_write_threshold_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.enable_busy_clear();
+        assert!(val.is_busy_clear_enabled());
+        assert_eq!(val.0, 0x00000002);
+
+        val = val.disable_busy_clear();
+        assert!(!val.is_busy_clear_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.enable_card_read_threshold();
+        assert!(val.is_card_read_threshold_enabled());
+        assert_eq!(val.0, 0x00000001);
+
+        val = val.disable_card_read_threshold();
+        assert!(!val.is_card_read_threshold_enabled());
+        assert_eq!(val.0, 0x00000000);
+    }
+
+    #[test]
+    fn struct_sample_fifo_control_functions() {
+        let mut val = SampleFifoControl(0x00000000);
+
+        val = val.set_stop_clk_ctrl(0xF);
+        assert_eq!(val.stop_clk_ctrl(), 0xF);
+        assert_eq!(val.0, 0x0000001E);
+
+        val = val.set_stop_clk_ctrl(0x0);
+        assert_eq!(val.stop_clk_ctrl(), 0x0);
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.enable_bypass();
+        assert!(val.is_bypass_enabled());
+        assert_eq!(val.0, 0x00000001);
+
+        val = val.disable_bypass();
+        assert!(!val.is_bypass_enabled());
+        assert_eq!(val.0, 0x00000000);
+    }
+
+    #[test]
+    fn struct_ddr_start_bit_detection_control_functions() {
+        let mut val = DdrStartBitDetectionControl(0x00000000);
+
+        val = val.enable_hs400_mode();
+        assert!(val.is_hs400_mode_enabled());
+        assert_eq!(val.0, 0x80000000);
+
+        val = val.disable_hs400_mode();
+        assert!(!val.is_hs400_mode_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.set_half_start_bit_less();
+        assert!(val.is_half_start_bit_less());
+        assert!(!val.is_half_start_bit_full());
+        assert_eq!(val.0, 0x00000001);
+
+        val = val.set_half_start_bit_full();
+        assert!(!val.is_half_start_bit_less());
+        assert!(val.is_half_start_bit_full());
+        assert_eq!(val.0, 0x00000000);
+    }
+
+    #[test]
+    fn struct_extended_command_functions() {
+        let mut val = ExtendedCommand(0x00000000);
+
+        val = val.enable_auto_cmd23();
+        assert!(val.is_auto_cmd23_enabled());
+        assert_eq!(val.0, 0x00000001);
+
+        val = val.disable_auto_cmd23();
+        assert!(!val.is_auto_cmd23_enabled());
+        assert_eq!(val.0, 0x00000000);
     }
 
     #[test]
@@ -1589,6 +3274,117 @@ mod tests {
 
         val = val.set_command_drive_phase(DdcTimingPhase::Sdr90Ddr45);
         assert_eq!(val.command_drive_phase(), DdcTimingPhase::Sdr90Ddr45);
+        assert_eq!(val.0, 0x00000000);
+    }
+
+    #[test]
+    fn struct_sample_delay_control_functions() {
+        let mut val = SampleDelayControl(0x00000000);
+
+        val = val.start_sample_delay_cal();
+        assert_eq!(val.0, 0x00008000);
+
+        val = val.stop_sample_delay_cal();
+        assert_eq!(val.0, 0x00000000);
+
+        val = SampleDelayControl(0x00004000);
+        assert!(val.is_sample_delay_cal_done());
+
+        val = SampleDelayControl(0x0);
+        assert!(!val.is_sample_delay_cal_done());
+
+        val = SampleDelayControl(0x00003F00);
+        assert_eq!(val.sample_delay(), 0x3F);
+
+        val = SampleDelayControl(0x0);
+        val = val.enable_sample_delay_software();
+        assert!(val.is_sample_delay_software_enabled());
+        assert_eq!(val.0, 0x00000080);
+
+        val = val.disable_sample_delay_software();
+        assert!(!val.is_sample_delay_software_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.set_sample_delay_software(0x3F);
+        assert_eq!(val.sample_delay_software(), 0x3F);
+        assert_eq!(val.0, 0x0000003F);
+
+        val = val.set_sample_delay_software(0x00);
+        assert_eq!(val.sample_delay_software(), 0x00);
+        assert_eq!(val.0, 0x00000000);
+    }
+
+    #[test]
+    fn struct_data_strobe_delay_control_functions() {
+        let mut val = DataStrobeDelayControl(0x00000000);
+
+        val = val.start_data_strobe_delay_cal();
+        assert_eq!(val.0, 0x00008000);
+
+        val = val.stop_data_strobe_delay_cal();
+        assert_eq!(val.0, 0x00000000);
+
+        val = DataStrobeDelayControl(0x00004000);
+        assert!(val.is_data_strobe_delay_cal_done());
+
+        val = DataStrobeDelayControl(0x0);
+        assert!(!val.is_data_strobe_delay_cal_done());
+
+        val = DataStrobeDelayControl(0x00003F00);
+        assert_eq!(val.data_strobe_delay(), 0x3F);
+
+        val = DataStrobeDelayControl(0x00000000);
+        val = val.enable_data_strobe_delay_software();
+        assert!(val.is_data_strobe_delay_software_enabled());
+        assert_eq!(val.0, 0x00000080);
+
+        val = val.disable_data_strobe_delay_software();
+        assert!(!val.is_data_strobe_delay_software_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.set_data_strobe_delay_software(0x3F);
+        assert_eq!(val.data_strobe_delay_software(), 0x3F);
+        assert_eq!(val.0, 0x0000003F);
+
+        val = val.set_data_strobe_delay_software(0x00);
+        assert_eq!(val.data_strobe_delay_software(), 0x00);
+        assert_eq!(val.0, 0x00000000);
+    }
+
+    #[test]
+    fn struct_hs400_delay_control_functions() {
+        let mut val = Hs400DelayControl(0x00000000);
+
+        val = val.start_hs400_delay_cal();
+        assert_eq!(val.0, 0x00008000);
+
+        val = val.stop_hs400_delay_cal();
+        assert_eq!(val.0, 0x00000000);
+
+        val = Hs400DelayControl(0x00004000);
+        assert!(val.is_hs400_delay_cal_done());
+
+        val = Hs400DelayControl(0x0);
+        assert!(!val.is_hs400_delay_cal_done());
+
+        val = Hs400DelayControl(0x00000F00);
+        assert_eq!(val.hs400_delay(), 0x0F);
+
+        val = Hs400DelayControl(0x00000000);
+        val = val.enable_hs400_delay_software();
+        assert!(val.is_hs400_delay_software_enabled());
+        assert_eq!(val.0, 0x00000080);
+
+        val = val.disable_hs400_delay_software();
+        assert!(!val.is_hs400_delay_software_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.set_hs400_delay_software(0x0F);
+        assert_eq!(val.hs400_delay_software(), 0x0F);
+        assert_eq!(val.0, 0x0000000F);
+
+        val = val.set_hs400_delay_software(0x00);
+        assert_eq!(val.hs400_delay_software(), 0x00);
         assert_eq!(val.0, 0x00000000);
     }
 }
