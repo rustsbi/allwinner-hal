@@ -31,6 +31,7 @@ pub use allwinner_rt_macros::entry;
 pub mod soc {
     pub mod d1;
     pub mod v821;
+    pub mod v853;
 }
 
 /// Jump over head data to executable code.
@@ -93,17 +94,22 @@ core::arch::global_asm! {
     sym start,
 }
 
-#[cfg(any(feature = "nezha", feature = "lichee"))]
+#[cfg(feature = "d1")]
 pub use {
     self::soc::d1::{__rom_init_params, Peripherals},
     allwinner_hal::ccu::Clocks,
 };
+#[cfg(feature = "v821")]
+pub use {
+    self::soc::v821::{__rom_init_params, Peripherals},
+    allwinner_hal::ccu::Clocks,
+};
 
-#[cfg(not(any(feature = "nezha", feature = "lichee")))]
+#[cfg(not(any(feature = "d1", feature = "v821")))]
 pub struct Peripherals {}
-#[cfg(not(any(feature = "nezha", feature = "lichee")))]
+#[cfg(not(any(feature = "d1", feature = "v821")))]
 pub struct Clocks {}
-#[cfg(not(any(feature = "nezha", feature = "lichee")))]
+#[cfg(not(any(feature = "d1", feature = "v821")))]
 #[doc(hidden)]
 pub fn __rom_init_params() -> (Peripherals, Clocks) {
     (Peripherals {}, Clocks {})

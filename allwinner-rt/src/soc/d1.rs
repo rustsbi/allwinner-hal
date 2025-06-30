@@ -53,8 +53,7 @@ soc! {
 impl_uart! {
     0 => UART0,
 }
-
-/// Ownership of a GPIO pad.
+/// Ownership of a D1 GPIO pad.
 pub struct Pad<const P: char, const N: u8> {
     _private: (),
 }
@@ -104,30 +103,6 @@ impl<const P: char, const N: u8> allwinner_hal::gpio::PadExt<'static, P, N> for 
     fn into_eint(self) -> allwinner_hal::gpio::EintPad<'static> {
         unsafe { allwinner_hal::gpio::EintPad::__new(P, N, &GPIO { _private: () }) }
     }
-}
-
-#[allow(unused)]
-macro_rules! impl_gpio_pins {
-    ($($px: ident:($P: expr, $N: expr);)+) => {
-/// GPIO pads in current platform.
-pub struct Pads {
-    $(
-    pub $px: $crate::soc::d1::Pad<$P, $N>,
-    )+
-}
-
-impl Pads {
-    #[doc(hidden)]
-    #[inline]
-    pub fn __new() -> Self {
-        Self {
-            $(
-            $px: $crate::soc::d1::Pad { _private: () },
-            )+
-        }
-    }
-}
-    };
 }
 
 impl_gpio_pins! {

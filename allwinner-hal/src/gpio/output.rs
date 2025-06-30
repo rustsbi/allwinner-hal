@@ -1,7 +1,6 @@
 use super::{
     input::Input,
     mode::{FromRegisters, PortAndNumber, borrow_with_mode, set_mode},
-    port_index,
     register::RegisterBlock,
 };
 
@@ -36,9 +35,9 @@ impl<'a> embedded_hal::digital::ErrorType for Output<'a> {
 impl<'a> embedded_hal::digital::OutputPin for Output<'a> {
     #[inline]
     fn set_low(&mut self) -> Result<(), Self::Error> {
-        let idx = port_index(self.port);
         unsafe {
-            self.gpio.port[idx]
+            self.gpio
+                .port(self.port)
                 .dat
                 .modify(|value| value & !(1 << self.number))
         };
@@ -46,9 +45,9 @@ impl<'a> embedded_hal::digital::OutputPin for Output<'a> {
     }
     #[inline]
     fn set_high(&mut self) -> Result<(), Self::Error> {
-        let idx = port_index(self.port);
         unsafe {
-            self.gpio.port[idx]
+            self.gpio
+                .port(self.port)
                 .dat
                 .modify(|value| value | (1 << self.number))
         };
@@ -59,11 +58,11 @@ impl<'a> embedded_hal::digital::OutputPin for Output<'a> {
 impl<'a> embedded_hal::digital::StatefulOutputPin for Output<'a> {
     #[inline]
     fn is_set_high(&mut self) -> Result<bool, Self::Error> {
-        Ok(self.gpio.port[port_index(self.port)].dat.read() & (1 << self.number) != 0)
+        Ok(self.gpio.port(self.port).dat.read() & (1 << self.number) != 0)
     }
     #[inline]
     fn is_set_low(&mut self) -> Result<bool, Self::Error> {
-        Ok(self.gpio.port[port_index(self.port)].dat.read() & (1 << self.number) == 0)
+        Ok(self.gpio.port(self.port).dat.read() & (1 << self.number) == 0)
     }
 }
 

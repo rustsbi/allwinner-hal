@@ -1,4 +1,4 @@
-use super::{port_cfg_index, register::RegisterBlock};
+use super::{cfg_index, register::RegisterBlock};
 
 /// Internal function to set GPIO pad mode.
 #[inline]
@@ -19,15 +19,15 @@ where
 unsafe fn write_mode<'a, T: PortAndNumber<'a>, U: FromRegisters<'a>>(value: &mut T) {
     let gpio = value.register_block();
     // calculate mask, value and register address
-    let (mask, value, port_idx, cfg_reg_idx) = {
+    let (mask, value, port, cfg_reg_idx) = {
         let (port, number) = value.port_number();
-        let (port_idx, cfg_reg_idx, cfg_field_idx) = port_cfg_index(port, number);
+        let (cfg_reg_idx, cfg_field_idx) = cfg_index(number);
         let mask = !(0xF << cfg_field_idx);
         let value = (U::VALUE as u32) << cfg_field_idx;
-        (mask, value, port_idx, cfg_reg_idx)
+        (mask, value, port, cfg_reg_idx)
     };
     // apply configuration
-    let cfg_reg = &gpio.port[port_idx].cfg[cfg_reg_idx];
+    let cfg_reg = &gpio.port(port).cfg[cfg_reg_idx];
     unsafe { cfg_reg.modify(|cfg| (cfg & mask) | value) };
 }
 
