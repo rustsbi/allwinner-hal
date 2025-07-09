@@ -1,8 +1,8 @@
 use super::{
-    ResponseMode, SdCardError, TransferMode,
     register::{
         AccessMode, BlockSize, BusWidth, CardType, Command, RegisterBlock, TransferDirection,
     },
+    ResponseMode, SdCardError, TransferMode,
 };
 use crate::ccu::{self, Clocks, SmhcClockSource};
 use core::arch::asm;
@@ -138,7 +138,6 @@ impl<SMHC: AsRef<RegisterBlock>, PADS> Smhc<SMHC, PADS> {
         let smhc = self.smhc.as_ref();
         if data_trans {
             unsafe {
-                smhc.byte_count.write(512); // TODO
                 smhc.global_control
                     .modify(|w| w.set_access_mode(AccessMode::Ahb));
             }
@@ -298,9 +297,13 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
     }
     /// Read a block from the SD card.
     #[inline]
-    pub fn read_block(&self, block: &mut Block, block_idx: u32) {
+    pub fn read_block(&self, blocks: &mut [Block], start_block_idx: u32) {
+        let length = blocks.len() as u32;
+        if length == 0 {
+            panic!("Invalid read block length = 0");
+        }
+        let smhc = self.smhc.smhc.as_ref();
         loop {
-            let smhc = self.smhc.smhc.as_ref();
             unsafe {
                 smhc.global_control.modify(|val| val.set_fifo_reset());
                 while !smhc.global_control.read().is_fifo_reset_cleared() {
@@ -308,21 +311,34 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
                 }
                 smhc.global_control
                     .modify(|val| val.set_access_mode(AccessMode::Ahb));
-                self.smhc.smhc.as_ref().fifo_water_level.modify(|val| {
+                smhc.fifo_water_level.modify(|val| {
                     use super::register::BurstSize;
                     val.set_burst_size(BurstSize::SixteenBit)
                         .set_receive_trigger_level(15)
                         .set_transmit_trigger_level(240)
                 });
+                smhc.byte_count.write(512 * length);
             }
-            self.smhc.send_card_command(
-                17,
-                block_idx,
-                TransferMode::Read,
-                ResponseMode::Short,
-                true,
-            );
-            self.smhc.read_data(&mut block.contents);
+            if length == 1 {
+                self.smhc.send_card_command(
+                    17,
+                    start_block_idx,
+                    TransferMode::Read,
+                    ResponseMode::Short,
+                    true,
+                );
+            } else {
+                self.smhc.send_card_command(
+                    18,
+                    start_block_idx,
+                    TransferMode::Read,
+                    ResponseMode::Short,
+                    true,
+                );
+            }
+            for block in &mut *blocks {
+                self.smhc.read_data(&mut block.contents);
+            }
             loop {
                 use super::register::Interrupt;
                 let status = self.smhc.smhc.as_ref().interrupt_state_raw.read();
@@ -333,8 +349,16 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
             }
             use super::register::Interrupt;
             let status = self.smhc.smhc.as_ref().interrupt_state_raw.read();
-            if status.has_interrupt(Interrupt::DataTransferComplete) {
-                break;
+            if length == 1 {
+                if status.has_interrupt(Interrupt::DataTransferComplete) {
+                    break;
+                }
+            } else {
+                if status.has_interrupt(Interrupt::DataTransferComplete)
+                    && status.has_interrupt(Interrupt::AutoCommandDone)
+                {
+                    break;
+                }
             }
         }
     }
@@ -364,9 +388,7 @@ impl<'a, S: AsRef<RegisterBlock>, P> BlockDevice for SdCard<'a, S, P> {
         start_block_idx: BlockIdx,
         _reason: &str,
     ) -> Result<(), Self::Error> {
-        for (i, block) in blocks.iter_mut().enumerate() {
-            self.read_block(block, start_block_idx.0 + i as u32);
-        }
+        self.read_block(blocks, start_block_idx.0);
         Ok(())
     }
 
