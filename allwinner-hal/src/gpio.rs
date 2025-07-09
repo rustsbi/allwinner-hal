@@ -15,17 +15,35 @@ pub use pad_ext::PadExt;
 pub use register::{Eint, PioPow, Port, RegisterBlock};
 
 #[inline]
-const fn port_index(p: char) -> usize {
-    assert!(p as usize >= b'B' as usize && p as usize <= b'G' as usize);
-    p as usize - b'B' as usize
-}
-
-#[inline]
-const fn port_cfg_index(p: char, n: u8) -> (usize, usize, u8) {
-    assert!(p as usize >= b'B' as usize && p as usize <= b'G' as usize);
+const fn cfg_index(n: u8) -> (usize, u8) {
     assert!(n <= 31);
-    let port_idx = p as usize - b'B' as usize;
     let cfg_reg_idx = (n >> 3) as usize;
     let cfg_field_idx = (n & 0b111) << 2;
-    (port_idx, cfg_reg_idx, cfg_field_idx)
+    (cfg_reg_idx, cfg_field_idx)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cfg_index;
+
+    #[test]
+    fn test_cfg_index() {
+        let test_cases = [
+            (0, (0, 0)),
+            (5, (0, 20)),
+            (7, (0, 28)),
+            (8, (1, 0)),
+            (24, (3, 0)),
+            (31, (3, 28)),
+            (11, (1, 12)),
+            (14, (1, 24)),
+            (1, (0, 4)),
+            (17, (2, 4)),
+            (15, (1, 28)),
+            (18, (2, 8)),
+        ];
+        for (n, idx) in test_cases {
+            assert_eq!(cfg_index(n), idx);
+        }
+    }
 }
