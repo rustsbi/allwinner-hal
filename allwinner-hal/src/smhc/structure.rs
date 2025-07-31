@@ -10,14 +10,14 @@ use embedded_sdmmc::{Block, BlockDevice, BlockIdx};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-struct IDMACDescriptor {
-    pub des0: IDMACDescriptor0,
-    pub des1: IDMACDescriptor1,
+struct IdmacDescriptor {
+    pub des0: IdmacDescriptor0,
+    pub des1: IdmacDescriptor1,
     des2: u32,
     des3: u32,
 }
 
-impl IDMACDescriptor {
+impl IdmacDescriptor {
     #[inline]
     pub fn get_buffer_address(&self) -> u32 {
         self.des2
@@ -39,9 +39,9 @@ impl IDMACDescriptor {
 
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct IDMACDescriptor0(u32);
+struct IdmacDescriptor0(u32);
 
-impl IDMACDescriptor0 {
+impl IdmacDescriptor0 {
     const DES_OWN_FLAG: u32 = 1u32 << 31;
     const ERR_FLAG: u32 = 1u32 << 30;
     const ED_RING: u32 = 1u32 << 5;
@@ -139,9 +139,9 @@ impl IDMACDescriptor0 {
     }
 }
 
-impl Default for IDMACDescriptor0 {
+impl Default for IdmacDescriptor0 {
     fn default() -> Self {
-        let mut result = IDMACDescriptor0(0);
+        let mut result = IdmacDescriptor0(0);
         result.enable_chain();
         result.enable_disable_interrupt_on_completion();
         result.enable_hold();
@@ -151,9 +151,9 @@ impl Default for IDMACDescriptor0 {
 
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-struct IDMACDescriptor1(u32);
+struct IdmacDescriptor1(u32);
 
-impl IDMACDescriptor1 {
+impl IdmacDescriptor1 {
     const BUFFER_SIZE_MASK: u32 = (1u32 << 13) - 1;
     const MAX_BUFFER_SIZE: u32 = Self::BUFFER_SIZE_MASK;
 
@@ -162,6 +162,9 @@ impl IDMACDescriptor1 {
     }
 
     pub fn set_buffer_size(&mut self, value: u32) {
+        if value & !Self::BUFFER_SIZE_MASK != 0 {
+            log::error!("Can not set size >= {}", Self::MAX_BUFFER_SIZE);
+        }
         self.0 = value & Self::BUFFER_SIZE_MASK
     }
 }
@@ -352,6 +355,7 @@ pub struct SdCard<'a, S, P> {
 }
 
 const MAX_DMA_DES_COUNT: usize = 16;
+const MAX_RETRIES: u8 = 10;
 
 impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
     /// Create an SD card instance.
@@ -369,11 +373,9 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
         smhc.send_card_command(0, 0, TransferMode::Disable, ResponseMode::Disable, false);
         Self::sleep(100); // TODO: wait for interrupt instead of sleep
 
-        const MAX_RETRIES: u8 = 10;
-        let mut attempts = 0;
         let mut success = false;
 
-        while attempts < MAX_RETRIES {
+        for _ in 0..MAX_RETRIES {
             smhc.send_card_command(8, 0x1AA, TransferMode::Disable, ResponseMode::Short, true);
             Self::sleep(100);
             let data = smhc.read_response();
@@ -381,7 +383,6 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
                 success = true;
                 break;
             }
-            attempts += 1;
         }
 
         if !success {
@@ -392,7 +393,7 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
         if data != 0x1AA {
             return Err(SdCardError::UnexpectedResponse(8, data));
         }
-        loop {
+        for _ in 0..MAX_RETRIES {
             smhc.send_card_command(55, 0, TransferMode::Disable, ResponseMode::Short, true);
             Self::sleep(100);
             smhc.send_card_command(
@@ -461,10 +462,11 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
         if length == 0 {
             panic!("Invalid read block length = 0");
         }
-        loop {
-            let mut dma_desc: [IDMACDescriptor; MAX_DMA_DES_COUNT] =
+        for _ in 0..MAX_RETRIES {
+            let mut dma_desc: [IdmacDescriptor; MAX_DMA_DES_COUNT] =
                 [Default::default(); MAX_DMA_DES_COUNT];
             let smhc = self.smhc.smhc.as_ref();
+            // Init
             unsafe {
                 smhc.global_control
                     .modify(|val| val.set_dma_reset().set_fifo_reset().enable_dma());
@@ -493,11 +495,11 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
                 smhc.dma_descriptor_base
                     .modify(|_| (core::ptr::addr_of!(dma_desc[0]) as u32) >> 2);
             }
+            // Fill the dma links
             for i in 0..blocks.len() {
                 dma_desc[i].des1.set_buffer_size(Block::LEN_U32);
                 dma_desc[i]
                     .set_buffer_address((core::ptr::addr_of!(blocks[i].contents) as u32) >> 2);
-                // TODO
                 dma_desc[i].set_next_descriptor_address(
                     (core::ptr::addr_of!(dma_desc[i + 1]) as u32) >> 2,
                 );
@@ -509,9 +511,12 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
             dma_desc[blocks.len() - 1]
                 .des0
                 .disable_disable_interrupt_on_completion();
+            // Fence to make sure dma links update synced.
             unsafe {
                 asm!("fence");
             };
+
+            // Send request.
             if length == 1 {
                 self.smhc.send_card_command(
                     17,
@@ -532,8 +537,7 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
             // for block in &mut *blocks {
             //     self.smhc.read_data(&mut block.contents);
             // }
-            const MAX_RETRY_TIME: u32 = 16;
-            for i in 0..MAX_RETRY_TIME {
+            for i in 0..MAX_RETRIES {
                 if i != 0 {
                     log::debug!("SD read retry for command complete: {}", i);
                 }
@@ -543,7 +547,7 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
                 }
                 Self::sleep(100);
             }
-            for i in 0..MAX_RETRY_TIME {
+            for i in 0..MAX_RETRIES {
                 if i != 0 {
                     log::debug!("SD read retry for DMA Read Complete: {}", i);
                 }
@@ -553,6 +557,7 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
                 }
                 Self::sleep(100);
             }
+
             // Reset DMA State
             unsafe {
                 let status = smhc.dma_state.read();
@@ -563,6 +568,7 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
             unsafe {
                 smhc.interrupt_state_raw.write(status);
             }
+
             if length == 1 {
                 if status.has_interrupt(Interrupt::DataTransferComplete) {
                     break;
@@ -619,5 +625,66 @@ impl<'a, S: AsRef<RegisterBlock>, P> BlockDevice for SdCard<'a, S, P> {
     #[inline]
     fn num_blocks(&self) -> Result<embedded_sdmmc::BlockCount, Self::Error> {
         Ok(embedded_sdmmc::BlockCount(self.block_count))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{IdmacDescriptor, IdmacDescriptor0, IdmacDescriptor1};
+    #[test]
+    fn test_idmac_descriptor_control_functions() {
+        let mut dma_desc: IdmacDescriptor = Default::default();
+        dma_desc.set_buffer_address(0xdeadbeef);
+        assert_eq!(dma_desc.get_buffer_address(), 0xdeadbeef);
+        dma_desc.set_next_descriptor_address(0xbeefdead);
+        assert_eq!(dma_desc.get_next_descriptor_address(), 0xbeefdead);
+    }
+
+    #[test]
+    fn test_idmac_descriptor0_control_functions() {
+        let mut dma_desc: IdmacDescriptor0 = IdmacDescriptor0(0);
+        dma_desc.enable_hold();
+        assert!(dma_desc.is_hold_enable());
+        assert_eq!(dma_desc.0, 0x8000_0000);
+        dma_desc.disable_hold();
+        assert_eq!(dma_desc.0, 0x0000_0000);
+
+        dma_desc.enable_error();
+        assert!(dma_desc.is_error_enable());
+        assert_eq!(dma_desc.0, 0x4000_0000);
+        dma_desc.disable_error();
+        assert_eq!(dma_desc.0, 0x0000_0000);
+
+        dma_desc.enable_chain();
+        assert!(dma_desc.is_chain_enable());
+        assert_eq!(dma_desc.0, 0x0000_0010);
+
+        let mut dma_desc: IdmacDescriptor0 = IdmacDescriptor0(0);
+        dma_desc.enable_first_flag();
+        assert!(dma_desc.is_first_flag_enable());
+        assert_eq!(dma_desc.0, 0x0000_0008);
+        dma_desc.disable_first_flag();
+        assert_eq!(dma_desc.0, 0x0000_0000);
+
+        let mut dma_desc: IdmacDescriptor0 = IdmacDescriptor0(0);
+        dma_desc.enable_last_flag();
+        assert!(dma_desc.is_last_flag_enable());
+        assert_eq!(dma_desc.0, 0x0000_0004);
+        dma_desc.disable_last_flag();
+        assert_eq!(dma_desc.0, 0x0000_0000);
+
+        let mut dma_desc: IdmacDescriptor0 = IdmacDescriptor0(0);
+        dma_desc.enable_disable_interrupt_on_completion();
+        assert!(dma_desc.is_disable_interrupt_on_completion());
+        assert_eq!(dma_desc.0, 0x0000_0002);
+        dma_desc.disable_disable_interrupt_on_completion();
+        assert_eq!(dma_desc.0, 0x0000_0000);
+    }
+
+    #[test]
+    fn test_idmac_descriptor1_control_functions() {
+        let mut dma_desc: IdmacDescriptor1 = IdmacDescriptor1(0);
+        dma_desc.set_buffer_size(0xff);
+        assert_eq!(dma_desc.buffer_size(), 0xff);
     }
 }
