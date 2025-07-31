@@ -8,6 +8,167 @@ use crate::ccu::{self, Clocks, SmhcClockSource};
 use core::arch::asm;
 use embedded_sdmmc::{Block, BlockDevice, BlockIdx};
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+struct IdmacDescriptor {
+    pub des0: IdmacDescriptor0,
+    pub des1: IdmacDescriptor1,
+    des2: u32,
+    des3: u32,
+}
+
+impl IdmacDescriptor {
+    #[inline]
+    pub fn get_buffer_address(&self) -> u32 {
+        self.des2
+    }
+    #[inline]
+    pub fn set_buffer_address(&mut self, value: u32) {
+        self.des2 = value
+    }
+
+    #[inline]
+    pub fn get_next_descriptor_address(&self) -> u32 {
+        self.des3
+    }
+    #[inline]
+    pub fn set_next_descriptor_address(&mut self, value: u32) {
+        self.des3 = value
+    }
+}
+
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct IdmacDescriptor0(u32);
+
+impl IdmacDescriptor0 {
+    const DES_OWN_FLAG: u32 = 1u32 << 31;
+    const ERR_FLAG: u32 = 1u32 << 30;
+    const ED_RING: u32 = 1u32 << 5;
+    const CHAIN_MOD: u32 = 1u32 << 4;
+    const FIRST_FLAG: u32 = 1u32 << 3;
+    const LAST_FLAG: u32 = 1u32 << 2;
+    const CUR_TXRX_OVER_INT_DI: u32 = 1u32 << 1;
+
+    #[inline]
+    pub fn is_hold_enable(&self) -> bool {
+        (self.0 & Self::DES_OWN_FLAG) != 0
+    }
+    #[inline]
+    pub fn enable_hold(&mut self) {
+        self.0 |= Self::DES_OWN_FLAG
+    }
+    #[inline]
+    pub fn disable_hold(&mut self) {
+        self.0 &= !Self::DES_OWN_FLAG
+    }
+
+    #[inline]
+    pub fn is_error_enable(&self) -> bool {
+        (self.0 & Self::ERR_FLAG) != 0
+    }
+    #[inline]
+    pub fn enable_error(&mut self) {
+        self.0 |= Self::ERR_FLAG
+    }
+    #[inline]
+    pub fn disable_error(&mut self) {
+        self.0 &= !Self::ERR_FLAG
+    }
+
+    #[inline]
+    pub fn is_end_ring_enable(&self) -> bool {
+        (self.0 & Self::ED_RING) != 0
+    }
+    #[inline]
+    pub fn enable_end_ring(&mut self) {
+        self.0 |= Self::ED_RING
+    }
+    #[inline]
+    pub fn disable_end_ring(&mut self) {
+        self.0 &= !Self::ED_RING;
+    }
+
+    #[inline]
+    pub fn is_chain_enable(&self) -> bool {
+        (self.0 & Self::CHAIN_MOD) != 0
+    }
+    #[inline]
+    pub fn enable_chain(&mut self) {
+        self.0 |= Self::CHAIN_MOD
+    }
+    // This flag "must be set to 1", so there is no disable function
+
+    #[inline]
+    pub fn is_first_flag_enable(&self) -> bool {
+        (self.0 & Self::FIRST_FLAG) != 0
+    }
+    #[inline]
+    pub fn enable_first_flag(&mut self) {
+        self.0 |= Self::FIRST_FLAG
+    }
+    #[inline]
+    pub fn disable_first_flag(&mut self) {
+        self.0 &= !Self::FIRST_FLAG
+    }
+
+    #[inline]
+    pub fn is_last_flag_enable(&self) -> bool {
+        (self.0 & Self::LAST_FLAG) != 0
+    }
+    #[inline]
+    pub fn enable_last_flag(&mut self) {
+        self.0 |= Self::LAST_FLAG
+    }
+    #[inline]
+    pub fn disable_last_flag(&mut self) {
+        self.0 &= !Self::LAST_FLAG
+    }
+
+    #[inline]
+    pub fn is_disable_interrupt_on_completion(&self) -> bool {
+        (self.0 & Self::CUR_TXRX_OVER_INT_DI) != 0
+    }
+    #[inline]
+    pub fn enable_disable_interrupt_on_completion(&mut self) {
+        self.0 |= Self::CUR_TXRX_OVER_INT_DI
+    }
+    #[inline]
+    pub fn disable_disable_interrupt_on_completion(&mut self) {
+        self.0 &= !Self::CUR_TXRX_OVER_INT_DI
+    }
+}
+
+impl Default for IdmacDescriptor0 {
+    fn default() -> Self {
+        let mut result = IdmacDescriptor0(0);
+        result.enable_chain();
+        result.enable_disable_interrupt_on_completion();
+        result.enable_hold();
+        result
+    }
+}
+
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+struct IdmacDescriptor1(u32);
+
+impl IdmacDescriptor1 {
+    const BUFFER_SIZE_MASK: u32 = (1u32 << 13) - 1;
+    const MAX_BUFFER_SIZE: u32 = Self::BUFFER_SIZE_MASK;
+
+    pub fn buffer_size(&self) -> u32 {
+        self.0 & Self::BUFFER_SIZE_MASK
+    }
+
+    pub fn set_buffer_size(&mut self, value: u32) {
+        if value & !Self::BUFFER_SIZE_MASK != 0 {
+            log::error!("Can not set size >= {}", Self::MAX_BUFFER_SIZE);
+        }
+        self.0 = value & Self::BUFFER_SIZE_MASK
+    }
+}
+
 /// Managed SMHC structure with peripheral and pins.
 pub struct Smhc<SMHC, PADS> {
     smhc: SMHC,
@@ -136,13 +297,6 @@ impl<SMHC: AsRef<RegisterBlock>, PADS> Smhc<SMHC, PADS> {
             ResponseMode::Long => (true, true),
         };
         let smhc = self.smhc.as_ref();
-        if data_trans {
-            unsafe {
-                smhc.byte_count.write(512); // TODO
-                smhc.global_control
-                    .modify(|w| w.set_access_mode(AccessMode::Ahb));
-            }
-        }
         unsafe {
             smhc.argument.write(arg);
             smhc.command.write({
@@ -200,6 +354,9 @@ pub struct SdCard<'a, S, P> {
     block_count: u32,
 }
 
+const MAX_DMA_DES_COUNT: usize = 16;
+const MAX_RETRIES: u8 = 10;
+
 impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
     /// Create an SD card instance.
     #[inline]
@@ -216,11 +373,9 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
         smhc.send_card_command(0, 0, TransferMode::Disable, ResponseMode::Disable, false);
         Self::sleep(100); // TODO: wait for interrupt instead of sleep
 
-        const MAX_RETRIES: u8 = 10;
-        let mut attempts = 0;
         let mut success = false;
 
-        while attempts < MAX_RETRIES {
+        for _ in 0..MAX_RETRIES {
             smhc.send_card_command(8, 0x1AA, TransferMode::Disable, ResponseMode::Short, true);
             Self::sleep(100);
             let data = smhc.read_response();
@@ -228,7 +383,6 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
                 success = true;
                 break;
             }
-            attempts += 1;
         }
 
         if !success {
@@ -239,7 +393,7 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
         if data != 0x1AA {
             return Err(SdCardError::UnexpectedResponse(8, data));
         }
-        loop {
+        for _ in 0..MAX_RETRIES {
             smhc.send_card_command(55, 0, TransferMode::Disable, ResponseMode::Short, true);
             Self::sleep(100);
             smhc.send_card_command(
@@ -298,43 +452,154 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
     }
     /// Read a block from the SD card.
     #[inline]
-    pub fn read_block(&self, block: &mut Block, block_idx: u32) {
-        loop {
+    pub fn read_block(&self, blocks: &mut [Block], start_block_idx: u32) {
+        log::trace!(
+            "read block from {}, length = {}",
+            start_block_idx,
+            blocks.len()
+        );
+        let length = blocks.len() as u32;
+        if length == 0 {
+            panic!("Invalid read block length = 0");
+        }
+        let short_mode = (length <= 2);
+        for _ in 0..MAX_RETRIES {
+            let mut dma_desc: [IdmacDescriptor; MAX_DMA_DES_COUNT] =
+                [Default::default(); MAX_DMA_DES_COUNT];
             let smhc = self.smhc.smhc.as_ref();
+            // Init
             unsafe {
-                smhc.global_control.modify(|val| val.set_fifo_reset());
+                if short_mode {
+                    smhc.global_control
+                        .modify(|val| val.set_dma_reset().set_fifo_reset());
+                } else {
+                    smhc.global_control
+                        .modify(|val| val.set_dma_reset().set_fifo_reset().enable_dma());
+                }
+                while !smhc.global_control.read().is_dma_reset_cleared() {
+                    core::hint::spin_loop();
+                }
                 while !smhc.global_control.read().is_fifo_reset_cleared() {
                     core::hint::spin_loop();
                 }
-                smhc.global_control
-                    .modify(|val| val.set_access_mode(AccessMode::Ahb));
-                self.smhc.smhc.as_ref().fifo_water_level.modify(|val| {
+                if short_mode {
+                    smhc.global_control
+                        .modify(|val| val.set_access_mode(AccessMode::Ahb));
+                    smhc.dma_control
+                        .modify(|val| val.disable_dma().enable_fix_burst_size());
+                } else {
+                    smhc.global_control
+                        .modify(|val| val.set_access_mode(AccessMode::Dma));
+                    smhc.dma_interrupt_enable.modify(|val| {
+                        val.enable_rx_int()
+                            .enable_card_err_sum_int()
+                            .enable_des_unavl_int()
+                            .enable_fatal_berr_int()
+                            .enable_tx_int()
+                    });
+                    smhc.dma_control
+                        .modify(|val| val.enable_dma().enable_fix_burst_size());
+                }
+                smhc.fifo_water_level.modify(|val| {
                     use super::register::BurstSize;
                     val.set_burst_size(BurstSize::SixteenBit)
                         .set_receive_trigger_level(15)
                         .set_transmit_trigger_level(240)
                 });
+                smhc.byte_count.write(Block::LEN_U32 * length);
+                smhc.dma_descriptor_base
+                    .modify(|_| (core::ptr::addr_of!(dma_desc[0]) as u32) >> 2);
             }
-            self.smhc.send_card_command(
-                17,
-                block_idx,
-                TransferMode::Read,
-                ResponseMode::Short,
-                true,
-            );
-            self.smhc.read_data(&mut block.contents);
-            loop {
-                use super::register::Interrupt;
+            // Fill the dma links
+            if !short_mode {
+                for i in 0..blocks.len() {
+                    dma_desc[i].des1.set_buffer_size(Block::LEN_U32);
+                    dma_desc[i]
+                        .set_buffer_address((core::ptr::addr_of!(blocks[i].contents) as u32) >> 2);
+                    dma_desc[i].set_next_descriptor_address(
+                        (core::ptr::addr_of!(dma_desc[i + 1]) as u32) >> 2,
+                    );
+                }
+                dma_desc[0].des0.enable_first_flag();
+                dma_desc[blocks.len() - 1].des0.enable_last_flag();
+                dma_desc[blocks.len() - 1].des0.enable_end_ring();
+                dma_desc[blocks.len() - 1].set_next_descriptor_address(0);
+                dma_desc[blocks.len() - 1]
+                    .des0
+                    .disable_disable_interrupt_on_completion();
+                // Fence to make sure dma links update synced.
+                unsafe {
+                    asm!("fence");
+                };
+            }
+
+            // Send request.
+            if length == 1 {
+                self.smhc.send_card_command(
+                    17,
+                    start_block_idx,
+                    TransferMode::Read,
+                    ResponseMode::Short,
+                    true,
+                );
+            } else {
+                self.smhc.send_card_command(
+                    18,
+                    start_block_idx,
+                    TransferMode::Read,
+                    ResponseMode::Short,
+                    true,
+                );
+            }
+            if short_mode {
+                for block in &mut *blocks {
+                    self.smhc.read_data(&mut block.contents);
+                }
+            }
+            for i in 0..MAX_RETRIES {
+                if i != 0 {
+                    log::debug!("SD read retry for command complete: {}", i);
+                }
                 let status = self.smhc.smhc.as_ref().interrupt_state_raw.read();
                 if status.has_interrupt(Interrupt::CommandComplete) {
                     break;
                 }
                 Self::sleep(100);
             }
+            if !short_mode {
+                for i in 0..MAX_RETRIES {
+                    if i != 0 {
+                        log::debug!("SD read retry for DMA Read Complete: {}", i);
+                    }
+                    let status = smhc.dma_state.read();
+                    if status.rx_int_occurs() {
+                        break;
+                    }
+                    Self::sleep(100);
+                }
+            }
+
+            // Reset DMA State
+            unsafe {
+                let status = smhc.dma_state.read();
+                smhc.dma_state.write(status);
+            }
             use super::register::Interrupt;
-            let status = self.smhc.smhc.as_ref().interrupt_state_raw.read();
-            if status.has_interrupt(Interrupt::DataTransferComplete) {
-                break;
+            let status = smhc.interrupt_state_raw.read();
+            unsafe {
+                smhc.interrupt_state_raw.write(status);
+            }
+
+            if length == 1 {
+                if status.has_interrupt(Interrupt::DataTransferComplete) {
+                    break;
+                }
+            } else {
+                if status.has_interrupt(Interrupt::DataTransferComplete)
+                    & status.has_interrupt(Interrupt::AutoCommandDone)
+                {
+                    break;
+                }
             }
         }
     }
@@ -358,14 +623,17 @@ impl<'a, S: AsRef<RegisterBlock>, P> BlockDevice for SdCard<'a, S, P> {
     type Error = core::convert::Infallible;
 
     #[inline]
-    fn read(
-        &self,
-        blocks: &mut [Block],
-        start_block_idx: BlockIdx,
-        _reason: &str,
-    ) -> Result<(), Self::Error> {
-        for (i, block) in blocks.iter_mut().enumerate() {
-            self.read_block(block, start_block_idx.0 + i as u32);
+    fn read(&self, blocks: &mut [Block], start_block_idx: BlockIdx) -> Result<(), Self::Error> {
+        let mut less_blocks = blocks;
+        let mut current_idx = start_block_idx.0;
+        while less_blocks.len() >= MAX_DMA_DES_COUNT {
+            let result = less_blocks.split_at_mut(MAX_DMA_DES_COUNT);
+            less_blocks = result.1;
+            self.read_block(result.0, current_idx);
+            current_idx += MAX_DMA_DES_COUNT as u32;
+        }
+        if less_blocks.len() > 0 {
+            self.read_block(less_blocks, current_idx);
         }
         Ok(())
     }
@@ -378,5 +646,66 @@ impl<'a, S: AsRef<RegisterBlock>, P> BlockDevice for SdCard<'a, S, P> {
     #[inline]
     fn num_blocks(&self) -> Result<embedded_sdmmc::BlockCount, Self::Error> {
         Ok(embedded_sdmmc::BlockCount(self.block_count))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{IdmacDescriptor, IdmacDescriptor0, IdmacDescriptor1};
+    #[test]
+    fn test_idmac_descriptor_control_functions() {
+        let mut dma_desc: IdmacDescriptor = Default::default();
+        dma_desc.set_buffer_address(0xdeadbeef);
+        assert_eq!(dma_desc.get_buffer_address(), 0xdeadbeef);
+        dma_desc.set_next_descriptor_address(0xbeefdead);
+        assert_eq!(dma_desc.get_next_descriptor_address(), 0xbeefdead);
+    }
+
+    #[test]
+    fn test_idmac_descriptor0_control_functions() {
+        let mut dma_desc: IdmacDescriptor0 = IdmacDescriptor0(0);
+        dma_desc.enable_hold();
+        assert!(dma_desc.is_hold_enable());
+        assert_eq!(dma_desc.0, 0x8000_0000);
+        dma_desc.disable_hold();
+        assert_eq!(dma_desc.0, 0x0000_0000);
+
+        dma_desc.enable_error();
+        assert!(dma_desc.is_error_enable());
+        assert_eq!(dma_desc.0, 0x4000_0000);
+        dma_desc.disable_error();
+        assert_eq!(dma_desc.0, 0x0000_0000);
+
+        dma_desc.enable_chain();
+        assert!(dma_desc.is_chain_enable());
+        assert_eq!(dma_desc.0, 0x0000_0010);
+
+        let mut dma_desc: IdmacDescriptor0 = IdmacDescriptor0(0);
+        dma_desc.enable_first_flag();
+        assert!(dma_desc.is_first_flag_enable());
+        assert_eq!(dma_desc.0, 0x0000_0008);
+        dma_desc.disable_first_flag();
+        assert_eq!(dma_desc.0, 0x0000_0000);
+
+        let mut dma_desc: IdmacDescriptor0 = IdmacDescriptor0(0);
+        dma_desc.enable_last_flag();
+        assert!(dma_desc.is_last_flag_enable());
+        assert_eq!(dma_desc.0, 0x0000_0004);
+        dma_desc.disable_last_flag();
+        assert_eq!(dma_desc.0, 0x0000_0000);
+
+        let mut dma_desc: IdmacDescriptor0 = IdmacDescriptor0(0);
+        dma_desc.enable_disable_interrupt_on_completion();
+        assert!(dma_desc.is_disable_interrupt_on_completion());
+        assert_eq!(dma_desc.0, 0x0000_0002);
+        dma_desc.disable_disable_interrupt_on_completion();
+        assert_eq!(dma_desc.0, 0x0000_0000);
+    }
+
+    #[test]
+    fn test_idmac_descriptor1_control_functions() {
+        let mut dma_desc: IdmacDescriptor1 = IdmacDescriptor1(0);
+        dma_desc.set_buffer_size(0xff);
+        assert_eq!(dma_desc.buffer_size(), 0xff);
     }
 }
