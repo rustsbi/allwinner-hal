@@ -462,29 +462,44 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
         if length == 0 {
             panic!("Invalid read block length = 0");
         }
+        let short_mode = (length <= 2);
         for _ in 0..MAX_RETRIES {
             let mut dma_desc: [IdmacDescriptor; MAX_DMA_DES_COUNT] =
                 [Default::default(); MAX_DMA_DES_COUNT];
             let smhc = self.smhc.smhc.as_ref();
             // Init
             unsafe {
-                smhc.global_control
-                    .modify(|val| val.set_dma_reset().set_fifo_reset().enable_dma());
+                if short_mode {
+                    smhc.global_control
+                        .modify(|val| val.set_dma_reset().set_fifo_reset());
+                } else {
+                    smhc.global_control
+                        .modify(|val| val.set_dma_reset().set_fifo_reset().enable_dma());
+                }
                 while !smhc.global_control.read().is_dma_reset_cleared() {
                     core::hint::spin_loop();
                 }
                 while !smhc.global_control.read().is_fifo_reset_cleared() {
                     core::hint::spin_loop();
                 }
-                smhc.dma_interrupt_enable.modify(|val| {
-                    val.enable_rx_int()
-                        .enable_card_err_sum_int()
-                        .enable_des_unavl_int()
-                        .enable_fatal_berr_int()
-                        .enable_tx_int()
-                });
-                smhc.dma_control
-                    .modify(|val| val.enable_dma().enable_fix_burst_size());
+                if short_mode {
+                    smhc.global_control
+                        .modify(|val| val.set_access_mode(AccessMode::Ahb));
+                    smhc.dma_control
+                        .modify(|val| val.disable_dma().enable_fix_burst_size());
+                } else {
+                    smhc.global_control
+                        .modify(|val| val.set_access_mode(AccessMode::Dma));
+                    smhc.dma_interrupt_enable.modify(|val| {
+                        val.enable_rx_int()
+                            .enable_card_err_sum_int()
+                            .enable_des_unavl_int()
+                            .enable_fatal_berr_int()
+                            .enable_tx_int()
+                    });
+                    smhc.dma_control
+                        .modify(|val| val.enable_dma().enable_fix_burst_size());
+                }
                 smhc.fifo_water_level.modify(|val| {
                     use super::register::BurstSize;
                     val.set_burst_size(BurstSize::SixteenBit)
@@ -496,25 +511,27 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
                     .modify(|_| (core::ptr::addr_of!(dma_desc[0]) as u32) >> 2);
             }
             // Fill the dma links
-            for i in 0..blocks.len() {
-                dma_desc[i].des1.set_buffer_size(Block::LEN_U32);
-                dma_desc[i]
-                    .set_buffer_address((core::ptr::addr_of!(blocks[i].contents) as u32) >> 2);
-                dma_desc[i].set_next_descriptor_address(
-                    (core::ptr::addr_of!(dma_desc[i + 1]) as u32) >> 2,
-                );
+            if !short_mode {
+                for i in 0..blocks.len() {
+                    dma_desc[i].des1.set_buffer_size(Block::LEN_U32);
+                    dma_desc[i]
+                        .set_buffer_address((core::ptr::addr_of!(blocks[i].contents) as u32) >> 2);
+                    dma_desc[i].set_next_descriptor_address(
+                        (core::ptr::addr_of!(dma_desc[i + 1]) as u32) >> 2,
+                    );
+                }
+                dma_desc[0].des0.enable_first_flag();
+                dma_desc[blocks.len() - 1].des0.enable_last_flag();
+                dma_desc[blocks.len() - 1].des0.enable_end_ring();
+                dma_desc[blocks.len() - 1].set_next_descriptor_address(0);
+                dma_desc[blocks.len() - 1]
+                    .des0
+                    .disable_disable_interrupt_on_completion();
+                // Fence to make sure dma links update synced.
+                unsafe {
+                    asm!("fence");
+                };
             }
-            dma_desc[0].des0.enable_first_flag();
-            dma_desc[blocks.len() - 1].des0.enable_last_flag();
-            dma_desc[blocks.len() - 1].des0.enable_end_ring();
-            dma_desc[blocks.len() - 1].set_next_descriptor_address(0);
-            dma_desc[blocks.len() - 1]
-                .des0
-                .disable_disable_interrupt_on_completion();
-            // Fence to make sure dma links update synced.
-            unsafe {
-                asm!("fence");
-            };
 
             // Send request.
             if length == 1 {
@@ -534,9 +551,11 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
                     true,
                 );
             }
-            // for block in &mut *blocks {
-            //     self.smhc.read_data(&mut block.contents);
-            // }
+            if short_mode {
+                for block in &mut *blocks {
+                    self.smhc.read_data(&mut block.contents);
+                }
+            }
             for i in 0..MAX_RETRIES {
                 if i != 0 {
                     log::debug!("SD read retry for command complete: {}", i);
@@ -547,15 +566,17 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
                 }
                 Self::sleep(100);
             }
-            for i in 0..MAX_RETRIES {
-                if i != 0 {
-                    log::debug!("SD read retry for DMA Read Complete: {}", i);
+            if !short_mode {
+                for i in 0..MAX_RETRIES {
+                    if i != 0 {
+                        log::debug!("SD read retry for DMA Read Complete: {}", i);
+                    }
+                    let status = smhc.dma_state.read();
+                    if status.rx_int_occurs() {
+                        break;
+                    }
+                    Self::sleep(100);
                 }
-                let status = smhc.dma_state.read();
-                if status.rx_int_occurs() {
-                    break;
-                }
-                Self::sleep(100);
             }
 
             // Reset DMA State
