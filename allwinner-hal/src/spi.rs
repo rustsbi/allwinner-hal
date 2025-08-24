@@ -478,8 +478,12 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi
 
 #[cfg(test)]
 mod tests {
-    use super::RegisterBlock;
+    use super::{
+        BurstControl, FifoStatus, GlobalControl, RXD, RegisterBlock, TXD, TransferControl,
+    };
+    use core::cell::UnsafeCell;
     use core::mem::offset_of;
+    use embedded_hal::spi::Mode as SpiMode;
     #[test]
     fn offset_spi0() {
         assert_eq!(offset_of!(RegisterBlock, ier), 0x10);
@@ -488,5 +492,159 @@ mod tests {
         assert_eq!(offset_of!(RegisterBlock, ndma_mode_ctl), 0x88);
         assert_eq!(offset_of!(RegisterBlock, txd), 0x200);
         assert_eq!(offset_of!(RegisterBlock, rxd), 0x300);
+    }
+
+    #[test]
+    fn test_spi_global_control() {
+        let reg = GlobalControl(0x0).set_enabled(true);
+        assert!(reg.is_enabled());
+        assert_eq!(reg.0, 1 << 0);
+
+        let reg = GlobalControl::default().set_master_mode();
+        assert!(reg.is_master_mode());
+        assert_eq!(reg.0, 1 << 1);
+
+        let reg = GlobalControl::default().set_slave_mode();
+        assert!(reg.is_slave_mode());
+        assert_eq!(reg.0, 0x0);
+
+        let reg = GlobalControl::default().set_transmit_pause_enable(true);
+        assert!(reg.transmit_pause_enabled());
+        assert_eq!(reg.0, 1 << 7);
+
+        let reg = GlobalControl::default().software_reset();
+        assert!(reg.is_software_reset_finished());
+        assert_eq!(reg.0, 1 << 31);
+    }
+
+    #[test]
+    fn test_spi_transfer_control() {
+        let mut reg = TransferControl(0x0);
+        reg = reg.start_burst_exchange();
+        assert!(!reg.burst_finished());
+        assert_eq!(reg.0, 1 << 31);
+
+        reg = TransferControl(0x0);
+        reg = reg.set_work_mode(SpiMode {
+            polarity: embedded_hal::spi::Polarity::IdleHigh, // CPOL=1
+            phase: embedded_hal::spi::Phase::CaptureOnSecondTransition, // CPHA=1
+        });
+        assert_eq!(reg.0, 0b11);
+    }
+
+    #[test]
+    fn test_fifo_status_functions() {
+        let mut val = FifoStatus(0x0); // Start with 0 to test all bits
+
+        // Test transmit_buffer_write_enable (bit 31)
+        val.0 = 0x80000000; // Set TB_WR
+        assert_eq!(val.transmit_buffer_write_enable(), true);
+        val.0 = 0x0;
+        assert_eq!(val.transmit_buffer_write_enable(), false);
+
+        // Test transmit_buffer_counter (bits 28-30)
+        val.0 = 0x10000000; // TB_CNT = 1 (0b001 << 28)
+        assert_eq!(val.transmit_buffer_counter(), 1);
+        val.0 = 0x70000000; // TB_CNT = 7 (0b111 << 28)
+        assert_eq!(val.transmit_buffer_counter(), 7);
+
+        // Test transmit_fifo_counter (bits 16-23)
+        val.0 = 0x00010000; // TF_CNT = 1
+        assert_eq!(val.transmit_fifo_counter(), 1);
+        val.0 = 0x00ff0000; // TF_CNT = 0xff
+        assert_eq!(val.transmit_fifo_counter(), 0xff);
+
+        // Test receive_buffer_write_enable (bit 15)
+        val.0 = 0x00008000; // Set RB_WR
+        assert_eq!(val.receive_buffer_write_enable(), true);
+
+        // Test receive_buffer_counter (bits 12-14)
+        val.0 = 0x00001000; // RB_CNT = 1 (0b001 << 12)
+        assert_eq!(val.receive_buffer_counter(), 1);
+        val.0 = 0x0;
+        assert_eq!(val.receive_buffer_counter(), 0);
+
+        // Test receive_fifo_counter (bits 0-7)
+        val.0 = 0x000000ff; // RF_CNT = 0xff
+        assert_eq!(val.receive_fifo_counter(), 0xff);
+        val.0 = 0x0;
+        assert_eq!(val.receive_fifo_counter(), 0);
+    }
+
+    #[test]
+    fn test_spi_burst_control_functions() {
+        let mut val = BurstControl(0x0); // Default value 0x0
+
+        // Test Quad Mode Enable (bit 29)
+        val = val.quad_mode_enable();
+        assert!(val.is_quad_mode_enabled());
+        assert_eq!(val.0 & (1 << 29), 1 << 29);
+
+        val = val.quad_mode_disable();
+        assert!(!val.is_quad_mode_enabled());
+        assert_eq!(val.0 & (1 << 29), 0);
+
+        // Test Master Dummy Burst Counter (bits 24-27)
+        val = val.set_master_dummy_burst_counter(5);
+        assert_eq!(val.master_dummy_burst_counter(), 5);
+        assert_eq!(val.0 & (0xf << 24), 5 << 24);
+
+        val = val.set_master_dummy_burst_counter(0);
+        assert_eq!(val.master_dummy_burst_counter(), 0);
+        assert_eq!(val.0 & (0xf << 24), 0);
+
+        // Test Single Mode Transmit Counter (bits 0-23)
+        val = val.set_master_single_mode_transmit_counter(0x123456);
+        assert_eq!(val.master_single_mode_transmit_counter(), 0x0456);
+        assert_eq!(val.0 & 0xfff, 0x0456);
+
+        val = val.set_master_single_mode_transmit_counter(0);
+        assert_eq!(val.master_single_mode_transmit_counter(), 0);
+        assert_eq!(val.0 & 0xfff, 0);
+    }
+
+    #[test]
+    fn test_spi_tx_data_functions() {
+        let val = TXD(UnsafeCell::new(0x15)); // Default value from image
+
+        // Test write_u8
+        val.write_u8(0x2a);
+        assert_eq!(unsafe { (val.0.get() as *const u8).read_volatile() }, 0x2a);
+
+        // Test write_u16
+        val.write_u16(0x1234);
+        assert_eq!(
+            unsafe { (val.0.get() as *const u16).read_volatile() },
+            0x1234
+        );
+
+        // Test write_u32
+        val.write_u32(0x12345678);
+        assert_eq!(unsafe { val.0.get().read_volatile() }, 0x12345678);
+
+        // Reset to default
+        val.write_u32(0x15);
+        assert_eq!(unsafe { val.0.get().read_volatile() }, 0x15);
+    }
+
+    #[test]
+    fn test_spi_rx_data_functions() {
+        let val = RXD(UnsafeCell::new(0x0)); // Assume default 0x0
+
+        // Test read_u8
+        unsafe { val.0.get().write_volatile(0x2a) }; // Simulate hardware write
+        assert_eq!(val.read_u8(), 0x2a);
+
+        // Test read_u16
+        unsafe { val.0.get().write_volatile(0x1234) };
+        assert_eq!(val.read_u16(), 0x1234);
+
+        // Test read_u32
+        unsafe { val.0.get().write_volatile(0x12345678) };
+        assert_eq!(val.read_u32(), 0x12345678);
+
+        // Reset to default
+        unsafe { val.0.get().write_volatile(0x0) };
+        assert_eq!(val.read_u32(), 0x0);
     }
 }

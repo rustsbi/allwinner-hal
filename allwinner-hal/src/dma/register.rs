@@ -441,8 +441,11 @@ impl ChannelStartAddr {
 
     /// Get full 32-bit DMA descriptor address with alignment.
     #[inline]
-    pub const fn full_dma_desc_addr(self) -> u32 {
-        (self.dma_desc_high_addr() << 30) | (self.dma_desc_addr() << 2)
+    pub const fn full_dma_desc_addr(self) -> (u32, u32) {
+        (
+            self.0 & Self::DMA_DESC_HIGH_ADDR,
+            self.0 & Self::DMA_DESC_ADDR,
+        )
     }
 }
 
@@ -844,6 +847,83 @@ mod tests {
             assert!(!reg.is_dma_channel_busy(ch));
             assert!(reg.is_dma_channel_idle(ch));
         }
+    }
+
+    #[test]
+    fn test_channel_enable() {
+        let mut reg = ChannelEnable(0x0);
+
+        reg = reg.enable_dma();
+        assert!(reg.is_dma_enabled());
+        assert_eq!(reg.0, 0x01);
+
+        reg = reg.disable_dma();
+        assert!(!reg.is_dma_enabled());
+        assert_eq!(reg.0, 0x00);
+    }
+
+    #[test]
+    fn test_channel_pause() {
+        let mut reg = ChannelPause(0x0);
+
+        reg = reg.pause_dma();
+        assert!(reg.is_dma_pause());
+        assert_eq!(reg.0, 0x01);
+
+        reg = reg.resume_dma();
+        assert!(!reg.is_dma_pause());
+        assert_eq!(reg.0, 0x00);
+    }
+
+    #[test]
+    fn test_channel_desc_addr() {
+        let reg = ChannelStartAddr(0x80000002);
+
+        let val = reg.dma_desc_addr();
+        assert_eq!(val, 0x20000000);
+
+        let val = reg.dma_desc_high_addr();
+        assert_eq!(val, 0x02);
+        assert_eq!(reg.full_dma_desc_addr(), (0x02, 0x80000000));
+    }
+
+    #[test]
+    fn test_channel_config() {
+        // A sample value covering multiple fields
+        let reg = ChannelConfig(0x4AC51285);
+
+        assert_eq!(reg.bmode_sel(), 1);
+        assert_eq!(reg.dma_dest_data_width(), 1); // 01: 16-bit
+        assert_eq!(reg.dma_addr_mode(), 0); // 0: Linear Mode
+        assert_eq!(reg.dma_dest_block_size(), 3); // 11: 3
+        assert_eq!(reg.dma_dest_drq_type(), 0x05);
+        assert_eq!(reg.dma_src_data_width(), 1); // 01: 32-bit
+        assert_eq!(reg.dma_src_addr_mode(), 0); // 0: Linear Mode
+        assert_eq!(reg.dma_src_block_size(), 2); // 10: 2
+        assert_eq!(reg.dma_src_drq_type(), 5);
+    }
+
+    #[test]
+    fn test_channel_mode() {
+        let mut reg = ChannelMode(0x0);
+
+        // Enable source handshake mode (bit 2)
+        reg = reg.set_dma_src_mode(true);
+        assert_eq!(reg.dma_src_mode(), 1);
+        assert_eq!(reg.dma_dst_mode(), 0);
+        assert_eq!(reg.0, 0x4);
+
+        // Enable destination handshake mode (bit 3)
+        reg = reg.set_dma_dst_mode(true);
+        assert_eq!(reg.dma_src_mode(), 1);
+        assert_eq!(reg.dma_dst_mode(), 1);
+        assert_eq!(reg.0, 0xC);
+
+        // Disable source handshake mode
+        reg = reg.set_dma_src_mode(false);
+        assert_eq!(reg.dma_src_mode(), 0);
+        assert_eq!(reg.dma_dst_mode(), 1);
+        assert_eq!(reg.0, 0x8);
     }
 
     #[test]

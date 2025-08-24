@@ -497,7 +497,7 @@ impl SmhcBusGating {
 mod tests {
     use super::{
         AxiFactorN, CpuAxiConfig, CpuClockSource, DramBusGating, DramClock, DramClockSource,
-        FactorP, MbusClock, PeriFactorN, RegisterBlock,
+        FactorP, MbusClock, PeriFactorN, RegisterBlock, SmhcBusGating, SmhcClock, SmhcClockSource,
     };
     use core::mem::offset_of;
     #[test]
@@ -800,6 +800,101 @@ mod tests {
         assert_eq!(val.0, 0x00020000);
 
         val = val.assert_reset::<1>();
+        assert_eq!(val.0, 0x00000000);
+    }
+
+    #[test]
+    fn struct_smhc_clock_functions() {
+        let mut val = SmhcClock(0x0);
+
+        val = val.enable_clock_gating();
+        assert!(val.is_clock_gating_enabled());
+        assert_eq!(val.0, 0x80000000);
+
+        val = val.disable_clock_gating();
+        assert!(!val.is_clock_gating_enabled());
+        assert_eq!(val.0, 0x00000000);
+
+        for i in 0..4 as u8 {
+            let cs_tmp = match i {
+                0x0 => SmhcClockSource::Hosc,
+                0x1 => SmhcClockSource::PllPeri1x,
+                0x2 => SmhcClockSource::PllPeri2x,
+                0x3 => SmhcClockSource::PllPeri800M,
+                0x4 => SmhcClockSource::PllAudio1Div2,
+                _ => unreachable!(),
+            };
+
+            let val_tmp = match i {
+                0x0 => 0x00000000,
+                0x1 => 0x01000000,
+                0x2 => 0x02000000,
+                0x3 => 0x03000000,
+                0x4 => 0x04000000,
+                _ => unreachable!(),
+            };
+
+            val = val.set_clock_source(cs_tmp);
+            assert_eq!(val.clock_source(), cs_tmp);
+            assert_eq!(val.0, val_tmp);
+        }
+
+        val = SmhcClock(0x0);
+
+        for i in 0..4 as u8 {
+            let fn_tmp = match i {
+                0x0 => PeriFactorN::N1,
+                0x1 => PeriFactorN::N2,
+                0x2 => PeriFactorN::N4,
+                0x3 => PeriFactorN::N8,
+                _ => unreachable!(),
+            };
+
+            let val_tmp = match i {
+                0x0 => 0x00000000,
+                0x1 => 0x00000100,
+                0x2 => 0x00000200,
+                0x3 => 0x00000300,
+                _ => unreachable!(),
+            };
+
+            val = val.set_factor_n(fn_tmp);
+            assert_eq!(val.factor_n(), fn_tmp);
+            assert_eq!(val.0, val_tmp);
+        }
+
+        val = SmhcClock(0x0);
+        val = val.set_factor_m(0x03);
+        assert_eq!(val.factor_m(), 0x03);
+        assert_eq!(val.0, 0x00000003);
+    }
+
+    #[test]
+    fn struct_smhc_bgr_functions() {
+        let mut val = SmhcBusGating(0x0);
+
+        val = val.gate_pass::<0>();
+        assert_eq!(val.0, 0x00000001);
+
+        val = val.gate_mask::<0>();
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.deassert_reset::<1>();
+        assert_eq!(val.0, 0x00020000);
+
+        val = val.assert_reset::<1>();
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.gate_pass::<1>();
+        assert_eq!(val.0, 0x00000002);
+
+        val = val.gate_mask::<1>();
+        assert_eq!(val.0, 0x00000000);
+
+        val = val.deassert_reset::<0>();
+        assert_eq!(val.0, 0x00010000);
+
+        val = val.assert_reset::<0>();
         assert_eq!(val.0, 0x00000000);
     }
 }
