@@ -18,6 +18,7 @@ pub mod smhc;
 pub mod spi;
 #[doc(hidden)]
 pub mod sysctl;
+pub mod twi;
 pub mod uart;
 
 #[doc(hidden)]

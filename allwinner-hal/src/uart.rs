@@ -393,10 +393,31 @@ impl UartStatus {
 
 #[cfg(test)]
 mod tests {
-    use super::RegisterBlock;
+    use super::{RegisterBlock, UartStatus};
     use core::mem::offset_of;
     #[test]
     fn offset_uart() {
         assert_eq!(offset_of!(RegisterBlock, usr), 0x7c);
+    }
+
+    #[test]
+    fn test_uart_status() {
+        // Scenario 1: Test when all status bits are set to 1
+        let status_all_set = UartStatus(0b11111); // 0x1F
+
+        assert!(status_all_set.receive_fifo_full());
+        assert!(status_all_set.receive_fifo_not_empty());
+        assert!(status_all_set.transmit_fifo_empty());
+        assert!(status_all_set.transmit_fifo_not_full());
+        assert!(status_all_set.busy());
+
+        // Scenario 2: Test when all status bits are set to 0
+        let status_all_clear = UartStatus(0b00000); // 0x0
+
+        assert!(!status_all_clear.receive_fifo_full());
+        assert!(!status_all_clear.receive_fifo_not_empty());
+        assert!(!status_all_clear.transmit_fifo_empty());
+        assert!(!status_all_clear.transmit_fifo_not_full());
+        assert!(!status_all_clear.busy());
     }
 }

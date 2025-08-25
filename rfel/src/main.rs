@@ -1,7 +1,9 @@
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 use log::{debug, error};
-use rfel::Fel;
+use rfel::chips::{self, DdrProfile};
+use rfel::{Fel, Progress, read_to_writer, write_from_reader};
+use std::io::{BufReader, BufWriter, Write};
 
 #[derive(Parser)]
 #[clap(name = "rfel")]
@@ -36,6 +38,32 @@ enum Commands {
         /// The 32-bit value to be written
         value: String,
     },
+    /// Read memory into a file: read <address> <length> <file>
+    Read {
+        address: String,
+        length: String,
+        file: String,
+    },
+    /// Write file into memory: write <address> <file>
+    Write { address: String, file: String },
+    /// Dump raw memory to stdout: dump <address> <length>
+    Dump { address: String, length: String },
+    /// Execute code at address: exec <address>
+    Exec { address: String },
+    /// Reset device using watchdog
+    Reset,
+    /// Show sid information
+    Sid,
+    /// Enable jtag debug
+    Jtag {
+        #[clap(long, default_value_t = true)]
+        enable: bool,
+    },
+    /// Initial ddr controller with optional type
+    Ddr {
+        #[clap(long)]
+        profile: Option<String>,
+    },
 }
 
 /// USB vendor ID 0x1f3a: Allwinner Technology Co., Ltd.
@@ -64,6 +92,10 @@ fn main() {
     let device = devices[0].open().expect("open USB device");
     let mut interface = device.claim_interface(0).expect("open USB interface 0");
     let fel = Fel::open_interface(&mut interface).expect("open usb interface as an FEL device");
+    let Some(chip) = chips::detect_from_fel(&fel) else {
+        println!("error: unsupported chip");
+        return;
+    };
     match cli.command {
         Commands::Version => {
             let version = fel.get_version();
@@ -133,6 +165,137 @@ fn main() {
             };
             fel.write_address(address, &value.to_le_bytes());
         }
+        Commands::Read {
+            address,
+            length,
+            file,
+        } => {
+            let address: u32 = match parse_value(address.trim()) {
+                Some(v) => v,
+                None => {
+                    println!("error: invalid address");
+                    return;
+                }
+            };
+            let length: usize = match parse_value(length.trim()) {
+                Some(v) => v,
+                None => {
+                    println!("error: invalid length");
+                    return;
+                }
+            };
+            let f = match std::fs::File::create(&file) {
+                Ok(f) => f,
+                Err(e) => {
+                    println!("error: create file {}: {}", file, e);
+                    return;
+                }
+            };
+            let mut writer = BufWriter::new(f);
+            let mut progress = Progress::new("READ", length as u64);
+            match read_to_writer(&fel, address, length, &mut writer, Some(&mut progress)) {
+                Ok(n) => {
+                    let _ = writer.flush();
+                    progress.finish();
+                    println!("read {} bytes from 0x{:08x} -> {}", n, address, file);
+                }
+                Err(e) => println!("error: read -> file: {}", e),
+            }
+        }
+        Commands::Write { address, file } => {
+            let address: u32 = match parse_value(address.trim()) {
+                Some(v) => v,
+                None => {
+                    println!("error: invalid address");
+                    return;
+                }
+            };
+            let f = match std::fs::File::open(&file) {
+                Ok(f) => f,
+                Err(e) => {
+                    println!("error: open file {}: {}", file, e);
+                    return;
+                }
+            };
+            let total = f.metadata().ok().map(|m| m.len()).unwrap_or(0);
+            let mut reader = BufReader::new(f);
+            let mut progress = Progress::new("WRITE", total);
+            match write_from_reader(&fel, address, &mut reader, Some(&mut progress)) {
+                Ok(n) => {
+                    progress.finish();
+                    println!("write {} bytes from {} -> 0x{:08x}", n, file, address);
+                }
+                Err(e) => println!("error: file -> write: {}", e),
+            }
+        }
+        Commands::Dump { address, length } => {
+            let address: u32 = match parse_value(address.trim()) {
+                Some(v) => v,
+                None => {
+                    eprintln!("error: invalid address");
+                    return;
+                }
+            };
+            let length: usize = match parse_value(length.trim()) {
+                Some(v) => v,
+                None => {
+                    eprintln!("error: invalid length");
+                    return;
+                }
+            };
+            let stdout = std::io::stdout();
+            let mut handle = stdout.lock();
+            if let Err(e) = read_to_writer(&fel, address, length, &mut handle, None) {
+                eprintln!("error: dump to stdout: {}", e);
+            }
+        }
+        Commands::Exec { address } => {
+            let address: u32 = match parse_value(address.trim()) {
+                Some(v) => v,
+                None => {
+                    println!("error: invalid address");
+                    return;
+                }
+            };
+            fel.exec(address);
+            println!("exec at 0x{:08x}", address);
+        }
+        Commands::Reset => {
+            println!("resetting...");
+            if let Err(e) = chip.reset(&fel) {
+                println!("error: reset: {:?}", e);
+            }
+        }
+        Commands::Sid => match chip.sid(&fel) {
+            Ok(sid) => {
+                for b in sid {
+                    print!("{:02x}", b);
+                }
+                println!();
+            }
+            Err(e) => println!("error: sid: {:?}", e),
+        },
+        Commands::Jtag { enable } => {
+            if let Err(e) = chip.jtag(&fel, enable) {
+                println!("error: jtag: {:?}", e);
+            } else {
+                println!("jtag {}abled", if enable { "en" } else { "dis" });
+            }
+        }
+        Commands::Ddr { profile } => {
+            let profile_enum = match profile.as_deref() {
+                Some(s) => match s.parse::<DdrProfile>() {
+                    Ok(p) => Some(p),
+                    Err(_) => None,
+                },
+                None => None,
+            };
+            if let Err(e) = chip.ddr(&fel, profile_enum) {
+                println!("error: ddr init: {:?}", e);
+            } else {
+                println!("ddr init done");
+            }
+        }
     }
 }
 
@@ -163,5 +326,23 @@ fn parse_value<T: core::str::FromStr + num_traits::Num>(value: &str) -> Option<T
         T::from_str_radix(value.strip_prefix("0x").unwrap(), 16).ok()
     } else {
         value.parse::<T>().ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_value_u32() {
+        assert_eq!(parse_value::<u32>("123"), Some(123));
+        assert_eq!(parse_value::<u32>("0x7b"), Some(123));
+        assert_eq!(parse_value::<u32>(" 0x10 "), None); // spaces not trimmed by caller
+        assert!(parse_value::<u32>("zz").is_none());
+    }
+
+    #[test]
+    fn test_parse_value_usize() {
+        assert_eq!(parse_value::<usize>("0x100"), Some(256usize));
     }
 }
