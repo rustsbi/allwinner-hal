@@ -159,3 +159,17 @@ impl Chip for D1 {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_d1_name_and_consts() {
+        let d1 = D1;
+        assert_eq!(d1.name(), "D1/F133");
+        // Basic constant relationships
+        assert_eq!(D1_SRAM_BASE, 0x0002_0000);
+        assert_eq!(DDR_PARAM_ADDR, D1_SRAM_BASE + 0x18);
+    }
+}
