@@ -14,12 +14,43 @@ use crate::ops;
 mod util;
 
 #[derive(Parser)]
-#[clap(name = "rfel")]
-#[clap(about = "Allwinner FEL tool", long_about = None)]
+#[command(
+    name = "rfel",
+    about = "Allwinner FEL tool",
+    long_about = None,
+    version,
+    disable_help_subcommand = true,
+    help_template = r#"rfel(v{version}) - https://github.com/rustsbi/allwinner-hal
+usage:
+    rfel version                                        - Show chip version
+    rfel hexdump <address> <length>                     - Dumps memory region in hex
+    rfel dump <address> <length>                        - Binary memory dump to stdout
+    rfel read32 <address>                               - Read 32-bits value from device memory
+    rfel write32 <address> <value>                      - Write 32-bits value to device memory
+    rfel read <address> <length> <file>                 - Read memory to file
+    rfel write <address> <file>                         - Write file to memory
+    rfel exec <address>                                 - Call function address
+    rfel reset                                          - Reset device using watchdog
+    rfel sid                                            - Show sid information
+    rfel jtag                                           - Enable jtag debug
+    rfel ddr [type]                                     - Initial ddr controller with optional type
+    rfel sign <public-key> <private-key> <file>         - Generate ecdsa256 signature file for sha256 of sid
+    rfel spinor                                         - Detect spi nor flash
+    rfel spinor erase <address> <length>                - Erase spi nor flash
+    rfel spinor read <address> <length> <file>          - Read spi nor flash to file
+    rfel spinor write <address> <file>                  - Write file to spi nor flash
+    rfel spinand                                        - Detect spi nand flash
+    rfel spinand erase <address> <length>               - Erase spi nand flash
+    rfel spinand read <address> <length> <file>         - Read spi nand flash to file
+    rfel spinand write <address> <file>                 - Write file to spi nand flash
+    rfel spinand splwrite <split-size> <address> <file> - Write file to spi nand flash with split support
+    rfel extra [...]                                    - The extra commands
+"#
+)]
 pub struct Cli {
-    #[clap(flatten)]
+    #[command(flatten)]
     pub verbose: Verbosity,
-    #[clap(subcommand)]
+    #[command(subcommand)]
     pub command: Commands,
 }
 
@@ -29,6 +60,13 @@ pub enum Commands {
     Version,
     /// Dumps memory region in hexadecimal format
     Hexdump {
+        /// The address to be dumped
+        address: String,
+        /// Length of memory to be dumped
+        length: String,
+    },
+    /// Binary memory dump to stdout
+    Dump {
         /// The address to be dumped
         address: String,
         /// Length of memory to be dumped
@@ -54,23 +92,42 @@ pub enum Commands {
     },
     /// Write file into memory: write <address> <file>
     Write { address: String, file: String },
-    /// Dump raw memory to stdout: dump <address> <length>
-    Dump { address: String, length: String },
     /// Execute code at address: exec <address>
     Exec { address: String },
     /// Reset device using watchdog
     Reset,
     /// Show sid information
     Sid,
-    /// Enable jtag debug
+    /// Enable JTAG debug (pass --disable to turn it off)
     Jtag {
-        #[clap(long, default_value_t = true)]
-        enable: bool,
+        #[arg(long, help = "Disable JTAG instead of enabling it")]
+        disable: bool,
     },
     /// Initial ddr controller with optional type
     Ddr {
-        #[clap(long)]
+        #[arg(long)]
         profile: Option<String>,
+    },
+    /// Generate ECDSA signature file for the SID hash
+    Sign {
+        public_key: String,
+        private_key: String,
+        file: String,
+    },
+    /// Placeholder for upcoming SPI NOR helpers
+    Spinor {
+        #[arg(num_args = 0.., value_name = "args", trailing_var_arg = true)]
+        args: Vec<String>,
+    },
+    /// Placeholder for upcoming SPI NAND helpers
+    Spinand {
+        #[arg(num_args = 0.., value_name = "args", trailing_var_arg = true)]
+        args: Vec<String>,
+    },
+    /// Placeholder for passthrough extras
+    Extra {
+        #[arg(num_args = 1.., value_name = "args", trailing_var_arg = true)]
+        args: Vec<String>,
     },
 }
 
@@ -83,6 +140,7 @@ pub enum CliError {
     ClaimInterface(nusb::Error),
     FelInterface,
     UnsupportedChip,
+    UnimplementedCommand(String),
 }
 
 impl fmt::Display for CliError {
@@ -98,6 +156,9 @@ impl fmt::Display for CliError {
             CliError::ClaimInterface(_) => write!(f, "failed to claim USB interface 0"),
             CliError::FelInterface => write!(f, "open usb interface as an FEL device"),
             CliError::UnsupportedChip => write!(f, "error: unsupported chip"),
+            CliError::UnimplementedCommand(cmd) => {
+                write!(f, "command '{cmd}' is not implemented yet")
+            }
         }
     }
 }
@@ -144,30 +205,34 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
         None => return Err(CliError::UnsupportedChip),
     };
 
-    execute_command(cli.command, &fel, chip.as_ref());
-    Ok(())
+    execute_command(cli.command, &fel, chip.as_ref())
 }
 
-fn execute_command(command: Commands, fel: &Fel<'_>, chip: &dyn chips::Chip) {
+fn execute_command(
+    command: Commands,
+    fel: &Fel<'_>,
+    chip: &dyn chips::Chip,
+) -> Result<(), CliError> {
     match command {
         Commands::Version => {
             let info = ops::op_version(fel);
             println!("chip: {}", chip.name());
             println!("{:x?}", info.version);
+            Ok(())
         }
         Commands::Hexdump { address, length } => {
             let address = match util::parse_value::<usize>(&address) {
                 Ok(v) => v,
                 Err(err) => {
                     println!("error: invalid address: {}", err);
-                    return;
+                    return Ok(());
                 }
             };
             let length = match util::parse_value::<usize>(&length) {
                 Ok(v) => v,
                 Err(err) => {
                     println!("error: invalid data length: {}", err);
-                    return;
+                    return Ok(());
                 }
             };
             if let Err(err) = ops::op_hexdump(fel, address, length, |line| {
@@ -175,38 +240,63 @@ fn execute_command(command: Commands, fel: &Fel<'_>, chip: &dyn chips::Chip) {
             }) {
                 println!("error: hexdump: {}", err);
             }
+            Ok(())
+        }
+        Commands::Dump { address, length } => {
+            let address = match util::parse_value::<u32>(&address) {
+                Ok(v) => v,
+                Err(err) => {
+                    eprintln!("error: invalid address: {}", err);
+                    return Ok(());
+                }
+            };
+            let length = match util::parse_value::<usize>(&length) {
+                Ok(v) => v,
+                Err(err) => {
+                    eprintln!("error: invalid length: {}", err);
+                    return Ok(());
+                }
+            };
+            let stdout = std::io::stdout();
+            let mut handle = stdout.lock();
+            if let Err(err) = ops::op_read(fel, address, length, &mut handle, None) {
+                eprintln!("error: dump to stdout: {}", err);
+            }
+            Ok(())
         }
         Commands::Read32 { address } => {
             let address = match util::parse_value::<u32>(&address) {
                 Ok(v) => v,
                 Err(err) => {
                     println!("error: invalid address: {}", err);
-                    return;
+                    return Ok(());
                 }
             };
             match ops::op_read32(fel, address) {
                 Ok(result) => println!("0x{:08x}", result.value),
                 Err(err) => println!("error: read32: {}", err),
             }
+            Ok(())
         }
         Commands::Write32 { address, value } => {
             let address = match util::parse_value::<u32>(&address) {
                 Ok(v) => v,
                 Err(err) => {
                     println!("error: invalid address: {}", err);
-                    return;
+                    return Ok(());
                 }
             };
             let value = match util::parse_value::<u32>(&value) {
                 Ok(v) => v,
                 Err(err) => {
                     println!("error: invalid value: {}", err);
-                    return;
+                    return Ok(());
                 }
             };
             if let Err(err) = ops::op_write32(fel, address, value) {
                 println!("error: write32: {}", err);
             }
+            Ok(())
         }
         Commands::Read {
             address,
@@ -217,21 +307,21 @@ fn execute_command(command: Commands, fel: &Fel<'_>, chip: &dyn chips::Chip) {
                 Ok(v) => v,
                 Err(err) => {
                     println!("error: invalid address: {}", err);
-                    return;
+                    return Ok(());
                 }
             };
             let length = match util::parse_value::<usize>(&length) {
                 Ok(v) => v,
                 Err(err) => {
                     println!("error: invalid length: {}", err);
-                    return;
+                    return Ok(());
                 }
             };
             let file_handle = match File::create(&file) {
                 Ok(f) => f,
                 Err(e) => {
                     println!("error: create file {}: {}", file, e);
-                    return;
+                    return Ok(());
                 }
             };
             let mut writer = BufWriter::new(file_handle);
@@ -247,20 +337,21 @@ fn execute_command(command: Commands, fel: &Fel<'_>, chip: &dyn chips::Chip) {
                 }
                 Err(err) => println!("error: read -> file: {}", err),
             }
+            Ok(())
         }
         Commands::Write { address, file } => {
             let address = match util::parse_value::<u32>(&address) {
                 Ok(v) => v,
                 Err(err) => {
                     println!("error: invalid address: {}", err);
-                    return;
+                    return Ok(());
                 }
             };
             let file_handle = match File::open(&file) {
                 Ok(f) => f,
                 Err(e) => {
                     println!("error: open file {}: {}", file, e);
-                    return;
+                    return Ok(());
                 }
             };
             let total = file_handle.metadata().ok().map(|m| m.len()).unwrap_or(0);
@@ -276,34 +367,14 @@ fn execute_command(command: Commands, fel: &Fel<'_>, chip: &dyn chips::Chip) {
                 }
                 Err(err) => println!("error: file -> write: {}", err),
             }
-        }
-        Commands::Dump { address, length } => {
-            let address = match util::parse_value::<u32>(&address) {
-                Ok(v) => v,
-                Err(err) => {
-                    eprintln!("error: invalid address: {}", err);
-                    return;
-                }
-            };
-            let length = match util::parse_value::<usize>(&length) {
-                Ok(v) => v,
-                Err(err) => {
-                    eprintln!("error: invalid length: {}", err);
-                    return;
-                }
-            };
-            let stdout = std::io::stdout();
-            let mut handle = stdout.lock();
-            if let Err(err) = ops::op_read(fel, address, length, &mut handle, None) {
-                eprintln!("error: dump to stdout: {}", err);
-            }
+            Ok(())
         }
         Commands::Exec { address } => {
             let address = match util::parse_value::<u32>(&address) {
                 Ok(v) => v,
                 Err(err) => {
                     println!("error: invalid address: {}", err);
-                    return;
+                    return Ok(());
                 }
             };
             if let Err(err) = ops::op_exec(fel, address) {
@@ -311,6 +382,7 @@ fn execute_command(command: Commands, fel: &Fel<'_>, chip: &dyn chips::Chip) {
             } else {
                 println!("exec at 0x{:08x}", address);
             }
+            Ok(())
         }
         Commands::Reset => {
             println!("resetting...");
@@ -318,38 +390,67 @@ fn execute_command(command: Commands, fel: &Fel<'_>, chip: &dyn chips::Chip) {
                 Ok(result) => println!("reset done ({})", result.chip_name),
                 Err(err) => println!("error: reset: {}", err),
             }
+            Ok(())
         }
-        Commands::Sid => match ops::op_sid(chip, fel) {
-            Ok(result) => {
-                print!("sid ({}): ", result.chip_name);
-                for b in &result.sid {
-                    print!("{:02x}", b);
+        Commands::Sid => {
+            match ops::op_sid(chip, fel) {
+                Ok(result) => {
+                    print!("sid ({}): ", result.chip_name);
+                    for b in &result.sid {
+                        print!("{:02x}", b);
+                    }
+                    println!();
                 }
-                println!();
+                Err(err) => println!("error: sid: {}", err),
             }
-            Err(err) => println!("error: sid: {}", err),
-        },
-        Commands::Jtag { enable } => match ops::op_jtag(chip, fel, enable) {
-            Ok(result) => println!(
-                "jtag {}abled ({})",
-                if result.enabled { "en" } else { "dis" },
-                result.chip_name
-            ),
-            Err(err) => println!("error: jtag: {}", err),
-        },
-        Commands::Ddr { profile } => match ops::op_ddr(chip, fel, profile.as_deref()) {
-            Ok(result) => {
-                let profile_label = result
-                    .profile
-                    .map(|p| format!("{p:?}"))
-                    .unwrap_or_else(|| "unknown".to_string());
-                println!(
-                    "ddr init done (chip: {}, profile: {profile_label})",
+            Ok(())
+        }
+        Commands::Jtag { disable } => {
+            let enable = !disable;
+            match ops::op_jtag(chip, fel, enable) {
+                Ok(result) => println!(
+                    "jtag {}abled ({})",
+                    if result.enabled { "en" } else { "dis" },
                     result.chip_name
-                );
+                ),
+                Err(err) => println!("error: jtag: {}", err),
             }
-            Err(err) => println!("error: ddr init: {}", err),
-        },
+            Ok(())
+        }
+        Commands::Ddr { profile } => {
+            match ops::op_ddr(chip, fel, profile.as_deref()) {
+                Ok(result) => {
+                    let profile_label = result
+                        .profile
+                        .map(|p| format!("{p:?}"))
+                        .unwrap_or_else(|| "unknown".to_string());
+                    println!(
+                        "ddr init done (chip: {}, profile: {profile_label})",
+                        result.chip_name
+                    );
+                }
+                Err(err) => println!("error: ddr init: {}", err),
+            }
+            Ok(())
+        }
+        Commands::Sign { .. } => Err(CliError::UnimplementedCommand("sign".to_string())),
+        Commands::Spinor { args } => Err(CliError::UnimplementedCommand(format_command(
+            "spinor", &args,
+        ))),
+        Commands::Spinand { args } => Err(CliError::UnimplementedCommand(format_command(
+            "spinand", &args,
+        ))),
+        Commands::Extra { args } => Err(CliError::UnimplementedCommand(format_command(
+            "extra", &args,
+        ))),
+    }
+}
+
+fn format_command(command: &str, args: &[String]) -> String {
+    if args.is_empty() {
+        command.to_string()
+    } else {
+        format!("{} {}", command, args.join(" "))
     }
 }
 
