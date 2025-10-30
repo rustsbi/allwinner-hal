@@ -1,4 +1,6 @@
 use log::debug;
+use std::error::Error;
+use std::fmt;
 
 use crate::Fel;
 
@@ -35,6 +37,18 @@ pub enum ChipError {
     /// other
     Other(&'static str),
 }
+
+impl fmt::Display for ChipError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ChipError::NotImplemented(msg) => write!(f, "not implemented: {msg}"),
+            ChipError::Unsupported(msg) => write!(f, "unsupported operation: {msg}"),
+            ChipError::Other(msg) => write!(f, "chip error: {msg}"),
+        }
+    }
+}
+
+impl Error for ChipError {}
 
 pub trait Chip {
     fn name(&self) -> String;
