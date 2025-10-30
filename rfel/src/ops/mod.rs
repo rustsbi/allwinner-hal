@@ -1,4 +1,6 @@
 pub mod chip;
+pub mod spinand;
+pub mod spinor;
 
 pub use chip::{
     ChipOpError, ChipOpResult, DdrResult, JtagResult, ResetResult, SidResult, ddr as op_ddr,

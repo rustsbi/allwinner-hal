@@ -56,6 +56,28 @@ pub trait Chip {
     fn sid(&self, fel: &Fel<'_>) -> Result<Vec<u8>, ChipError>;
     fn jtag(&self, fel: &Fel<'_>, enable: bool) -> Result<(), ChipError>;
     fn ddr(&self, fel: &Fel<'_>, profile: Option<DdrProfile>) -> Result<(), ChipError>;
+    fn as_spi(&self) -> Option<&dyn ChipSpi> {
+        None
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SpiContext {
+    pub payload_base: u32,
+    pub command_base: u32,
+    pub command_len: u32,
+    pub swap_base: u32,
+    pub swap_len: u32,
+}
+
+pub trait ChipSpi {
+    fn spi_init(&self, fel: &Fel<'_>) -> Result<SpiContext, ChipError>;
+    fn spi_run(
+        &self,
+        fel: &Fel<'_>,
+        context: &SpiContext,
+        commands: &[u8],
+    ) -> Result<(), ChipError>;
 }
 
 pub fn detect_from_fel(fel: &Fel<'_>) -> Option<Box<dyn Chip>> {

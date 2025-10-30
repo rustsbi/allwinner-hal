@@ -3,6 +3,7 @@ pub mod cli;
 pub mod fel;
 pub mod ops;
 pub mod progress;
+pub mod spi;
 pub mod transfer;
 
 pub use fel::{CHUNK_SIZE, Chip, Fel, Version};

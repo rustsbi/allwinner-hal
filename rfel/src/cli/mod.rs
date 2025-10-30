@@ -3,13 +3,13 @@ use clap_verbosity_flag::Verbosity;
 use log::{debug, error};
 use std::error::Error;
 use std::fmt;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Write};
 
 use crate::Progress;
 use crate::chips;
 use crate::fel::Fel;
-use crate::ops;
+use crate::ops::{self, spinand, spinor};
 
 mod util;
 
@@ -114,20 +114,60 @@ pub enum Commands {
         private_key: String,
         file: String,
     },
-    /// Placeholder for upcoming SPI NOR helpers
+    /// Operate on SPI NOR flash
     Spinor {
-        #[arg(num_args = 0.., value_name = "args", trailing_var_arg = true)]
-        args: Vec<String>,
+        #[command(subcommand)]
+        command: Option<SpinorCommand>,
     },
-    /// Placeholder for upcoming SPI NAND helpers
+    /// Operate on SPI NAND flash
     Spinand {
-        #[arg(num_args = 0.., value_name = "args", trailing_var_arg = true)]
-        args: Vec<String>,
+        #[command(subcommand)]
+        command: Option<SpinandCommand>,
     },
     /// Placeholder for passthrough extras
     Extra {
         #[arg(num_args = 1.., value_name = "args", trailing_var_arg = true)]
         args: Vec<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SpinorCommand {
+    /// Detect SPI NOR flash
+    Detect,
+    /// Erase a range: erase <address> <length>
+    Erase { address: String, length: String },
+    /// Read into a file: read <address> <length> <file>
+    Read {
+        address: String,
+        length: String,
+        file: String,
+    },
+    /// Write from a file: write <address> <file>
+    Write { address: String, file: String },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SpinandCommand {
+    /// Detect SPI NAND flash
+    Detect,
+    /// Erase a range: erase <address> <length>
+    Erase { address: String, length: String },
+    /// Read into a file: read <address> <length> <file>
+    Read {
+        address: String,
+        length: String,
+        file: String,
+    },
+    /// Write from a file: write <address> <file>
+    Write { address: String, file: String },
+    /// Write SPL image with split support: splwrite <split-size> <address> <file>
+    #[command(name = "splwrite")]
+    SplWrite {
+        #[arg(value_name = "split-size")]
+        split_size: String,
+        address: String,
+        file: String,
     },
 }
 
@@ -434,15 +474,288 @@ fn execute_command(
             Ok(())
         }
         Commands::Sign { .. } => Err(CliError::UnimplementedCommand("sign".to_string())),
-        Commands::Spinor { args } => Err(CliError::UnimplementedCommand(format_command(
-            "spinor", &args,
-        ))),
-        Commands::Spinand { args } => Err(CliError::UnimplementedCommand(format_command(
-            "spinand", &args,
-        ))),
+        Commands::Spinor { command } => {
+            let sub = command.unwrap_or(SpinorCommand::Detect);
+            match sub {
+                SpinorCommand::Detect => match spinor::detect(chip, fel) {
+                    Ok(info) => print_flash_info("spi nor", &info.name, info.capacity),
+                    Err(err) => println!("error: spinor detect: {}", err),
+                },
+                SpinorCommand::Erase { address, length } => {
+                    let address = match util::parse_value::<u64>(&address) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            println!("error: invalid address: {}", err);
+                            return Ok(());
+                        }
+                    };
+                    let length = match util::parse_value::<u64>(&length) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            println!("error: invalid length: {}", err);
+                            return Ok(());
+                        }
+                    };
+                    let mut progress = Progress::new("NORER", length);
+                    match spinor::erase(chip, fel, address, length, Some(&mut progress)) {
+                        Ok(()) => {
+                            progress.finish();
+                            println!("erased {} bytes at 0x{:016x}", length, address);
+                        }
+                        Err(err) => println!("error: spinor erase: {}", err),
+                    }
+                }
+                SpinorCommand::Read {
+                    address,
+                    length,
+                    file,
+                } => {
+                    let address = match util::parse_value::<u64>(&address) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            println!("error: invalid address: {}", err);
+                            return Ok(());
+                        }
+                    };
+                    let length = match util::parse_value::<usize>(&length) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            println!("error: invalid length: {}", err);
+                            return Ok(());
+                        }
+                    };
+                    let file_handle = match File::create(&file) {
+                        Ok(f) => f,
+                        Err(err) => {
+                            println!("error: create file {}: {}", file, err);
+                            return Ok(());
+                        }
+                    };
+                    let mut writer = BufWriter::new(file_handle);
+                    let mut data = vec![0u8; length];
+                    let mut progress = Progress::new("NORRD", length as u64);
+                    match spinor::read(chip, fel, address, &mut data, Some(&mut progress)) {
+                        Ok(()) => {
+                            progress.finish();
+                            if let Err(err) = writer.write_all(&data) {
+                                println!("error: write {}: {}", file, err);
+                            } else if let Err(err) = writer.flush() {
+                                println!("error: flush {}: {}", file, err);
+                            } else {
+                                println!(
+                                    "read {} bytes from 0x{:016x} -> {}",
+                                    data.len(),
+                                    address,
+                                    file
+                                );
+                            }
+                        }
+                        Err(err) => println!("error: spinor read: {}", err),
+                    }
+                }
+                SpinorCommand::Write { address, file } => {
+                    let address = match util::parse_value::<u64>(&address) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            println!("error: invalid address: {}", err);
+                            return Ok(());
+                        }
+                    };
+                    let data = match fs::read(&file) {
+                        Ok(d) => d,
+                        Err(err) => {
+                            println!("error: read file {}: {}", file, err);
+                            return Ok(());
+                        }
+                    };
+                    let mut progress = Progress::new("NORWR", data.len() as u64);
+                    match spinor::write(chip, fel, address, &data, Some(&mut progress)) {
+                        Ok(()) => {
+                            progress.finish();
+                            println!(
+                                "write {} bytes from {} -> 0x{:016x}",
+                                data.len(),
+                                file,
+                                address
+                            );
+                        }
+                        Err(err) => println!("error: spinor write: {}", err),
+                    }
+                }
+            }
+            Ok(())
+        }
+        Commands::Spinand { command } => {
+            let sub = command.unwrap_or(SpinandCommand::Detect);
+            match sub {
+                SpinandCommand::Detect => match spinand::detect(chip, fel) {
+                    Ok(info) => print_flash_info("spi nand", &info.name, info.capacity),
+                    Err(err) => println!("error: spinand detect: {}", err),
+                },
+                SpinandCommand::Erase { address, length } => {
+                    let address = match util::parse_value::<u64>(&address) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            println!("error: invalid address: {}", err);
+                            return Ok(());
+                        }
+                    };
+                    let length = match util::parse_value::<u64>(&length) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            println!("error: invalid length: {}", err);
+                            return Ok(());
+                        }
+                    };
+                    match spinand::erase(chip, fel, address, length) {
+                        Ok(()) => println!("erased {} bytes at 0x{:016x}", length, address),
+                        Err(err) => println!("error: spinand erase: {}", err),
+                    }
+                }
+                SpinandCommand::Read {
+                    address,
+                    length,
+                    file,
+                } => {
+                    let address = match util::parse_value::<u64>(&address) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            println!("error: invalid address: {}", err);
+                            return Ok(());
+                        }
+                    };
+                    let length = match util::parse_value::<usize>(&length) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            println!("error: invalid length: {}", err);
+                            return Ok(());
+                        }
+                    };
+                    let file_handle = match File::create(&file) {
+                        Ok(f) => f,
+                        Err(err) => {
+                            println!("error: create file {}: {}", file, err);
+                            return Ok(());
+                        }
+                    };
+                    let mut writer = BufWriter::new(file_handle);
+                    let mut data = vec![0u8; length];
+                    let mut progress = Progress::new("NDRD", length as u64);
+                    match spinand::read(chip, fel, address, &mut data, Some(&mut progress)) {
+                        Ok(()) => {
+                            progress.finish();
+                            if let Err(err) = writer.write_all(&data) {
+                                println!("error: write {}: {}", file, err);
+                            } else if let Err(err) = writer.flush() {
+                                println!("error: flush {}: {}", file, err);
+                            } else {
+                                println!(
+                                    "read {} bytes from 0x{:016x} -> {}",
+                                    data.len(),
+                                    address,
+                                    file
+                                );
+                            }
+                        }
+                        Err(err) => println!("error: spinand read: {}", err),
+                    }
+                }
+                SpinandCommand::Write { address, file } => {
+                    let address = match util::parse_value::<u64>(&address) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            println!("error: invalid address: {}", err);
+                            return Ok(());
+                        }
+                    };
+                    let data = match fs::read(&file) {
+                        Ok(d) => d,
+                        Err(err) => {
+                            println!("error: read file {}: {}", file, err);
+                            return Ok(());
+                        }
+                    };
+                    let mut progress = Progress::new("NDWR", data.len() as u64);
+                    match spinand::write(chip, fel, address, &data, Some(&mut progress)) {
+                        Ok(()) => {
+                            progress.finish();
+                            println!(
+                                "write {} bytes from {} -> 0x{:016x}",
+                                data.len(),
+                                file,
+                                address
+                            );
+                        }
+                        Err(err) => println!("error: spinand write: {}", err),
+                    }
+                }
+                SpinandCommand::SplWrite {
+                    split_size,
+                    address,
+                    file,
+                } => {
+                    let split_size = match util::parse_value::<u32>(&split_size) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            println!("error: invalid split-size: {}", err);
+                            return Ok(());
+                        }
+                    };
+                    if split_size == 0 {
+                        println!("error: split-size must be greater than zero");
+                        return Ok(());
+                    }
+                    let address = match util::parse_value::<u64>(&address) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            println!("error: invalid address: {}", err);
+                            return Ok(());
+                        }
+                    };
+                    let data = match fs::read(&file) {
+                        Ok(d) => d,
+                        Err(err) => {
+                            println!("error: read file {}: {}", file, err);
+                            return Ok(());
+                        }
+                    };
+                    match spinand::spl_write(chip, fel, split_size, address, &data) {
+                        Ok(()) => println!(
+                            "splwrite {} bytes from {} -> 0x{:016x} (split {})",
+                            data.len(),
+                            file,
+                            address,
+                            split_size
+                        ),
+                        Err(err) => println!("error: spinand splwrite: {}", err),
+                    }
+                }
+            }
+            Ok(())
+        }
         Commands::Extra { args } => Err(CliError::UnimplementedCommand(format_command(
             "extra", &args,
         ))),
+    }
+}
+
+fn print_flash_info(kind: &str, name: &str, capacity: u64) {
+    let pretty = format_size(capacity);
+    println!("{kind}: {name} ({pretty} / {capacity} bytes)");
+}
+
+fn format_size(bytes: u64) -> String {
+    const UNITS: [&str; 6] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+    let mut value = bytes as f64;
+    let mut idx = 0usize;
+    while value >= 1024.0 && idx + 1 < UNITS.len() {
+        value /= 1024.0;
+        idx += 1;
+    }
+    if idx == 0 {
+        format!("{:.0}{}", value, UNITS[idx])
+    } else {
+        format!("{:.2}{}", value, UNITS[idx])
     }
 }
 
