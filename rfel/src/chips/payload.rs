@@ -22,6 +22,11 @@ pub const DDR_INIT_F133: &[u8] = include_bytes!(concat!(
     "/assets/payloads/ddr_f133.bin"
 ));
 
+pub const SPI_INIT_D1: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/payloads/spi_d1.bin"
+));
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -34,5 +39,6 @@ mod tests {
         assert!(!JTAG_ENABLE_D1.is_empty(), "jtag_d1.bin should be embedded");
         assert!(!DDR_INIT_D1.is_empty(), "ddr_d1.bin should be embedded");
         assert!(!DDR_INIT_F133.is_empty(), "ddr_f133.bin should be embedded");
+        assert!(!SPI_INIT_D1.is_empty(), "spi_d1.bin should be embedded");
     }
 }

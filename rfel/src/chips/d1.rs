@@ -3,12 +3,15 @@ use log::debug;
 use crate::{Fel, write_all};
 
 use super::util::{read32_via_stub, u32_params_le, write32_via_stub};
-use super::{Chip, ChipError, DdrProfile, payload};
+use super::{Chip, ChipError, ChipSpi, DdrProfile, SpiContext, payload};
 
 pub struct D1;
 
 const D1_SRAM_BASE: u32 = 0x0002_0000;
 const DDR_PARAM_ADDR: u32 = D1_SRAM_BASE + 0x18;
+const SPI_PAYLOAD_BASE: u32 = 0x0002_0000;
+const SPI_COMMAND_BASE: u32 = 0x0002_1000;
+const SPI_SWAP_BASE: u32 = 0x0002_2000;
 
 impl Chip for D1 {
     fn name(&self) -> String {
@@ -157,6 +160,51 @@ impl Chip for D1 {
                 Ok(())
             }
         }
+    }
+
+    fn as_spi(&self) -> Option<&dyn ChipSpi> {
+        Some(self)
+    }
+}
+
+impl ChipSpi for D1 {
+    fn spi_init(&self, fel: &Fel<'_>) -> Result<SpiContext, ChipError> {
+        if payload::SPI_INIT_D1.is_empty() {
+            return Err(ChipError::NotImplemented(
+                "missing assets/payloads/spi_d1.bin",
+            ));
+        }
+        debug!(
+            "loading SPI helper payload at 0x{SPI_PAYLOAD_BASE:08x} ({} bytes)",
+            payload::SPI_INIT_D1.len()
+        );
+        write_all(fel, SPI_PAYLOAD_BASE, payload::SPI_INIT_D1);
+        Ok(SpiContext {
+            payload_base: SPI_PAYLOAD_BASE,
+            command_base: SPI_COMMAND_BASE,
+            command_len: 4096,
+            swap_base: SPI_SWAP_BASE,
+            swap_len: 65_536,
+        })
+    }
+
+    fn spi_run(
+        &self,
+        fel: &Fel<'_>,
+        context: &SpiContext,
+        commands: &[u8],
+    ) -> Result<(), ChipError> {
+        if commands.len() > context.command_len as usize {
+            return Err(ChipError::Unsupported("spi command buffer exceeds limit"));
+        }
+        debug!(
+            "executing SPI helper (cmd {} bytes @0x{:#010x})",
+            commands.len(),
+            context.command_base
+        );
+        write_all(fel, context.command_base, commands);
+        fel.exec(context.payload_base);
+        Ok(())
     }
 }
 
