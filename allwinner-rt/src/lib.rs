@@ -45,7 +45,7 @@ pub mod soc {
 #[unsafe(naked)]
 #[unsafe(link_section = ".text.entry")]
 unsafe extern "C" fn start() -> ! {
-    const STACK_SIZE: usize = 4 * 1024;
+    const STACK_SIZE: usize = 8 * 1024;
     #[unsafe(link_section = ".bss.uninit")]
     static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
     core::arch::naked_asm!(
