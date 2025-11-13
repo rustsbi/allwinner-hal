@@ -1,6 +1,7 @@
 //! SD/MMC Host Controller peripheral.
 
 mod register;
+use embedded_time::rate::Hertz;
 pub use register::*;
 mod pad;
 pub use pad::*;
@@ -31,4 +32,8 @@ pub enum ResponseMode {
 pub enum SdCardError {
     Unknown,
     UnexpectedResponse(u8, u128),
+}
+
+pub trait Clock {
+    fn smhc_clock(&self) -> Hertz;
 }

@@ -80,32 +80,24 @@ macro_rules! impl_uart {
             }
 
             impl<'a> UartExt<'a, $i> for &'a mut $UARTi {
-                fn serial<PADS>(
+                fn serial(
                     self,
-                    pads: PADS,
+                    pads: impl allwinner_hal::uart::Pads<'a, $i>,
                     config: impl Into<allwinner_hal::uart::Config>,
-                    clocks: &Clocks,
-                    ccu: &allwinner_hal::ccu::RegisterBlock,
-                ) -> allwinner_hal::uart::BlockingSerial<'a, PADS>
-                where
-                    PADS: allwinner_hal::uart::Pads<$i>,
-                {
-                    allwinner_hal::uart::BlockingSerial::new(self, pads, config, clocks, ccu)
+                    clock: impl allwinner_hal::uart::Clock,
+                ) -> allwinner_hal::uart::BlockingSerial<'a> {
+                    allwinner_hal::uart::BlockingSerial::new(self, pads, config, clock)
                 }
             }
 
             impl UartExt<'static, $i> for $UARTi {
-                fn serial<PADS>(
+                fn serial(
                     self,
-                    pads: PADS,
+                    pads: impl allwinner_hal::uart::Pads<'static, $i>,
                     config: impl Into<allwinner_hal::uart::Config>,
-                    clocks: &Clocks,
-                    ccu: &allwinner_hal::ccu::RegisterBlock,
-                ) -> allwinner_hal::uart::BlockingSerial<'static, PADS>
-                where
-                    PADS: allwinner_hal::uart::Pads<$i>,
-                {
-                    allwinner_hal::uart::BlockingSerial::new(self, pads, config, clocks, ccu)
+                    clock: impl allwinner_hal::uart::Clock,
+                ) -> allwinner_hal::uart::BlockingSerial<'static> {
+                    allwinner_hal::uart::BlockingSerial::new(self, pads, config, clock)
                 }
             }
 
@@ -116,21 +108,17 @@ macro_rules! impl_uart {
 macro_rules! impl_uart_pads {
     ($(($p: expr, $i: expr, $f: expr): $Trait: ident, $Ty: tt, $into_func: ident, $UARTi: expr;)+) => {
         $(
-impl allwinner_hal::uart::$Trait<$UARTi> for Pad<$p, $i> {
-    type $Ty = allwinner_hal::gpio::Function<'static, $p, $i, $f>;
-
+impl allwinner_hal::uart::$Trait<'static, $UARTi> for Pad<$p, $i> {
     #[inline]
-    fn $into_func(self) -> Self::$Ty {
-        self.into_function()
+    fn $into_func(self) -> allwinner_hal::gpio::FlexPad<'static> {
+        self.into_function::<$f>().into()
     }
 }
 
-impl<'a> allwinner_hal::uart::$Trait<$UARTi> for &'a mut Pad<$p, $i> {
-    type $Ty = allwinner_hal::gpio::Function<'a, $p, $i, $f>;
-
+impl<'a> allwinner_hal::uart::$Trait<'a, $UARTi> for &'a mut Pad<$p, $i> {
     #[inline]
-    fn $into_func(self) -> Self::$Ty {
-        self.into_function()
+    fn $into_func(self) -> allwinner_hal::gpio::FlexPad<'a> {
+        self.into_function::<$f>().into()
     }
 }
         )+

@@ -1,5 +1,6 @@
 //! Allwinner GPIO controller.
 mod eint;
+mod flex_pad;
 mod function;
 mod input;
 mod mode;
@@ -8,6 +9,7 @@ mod pad_ext;
 mod register;
 
 pub use eint::{EintPad, Event};
+pub use flex_pad::FlexPad;
 pub use function::Function;
 pub use input::Input;
 pub use output::Output;

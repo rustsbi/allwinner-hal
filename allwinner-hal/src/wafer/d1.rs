@@ -4,15 +4,15 @@ use crate::{smhc, spi};
 
 // SPI PINS
 impl_pins_trait! {
-    ('B', 9, 5): spi::Miso<1>;
-    ('B', 10, 5): spi::Mosi<1>;
-    ('B', 11, 5): spi::Clk<1>;
-    ('C', 2, 2): spi::Clk<0>;
-    ('C', 4, 2): spi::Mosi<0>;
-    ('C', 5, 2): spi::Miso<0>;
-    ('D', 11, 4): spi::Clk<1>;
-    ('D', 12, 4): spi::Mosi<1>;
-    ('D', 13, 4): spi::Miso<1>;
+    ('B', 9, 5): spi::IntoMiso<1>;
+    ('B', 10, 5): spi::IntoMosi<1>;
+    ('B', 11, 5): spi::IntoClk<1>;
+    ('C', 2, 2): spi::IntoClk<0>;
+    ('C', 4, 2): spi::IntoMosi<0>;
+    ('C', 5, 2): spi::IntoMiso<0>;
+    ('D', 11, 4): spi::IntoClk<1>;
+    ('D', 12, 4): spi::IntoMosi<1>;
+    ('D', 13, 4): spi::IntoMiso<1>;
 }
 
 // SMHC pins

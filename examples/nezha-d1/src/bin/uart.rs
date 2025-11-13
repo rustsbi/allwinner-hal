@@ -9,7 +9,7 @@ use panic_halt as _;
 #[entry]
 fn main(p: Peripherals, c: Clocks) {
     let pads = (p.gpio.pb8, p.gpio.pb9);
-    let mut serial = p.uart0.serial(pads, Config::default(), &c, &p.ccu);
+    let mut serial = p.uart0.serial(pads, Config::default(), &c);
 
     writeln!(serial, "Hello World!").ok();
 
