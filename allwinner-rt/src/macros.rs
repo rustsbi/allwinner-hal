@@ -86,11 +86,11 @@ macro_rules! impl_uart {
                     config: impl Into<allwinner_hal::uart::Config>,
                     clocks: &Clocks,
                     ccu: &allwinner_hal::ccu::RegisterBlock,
-                ) -> allwinner_hal::uart::Serial<'a, PADS>
+                ) -> allwinner_hal::uart::BlockingSerial<'a, PADS>
                 where
                     PADS: allwinner_hal::uart::Pads<$i>,
                 {
-                    allwinner_hal::uart::Serial::new(self, pads, config, clocks, ccu)
+                    allwinner_hal::uart::BlockingSerial::new(self, pads, config, clocks, ccu)
                 }
             }
 
@@ -101,11 +101,11 @@ macro_rules! impl_uart {
                     config: impl Into<allwinner_hal::uart::Config>,
                     clocks: &Clocks,
                     ccu: &allwinner_hal::ccu::RegisterBlock,
-                ) -> allwinner_hal::uart::Serial<'static, PADS>
+                ) -> allwinner_hal::uart::BlockingSerial<'static, PADS>
                 where
                     PADS: allwinner_hal::uart::Pads<$i>,
                 {
-                    allwinner_hal::uart::Serial::new(self, pads, config, clocks, ccu)
+                    allwinner_hal::uart::BlockingSerial::new(self, pads, config, clocks, ccu)
                 }
             }
 

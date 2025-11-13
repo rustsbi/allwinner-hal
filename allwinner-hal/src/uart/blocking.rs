@@ -1,105 +1,10 @@
-//! Universal Asynchronous Receiver-Transmitter.
-
-use core::cell::UnsafeCell;
-
+use super::{
+    Instance, Pads, Receive, Transmit,
+    config::{Config, Parity, StopBits, WordLength},
+    register::RegisterBlock,
+};
 use crate::ccu::{self, ClockGate, Clocks};
-use embedded_time::rate::Baud;
-use uart16550::{CharLen, PARITY, Register, Uart16550};
-
-/// Universal Asynchronous Receiver-Transmitter registers.
-#[repr(C)]
-pub struct RegisterBlock {
-    uart16550: Uart16550<u32>,
-    _reserved0: [u32; 24],
-    usr: USR<u32>, // offset = 31(0x7c)
-}
-
-/// Serial configuration structure.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Config {
-    /// Serial baudrate in `Bps`.
-    pub baudrate: Baud,
-    /// Word length, can be 5, 6, 7 or 8.
-    pub wordlength: WordLength,
-    /// Parity checks, can be `None`, `Odd` or `Even`.
-    pub parity: Parity,
-    /// Number of stop bits, can be `One` or `Two`.
-    pub stopbits: StopBits,
-}
-
-impl Default for Config {
-    #[inline]
-    fn default() -> Self {
-        use embedded_time::rate::Extensions;
-        Self {
-            baudrate: 115200.Bd(),
-            wordlength: WordLength::Eight,
-            parity: Parity::None,
-            stopbits: StopBits::One,
-        }
-    }
-}
-
-/// Serial word length settings.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum WordLength {
-    /// 5 bits per word.
-    Five,
-    /// 6 bits per word.
-    Six,
-    /// 7 bits per word.
-    Seven,
-    /// 8 bits per word.
-    Eight,
-}
-
-/// Serial parity bit settings.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Parity {
-    /// No parity checks.
-    None,
-    /// Odd parity.
-    Odd,
-    /// Even parity.
-    Even,
-}
-
-/// Stop bit settings.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum StopBits {
-    /// 1 stop bit
-    One,
-    /// 2 stop bits, or 1.5 bits when WordLength is Five
-    Two,
-}
-
-impl core::ops::Deref for RegisterBlock {
-    type Target = Uart16550<u32>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.uart16550
-    }
-}
-
-/// Extend constructor to owned UART register blocks.
-pub trait UartExt<'a, const I: usize> {
-    /// Creates a polling serial instance, without interrupt or DMA configurations.
-    fn serial<PADS>(
-        self,
-        pads: PADS,
-        config: impl Into<Config>,
-        clocks: &Clocks,
-        ccu: &ccu::RegisterBlock,
-    ) -> Serial<'a, PADS>
-    where
-        PADS: Pads<I>;
-}
-
-/// Peripheral instance of UART.
-pub trait Instance<'a> {
-    /// Retrieve register block for this instance.
-    fn register_block(self) -> &'a RegisterBlock;
-}
+use uart16550::{CharLen, PARITY};
 
 /// Managed serial structure with peripheral and pads.
 pub struct Serial<'a, PADS> {
@@ -220,19 +125,6 @@ pub struct ReceiveHalf<'a, PADS> {
     _pads: PADS,
 }
 
-/// Valid serial pads.
-pub trait Pads<const I: usize> {
-    type Clock: ccu::ClockGate + ccu::ClockReset;
-}
-
-/// Valid transmit pin for UART peripheral.
-#[diagnostic::on_unimplemented(message = "selected pad does not connect to UART{I} TX signal")]
-pub trait Transmit<const I: usize> {}
-
-/// Valid receive pin for UART peripheral.
-#[diagnostic::on_unimplemented(message = "selected pad does not connect to UART{I} RX signal")]
-pub trait Receive<const I: usize> {}
-
 #[inline]
 fn uart_write_blocking(
     uart: &RegisterBlock,
@@ -263,7 +155,7 @@ fn uart_read_blocking(
 ) -> Result<usize, core::convert::Infallible> {
     let len = buffer.len();
     for c in buffer {
-        while !uart.uart16550.lsr().read().is_data_ready() {
+        while !uart.lsr().read().is_data_ready() {
             core::hint::spin_loop()
         }
         *c = uart.rbr_thr().rx_data();
@@ -326,98 +218,5 @@ impl<'a, PADS> embedded_io::Read for ReceiveHalf<'a, PADS> {
     #[inline]
     fn read(&mut self, buffer: &mut [u8]) -> Result<usize, Self::Error> {
         uart_read_blocking(self.uart, buffer)
-    }
-}
-
-/// UART Status Register.
-#[derive(Debug)]
-#[repr(transparent)]
-pub struct USR<R: Register>(UnsafeCell<R>);
-
-/// Status settings for current peripheral.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct UartStatus(u8);
-
-impl<R: uart16550::Register> USR<R> {
-    /// Write UART status settings.
-    #[inline]
-    pub fn write(&self, val: UartStatus) {
-        unsafe { self.0.get().write_volatile(R::from(val.0)) }
-    }
-
-    /// Read UART status settings.
-    #[inline]
-    pub fn read(&self) -> UartStatus {
-        UartStatus(unsafe { self.0.get().read_volatile() }.val())
-    }
-}
-
-impl UartStatus {
-    const RFF: u8 = 1 << 4;
-    const RFNE: u8 = 1 << 3;
-    const TFE: u8 = 1 << 2;
-    const TFNF: u8 = 1 << 1;
-    const BUSY: u8 = 1 << 0;
-
-    /// Returns if the receive FIFO is full.
-    #[inline]
-    pub const fn receive_fifo_full(self) -> bool {
-        self.0 & Self::RFF != 0
-    }
-
-    /// Returns if the receive FIFO is non-empty.
-    #[inline]
-    pub const fn receive_fifo_not_empty(self) -> bool {
-        self.0 & Self::RFNE != 0
-    }
-
-    /// Returns if the transmit FIFO is empty.
-    #[inline]
-    pub const fn transmit_fifo_empty(self) -> bool {
-        self.0 & Self::TFE != 0
-    }
-
-    /// Returns if the transmit FIFO is not full.
-    #[inline]
-    pub const fn transmit_fifo_not_full(self) -> bool {
-        self.0 & Self::TFNF != 0
-    }
-
-    /// Returns if the peripheral is busy.
-    #[inline]
-    pub const fn busy(self) -> bool {
-        self.0 & Self::BUSY != 0
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{RegisterBlock, UartStatus};
-    use core::mem::offset_of;
-    #[test]
-    fn offset_uart() {
-        assert_eq!(offset_of!(RegisterBlock, usr), 0x7c);
-    }
-
-    #[test]
-    fn test_uart_status() {
-        // Scenario 1: Test when all status bits are set to 1
-        let status_all_set = UartStatus(0b11111); // 0x1F
-
-        assert!(status_all_set.receive_fifo_full());
-        assert!(status_all_set.receive_fifo_not_empty());
-        assert!(status_all_set.transmit_fifo_empty());
-        assert!(status_all_set.transmit_fifo_not_full());
-        assert!(status_all_set.busy());
-
-        // Scenario 2: Test when all status bits are set to 0
-        let status_all_clear = UartStatus(0b00000); // 0x0
-
-        assert!(!status_all_clear.receive_fifo_full());
-        assert!(!status_all_clear.receive_fifo_not_empty());
-        assert!(!status_all_clear.transmit_fifo_empty());
-        assert!(!status_all_clear.transmit_fifo_not_full());
-        assert!(!status_all_clear.busy());
     }
 }
