@@ -36,12 +36,37 @@ pub trait Instance<'a> {
 /// Valid serial pads.
 pub trait Pads<const I: usize> {
     type Clock: ccu::ClockGate + ccu::ClockReset;
+    type Pads;
+    fn into_uart_pads(self) -> Self::Pads;
 }
 
 /// Valid transmit pin for UART peripheral.
 #[diagnostic::on_unimplemented(message = "selected pad does not connect to UART{I} TX signal")]
-pub trait Transmit<const I: usize> {}
+pub trait IntoTransmit<const I: usize> {
+    type Transmit;
+    fn into_uart_transmit(self) -> Self::Transmit;
+}
 
 /// Valid receive pin for UART peripheral.
 #[diagnostic::on_unimplemented(message = "selected pad does not connect to UART{I} RX signal")]
-pub trait Receive<const I: usize> {}
+pub trait IntoReceive<const I: usize> {
+    type Receive;
+    fn into_uart_receive(self) -> Self::Receive;
+}
+
+impl<const I: usize, T, R> Pads<I> for (T, R)
+where
+    T: IntoTransmit<I>,
+    R: IntoReceive<I>,
+{
+    type Clock = ccu::UART<I>;
+    type Pads = (
+        <T as IntoTransmit<I>>::Transmit,
+        <R as IntoReceive<I>>::Receive,
+    );
+
+    #[inline]
+    fn into_uart_pads(self) -> Self::Pads {
+        (self.0.into_uart_transmit(), self.1.into_uart_receive())
+    }
+}

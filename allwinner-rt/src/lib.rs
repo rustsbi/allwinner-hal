@@ -48,7 +48,7 @@ unsafe extern "Rust" {
 }
 
 cfg_if::cfg_if! {
-    if #[cfg(all(feature = "d1", target_arch = "riscv64"))] {
+    if #[cfg(feature = "d1")] {
         pub use {
             self::arch::thead_c906::start,
             self::soc::d1::{__rom_init_params, Peripherals},

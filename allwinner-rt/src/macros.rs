@@ -112,3 +112,27 @@ macro_rules! impl_uart {
         )+
     };
 }
+
+macro_rules! impl_uart_pads {
+    ($(($p: expr, $i: expr, $f: expr): $Trait: ident, $Ty: tt, $into_func: ident, $UARTi: expr;)+) => {
+        $(
+impl allwinner_hal::uart::$Trait<$UARTi> for Pad<$p, $i> {
+    type $Ty = allwinner_hal::gpio::Function<'static, $p, $i, $f>;
+
+    #[inline]
+    fn $into_func(self) -> Self::$Ty {
+        self.into_function()
+    }
+}
+
+impl<'a> allwinner_hal::uart::$Trait<$UARTi> for &'a mut Pad<$p, $i> {
+    type $Ty = allwinner_hal::gpio::Function<'a, $p, $i, $f>;
+
+    #[inline]
+    fn $into_func(self) -> Self::$Ty {
+        self.into_function()
+    }
+}
+        )+
+    };
+}

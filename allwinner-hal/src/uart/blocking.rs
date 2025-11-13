@@ -1,5 +1,5 @@
 use super::{
-    Instance, Pads, Receive, Transmit,
+    Instance, IntoReceive, IntoTransmit, Pads,
     config::{Config, Parity, StopBits, WordLength},
     register::RegisterBlock,
 };
@@ -97,8 +97,8 @@ impl<'a, TX, RX> Serial<'a, (TX, RX)> {
     #[inline]
     pub fn split<const I: usize>(self) -> (TransmitHalf<'a, TX>, ReceiveHalf<'a, RX>)
     where
-        TX: Transmit<I>,
-        RX: Receive<I>,
+        TX: IntoTransmit<I>,
+        RX: IntoReceive<I>,
     {
         (
             TransmitHalf {
@@ -161,14 +161,6 @@ fn uart_read_blocking(
         *c = uart.rbr_thr().rx_data();
     }
     Ok(len)
-}
-
-impl<const I: usize, T, R> Pads<I> for (T, R)
-where
-    T: Transmit<I>,
-    R: Receive<I>,
-{
-    type Clock = ccu::UART<I>;
 }
 
 impl<'a, PADS> embedded_io::ErrorType for Serial<'a, PADS> {

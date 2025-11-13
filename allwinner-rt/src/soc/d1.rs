@@ -1,6 +1,6 @@
 //! D1-H, D1s, F133, F133A/B chip platforms.
 
-use allwinner_hal::{ccu::Clocks, uart::UartExt};
+use allwinner_hal::{ccu::Clocks, gpio::PadExt, uart::UartExt};
 use core::num::NonZeroU32;
 use embedded_time::rate::Extensions;
 
@@ -196,6 +196,61 @@ impl_gpio_pins! {
     pg16: ('G', 16);
     pg17: ('G', 17);
     pg18: ('G', 18);
+}
+
+impl_uart_pads! {
+    ('B', 0, 6):  IntoTransmit, Transmit, into_uart_transmit, 0;
+    ('B', 0, 7):  IntoTransmit, Transmit, into_uart_transmit, 2;
+    ('B', 1, 6):  IntoReceive, Receive, into_uart_receive, 0;
+    ('B', 1, 7):  IntoReceive, Receive, into_uart_receive, 2;
+    ('B', 2, 7):  IntoTransmit, Transmit, into_uart_transmit, 4;
+    ('B', 3, 7):  IntoReceive, Receive, into_uart_receive, 4;
+    ('B', 4, 7):  IntoTransmit, Transmit, into_uart_transmit, 5;
+    ('B', 5, 7):  IntoReceive, Receive, into_uart_receive, 5;
+    ('B', 6, 7):  IntoTransmit, Transmit, into_uart_transmit, 3;
+    ('B', 7, 7):  IntoReceive, Receive, into_uart_receive, 3;
+    ('B', 8, 6):  IntoTransmit, Transmit, into_uart_transmit, 0;
+    ('B', 8, 7):  IntoTransmit, Transmit, into_uart_transmit, 1;
+    ('B', 9, 6):  IntoReceive, Receive, into_uart_receive, 0;
+    ('B', 9, 7):  IntoReceive, Receive, into_uart_receive, 1;
+    ('C', 0, 2):  IntoTransmit, Transmit, into_uart_transmit, 2;
+    ('C', 1, 2):  IntoReceive, Receive, into_uart_receive, 2;
+    ('C', 6, 4):  IntoTransmit, Transmit, into_uart_transmit, 3;
+    ('C', 7, 4):  IntoReceive, Receive, into_uart_receive, 3;
+    ('D', 1, 5):  IntoTransmit, Transmit, into_uart_transmit, 2;
+    ('D', 2, 5):  IntoReceive, Receive, into_uart_receive, 2;
+    ('D', 5, 5):  IntoTransmit, Transmit, into_uart_transmit, 5;
+    ('D', 6, 5):  IntoReceive, Receive, into_uart_receive, 5;
+    ('D', 7, 5):  IntoTransmit, Transmit, into_uart_transmit, 4;
+    ('D', 8, 5):  IntoReceive, Receive, into_uart_receive, 4;
+    ('D', 10, 5): IntoTransmit, Transmit, into_uart_transmit, 3;
+    ('D', 11, 5): IntoReceive, Receive, into_uart_receive, 3;
+    ('D', 21, 4): IntoTransmit, Transmit, into_uart_transmit, 1;
+    ('D', 22, 4): IntoReceive, Receive, into_uart_receive, 1;
+    ('E', 2, 3):  IntoTransmit, Transmit, into_uart_transmit, 2;
+    ('E', 2, 6):  IntoTransmit, Transmit, into_uart_transmit, 0;
+    ('E', 3, 3):  IntoReceive, Receive, into_uart_receive, 2;
+    ('E', 3, 6):  IntoReceive, Receive, into_uart_receive, 0;
+    ('E', 4, 3):  IntoTransmit, Transmit, into_uart_transmit, 4;
+    ('E', 5, 3):  IntoReceive, Receive, into_uart_receive, 4;
+    ('E', 6, 3):  IntoTransmit, Transmit, into_uart_transmit, 5;
+    ('E', 7, 3):  IntoReceive, Receive, into_uart_receive, 5;
+    ('E', 8, 5):  IntoTransmit, Transmit, into_uart_transmit, 3;
+    ('E', 9, 5):  IntoReceive, Receive, into_uart_receive, 3;
+    ('E', 10, 3): IntoTransmit, Transmit, into_uart_transmit, 1;
+    ('E', 11, 3): IntoReceive, Receive, into_uart_receive, 1;
+    ('G', 0, 3):  IntoTransmit, Transmit, into_uart_transmit, 3;
+    ('G', 1, 3):  IntoReceive, Receive, into_uart_receive, 3;
+    ('G', 2, 5):  IntoTransmit, Transmit, into_uart_transmit, 4;
+    ('G', 3, 5):  IntoReceive, Receive, into_uart_receive, 4;
+    ('G', 4, 3):  IntoTransmit, Transmit, into_uart_transmit, 5;
+    ('G', 5, 3):  IntoReceive, Receive, into_uart_receive, 5;
+    ('G', 6, 2):  IntoTransmit, Transmit, into_uart_transmit, 1;
+    ('G', 7, 2):  IntoReceive, Receive, into_uart_receive, 1;
+    ('G', 8, 5):  IntoTransmit, Transmit, into_uart_transmit, 3;
+    ('G', 9, 5):  IntoReceive, Receive, into_uart_receive, 3;
+    ('G', 17, 2): IntoTransmit, Transmit, into_uart_transmit, 2;
+    ('G', 18, 2): IntoReceive, Receive, into_uart_receive, 2;
 }
 
 #[doc(hidden)]

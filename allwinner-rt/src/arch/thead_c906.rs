@@ -59,3 +59,8 @@ pub unsafe extern "C" fn start() -> ! {
         main       =   sym main,
     )
 }
+
+#[cfg(not(any(all(feature = "d1", target_arch = "riscv64"), doc)))]
+pub unsafe extern "C" fn start() -> ! {
+    unimplemented!()
+}
