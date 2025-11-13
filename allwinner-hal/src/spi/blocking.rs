@@ -1,38 +1,39 @@
 use super::{
-    Pins,
+    Pads,
     register::{GlobalControl, RegisterBlock, TransferControl},
 };
-use crate::{
-    ccu::{self, ClockConfig, ClockGate, SpiClockSource},
-    spi::Clock,
-};
+use crate::gpio::FlexPad;
 use embedded_hal::spi::Mode;
-use embedded_time::rate::Hertz;
 
 /// Managed SPI structure with peripheral and pins.
-#[derive(Debug)]
-pub struct Spi<SPI, const I: usize, PINS: Pins<I>> {
+pub struct Spi<'a, SPI> {
     spi: SPI,
-    pins: PINS,
+    #[allow(unused)]
+    pads: (
+        Option<FlexPad<'a>>,
+        Option<FlexPad<'a>>,
+        Option<FlexPad<'a>>,
+    ),
 }
 
 // Ref: rustsbi-d1 project
-impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> Spi<SPI, I, PINS> {
+impl<'a, SPI: AsRef<RegisterBlock>> Spi<'a, SPI> {
     /// Create an SPI instance.
-    pub fn new(
+    pub fn new<const I: usize>(
         spi: SPI,
-        pins: PINS,
+        pads: impl Pads<'a, I>,
         mode: impl Into<Mode>,
-        freq: Hertz,
-        clock: impl Clock,
-        ccu: &ccu::RegisterBlock,
+        // freq: Hertz,
+        // clock: impl Clock,
+        // ccu: &ccu::RegisterBlock,
     ) -> Self {
-        // 1. unwrap parameters
-        let (Hertz(psi), Hertz(freq)) = (clock.spi_clock(), freq);
-        let (factor_n, factor_m) = ccu::calculate_best_peripheral_factors_nm(psi, freq);
-        // 2. init peripheral clocks
-        // Reset and reconfigure clock source and divider
-        unsafe { PINS::Clock::reconfigure(ccu, SpiClockSource::PllPeri1x, factor_m, factor_n) };
+        // TODO move clock out of SPI initialization
+        // // 1. unwrap parameters
+        // let (Hertz(psi), Hertz(freq)) = (clock.spi_clock(), freq);
+        // let (factor_n, factor_m) = ccu::calculate_best_peripheral_factors_nm(psi, freq);
+        // // 2. init peripheral clocks
+        // // Reset and reconfigure clock source and divider
+        // unsafe { PINS::Clock::reconfigure(ccu, SpiClockSource::PllPeri1x, factor_m, factor_n) };
         // 3. global configuration and soft reset
         unsafe {
             spi.as_ref().gcr.write(
@@ -53,13 +54,18 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> Spi<SPI, I, PINS>
                 .write(TransferControl::default().set_work_mode(mode.into()))
         };
         // Finally, return ownership of this structure.
-        Spi { spi, pins }
+        Spi {
+            spi,
+            pads: pads.into_spi_pads(),
+        }
     }
 }
 
-impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi::SpiBus
-    for Spi<SPI, I, PINS>
-{
+impl<'a, SPI: AsRef<RegisterBlock>> embedded_hal::spi::ErrorType for Spi<'a, SPI> {
+    type Error = embedded_hal::spi::ErrorKind;
+}
+
+impl<'a, SPI: AsRef<RegisterBlock>> embedded_hal::spi::SpiBus for Spi<'a, SPI> {
     fn transfer(&mut self, read: &mut [u8], write: &[u8]) -> Result<(), Self::Error> {
         assert!(read.len() + write.len() <= u32::MAX as usize);
         let spi = self.spi.as_ref();
@@ -163,10 +169,4 @@ impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi
         }
         Ok(())
     }
-}
-
-impl<SPI: AsRef<RegisterBlock>, const I: usize, PINS: Pins<I>> embedded_hal::spi::ErrorType
-    for Spi<SPI, I, PINS>
-{
-    type Error = embedded_hal::spi::ErrorKind;
 }

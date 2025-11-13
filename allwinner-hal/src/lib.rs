@@ -31,17 +31,3 @@ pub mod prelude {
     };
     pub use embedded_io::{Read as _, Write as _};
 }
-
-#[allow(unused)]
-macro_rules! impl_pins_trait {
-    ($(($p: expr_2021, $i: expr_2021, $f: expr_2021): $Trait: ty;)+) => {
-        $(
-impl<'a> $Trait for $crate::gpio::Function<'a, $p, $i, $f> {}
-        )+
-    };
-}
-
-/// SoC configurations on peripherals and interrupt contexts.
-pub mod wafer {
-    pub mod d1;
-}

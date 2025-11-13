@@ -106,7 +106,7 @@ macro_rules! impl_uart {
 }
 
 macro_rules! impl_uart_pads {
-    ($(($p: expr, $i: expr, $f: expr): $Trait: ident, $Ty: tt, $into_func: ident, $UARTi: expr;)+) => {
+    ($(($p: expr, $i: expr, $f: expr): $Trait: ident, $into_func: ident, $UARTi: expr;)+) => {
         $(
 impl allwinner_hal::uart::$Trait<'static, $UARTi> for Pad<$p, $i> {
     #[inline]
@@ -116,6 +116,26 @@ impl allwinner_hal::uart::$Trait<'static, $UARTi> for Pad<$p, $i> {
 }
 
 impl<'a> allwinner_hal::uart::$Trait<'a, $UARTi> for &'a mut Pad<$p, $i> {
+    #[inline]
+    fn $into_func(self) -> allwinner_hal::gpio::FlexPad<'a> {
+        self.into_function::<$f>().into()
+    }
+}
+        )+
+    };
+}
+
+macro_rules! impl_spi_pads {
+    ($(($p: expr, $i: expr, $f: expr): $Trait: ident, $into_func: ident, $UARTi: expr;)+) => {
+        $(
+impl allwinner_hal::spi::$Trait<'static, $UARTi> for Pad<$p, $i> {
+    #[inline]
+    fn $into_func(self) -> allwinner_hal::gpio::FlexPad<'static> {
+        self.into_function::<$f>().into()
+    }
+}
+
+impl<'a> allwinner_hal::spi::$Trait<'a, $UARTi> for &'a mut Pad<$p, $i> {
     #[inline]
     fn $into_func(self) -> allwinner_hal::gpio::FlexPad<'a> {
         self.into_function::<$f>().into()

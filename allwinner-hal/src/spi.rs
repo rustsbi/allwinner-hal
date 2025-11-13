@@ -6,29 +6,54 @@ pub use blocking::Spi as BlockingSpi;
 use embedded_time::rate::Hertz;
 pub use register::*;
 
-use crate::ccu::{self, SpiClockSource};
+use crate::gpio::FlexPad;
 
 /// Valid SPI pins.
-pub trait Pins<const I: usize> {
-    type Clock: ccu::ClockGate + ccu::ClockConfig<Source = SpiClockSource>;
+pub trait Pads<'a, const I: usize> {
+    fn into_spi_pads(
+        self,
+    ) -> (
+        Option<FlexPad<'a>>,
+        Option<FlexPad<'a>>,
+        Option<FlexPad<'a>>,
+    );
 }
 
 /// Valid clk pin for SPI peripheral.
-pub trait IntoClk<const I: usize> {}
+pub trait IntoClk<'a, const I: usize> {
+    fn into_spi_clk(self) -> FlexPad<'a>;
+}
 
 /// Valid mosi pin for SPI peripheral.
-pub trait IntoMosi<const I: usize> {}
+pub trait IntoMosi<'a, const I: usize> {
+    fn into_spi_mosi(self) -> FlexPad<'a>;
+}
 
 /// Valid miso pin for SPI peripheral.
-pub trait IntoMiso<const I: usize> {}
+pub trait IntoMiso<'a, const I: usize> {
+    fn into_spi_miso(self) -> FlexPad<'a>;
+}
 
-impl<const I: usize, CLK, MOSI, MISO> Pins<I> for (CLK, MOSI, MISO)
+impl<'a, const I: usize, CLK, MOSI, MISO> Pads<'a, I> for (CLK, MOSI, MISO)
 where
-    CLK: IntoClk<I>,
-    MOSI: IntoMosi<I>,
-    MISO: IntoMiso<I>,
+    CLK: IntoClk<'a, I>,
+    MOSI: IntoMosi<'a, I>,
+    MISO: IntoMiso<'a, I>,
 {
-    type Clock = ccu::SPI<I>;
+    #[inline]
+    fn into_spi_pads(
+        self,
+    ) -> (
+        Option<FlexPad<'a>>,
+        Option<FlexPad<'a>>,
+        Option<FlexPad<'a>>,
+    ) {
+        (
+            Some(self.0.into_spi_clk()),
+            Some(self.1.into_spi_mosi()),
+            Some(self.2.into_spi_miso()),
+        )
+    }
 }
 
 pub trait Clock {
