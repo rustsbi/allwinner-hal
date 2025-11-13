@@ -1,3 +1,5 @@
+use crate::start;
+
 /// eGON.BT0 identifying structure.
 // TODO verify with original ROM source code
 #[repr(C)]
@@ -27,3 +29,10 @@ static EGON_HEAD: EgonHead = EgonHead {
     boot_cpu: 0,
     platform: *b"\0\03.0.0\0",
 };
+
+core::arch::global_asm! {
+    ".section .text.head",
+    "head_jump:",
+    "j  {}",
+    sym start,
+}

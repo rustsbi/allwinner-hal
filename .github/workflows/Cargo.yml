@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        TARGET: [riscv64imac-unknown-none-elf]
+        TARGET: [riscv64imac-unknown-none-elf, riscv64gc-unknown-none-elf]
         TOOLCHAIN: [nightly]
     steps:
       - uses: actions/checkout@v4
