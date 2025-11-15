@@ -4,7 +4,6 @@
 use allwinner_hal::{prelude::*, uart::Config};
 use allwinner_rt::{Clocks, Peripherals, entry};
 use embedded_io::{Read, Write};
-use panic_halt as _;
 
 #[entry]
 fn main(p: Peripherals, c: Clocks) {

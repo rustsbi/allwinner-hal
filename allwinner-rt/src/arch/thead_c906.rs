@@ -9,7 +9,7 @@
 #[cfg(any(all(feature = "d1", target_arch = "riscv64"), doc))]
 #[unsafe(naked)]
 #[unsafe(link_section = ".text.entry")]
-pub unsafe extern "C" fn start() -> ! {
+pub unsafe extern "C" fn thead_c906_start() -> ! {
     use super::riscv_fpu::init_floating_point;
     use crate::main;
     const STACK_SIZE: usize = 8 * 1024;
@@ -65,8 +65,9 @@ pub unsafe extern "C" fn start() -> ! {
     unimplemented!()
 }
 
+/// Stop a T-Head C906 core.
 #[unsafe(naked)]
-unsafe extern "C" fn thead_c906_halt() -> ! {
+pub unsafe extern "C" fn thead_c906_halt() -> ! {
     core::arch::naked_asm!(
         "li     x3, 0x20aaa
         csrs    mie, x3

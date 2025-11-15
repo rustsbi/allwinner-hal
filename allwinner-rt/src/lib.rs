@@ -18,6 +18,7 @@
 mod macros;
 
 mod boot0;
+mod panic;
 pub use boot0::EgonHead;
 
 #[cfg(any(feature = "nezha", feature = "lichee"))]
@@ -50,7 +51,7 @@ unsafe extern "Rust" {
 cfg_if::cfg_if! {
     if #[cfg(feature = "d1")] {
         pub use {
-            self::arch::thead_c906::start,
+            self::arch::thead_c906::{thead_c906_start as start, thead_c906_halt as halt},
             self::soc::d1::{__rom_init_params, Peripherals, Clocks},
         };
     } else if #[cfg(feature = "v821")] {
@@ -58,6 +59,7 @@ cfg_if::cfg_if! {
             self::arch::andes_a27l2::start,
             self::soc::v821::{__rom_init_params, Peripherals, Clocks},
         };
+        unsafe extern "C" fn halt() -> ! { loop {} }
     } else {
         pub struct Peripherals {}
         pub struct Clocks {}
@@ -66,5 +68,6 @@ cfg_if::cfg_if! {
             (Peripherals {}, Clocks {})
         }
         pub fn start() {}
+        unsafe extern "C" fn halt() -> ! { loop {} }
     }
 }

@@ -29,9 +29,11 @@ cfg-if = "1.0"
 riscv-target-parser = "0.1.3"
 
 [features]
-default = ["nezha"]
+default = ["nezha", "panic-halt"]
 d1 = []
 v821 = []
 
 nezha = []
 lichee = []
+
+panic-halt = []

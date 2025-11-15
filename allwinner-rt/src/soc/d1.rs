@@ -304,6 +304,13 @@ impl allwinner_hal::uart::Clock for Clocks {
     }
 }
 
+impl<'a> allwinner_hal::uart::Clock for &'a Clocks {
+    #[inline]
+    fn uart_clock(&self) -> embedded_time::rate::Hertz {
+        self.apb1
+    }
+}
+
 impl allwinner_hal::spi::Clock for Clocks {
     #[inline]
     fn spi_clock(&self) -> embedded_time::rate::Hertz {

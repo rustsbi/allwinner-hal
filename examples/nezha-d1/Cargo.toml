@@ -8,6 +8,20 @@ repository.workspace = true
 
 [dependencies]
 allwinner-hal = { path = "../../allwinner-hal", features = ["d1"] }
-allwinner-rt = { path = "../../allwinner-rt", features = ["d1"] }
-panic-halt = "0.2.0"
+allwinner-rt = { path = "../../allwinner-rt", features = ["d1", "panic-halt"] }
 embedded-io = "0.6.1"
+
+[[bin]]
+name = "blinky"
+test = false
+bench = false
+
+[[bin]]
+name = "uart"
+test = false
+bench = false
+
+[lib]
+name = "nezha_d1_example"
+test = false
+bench = false
