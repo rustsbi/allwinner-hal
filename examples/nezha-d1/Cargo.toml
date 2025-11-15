@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-allwinner-hal = { path = "../../allwinner-hal", features = ["d1"] }
+allwinner-hal = { path = "../../allwinner-hal" }
 allwinner-rt = { path = "../../allwinner-rt", features = ["d1", "panic-halt"] }
 embedded-io = "0.6.1"
 
