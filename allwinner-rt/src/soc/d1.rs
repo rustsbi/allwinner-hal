@@ -1,7 +1,8 @@
 //! D1-H, D1s, F133, F133A/B chip platforms.
 
-use allwinner_hal::{ccu::Clocks, uart::UartExt};
-use embedded_time::rate::Extensions;
+use allwinner_hal::{gpio::PadExt, uart::UartExt};
+use core::num::NonZeroU32;
+use embedded_time::rate::{Extensions, Hertz};
 
 /// ROM runtime peripheral ownership and configurations.
 pub struct Peripherals {
@@ -53,6 +54,7 @@ soc! {
 impl_uart! {
     0 => UART0,
 }
+
 /// Ownership of a D1 GPIO pad.
 pub struct Pad<const P: char, const N: u8> {
     _private: (),
@@ -196,6 +198,134 @@ impl_gpio_pins! {
     pg18: ('G', 18);
 }
 
+impl_uart_pads! {
+    ('B', 0, 6):  IntoTransmit, into_uart_transmit, 0;
+    ('B', 0, 7):  IntoTransmit, into_uart_transmit, 2;
+    ('B', 1, 6):  IntoReceive, into_uart_receive, 0;
+    ('B', 1, 7):  IntoReceive, into_uart_receive, 2;
+    ('B', 2, 7):  IntoTransmit, into_uart_transmit, 4;
+    ('B', 3, 7):  IntoReceive, into_uart_receive, 4;
+    ('B', 4, 7):  IntoTransmit, into_uart_transmit, 5;
+    ('B', 5, 7):  IntoReceive, into_uart_receive, 5;
+    ('B', 6, 7):  IntoTransmit, into_uart_transmit, 3;
+    ('B', 7, 7):  IntoReceive, into_uart_receive, 3;
+    ('B', 8, 6):  IntoTransmit, into_uart_transmit, 0;
+    ('B', 8, 7):  IntoTransmit, into_uart_transmit, 1;
+    ('B', 9, 6):  IntoReceive, into_uart_receive, 0;
+    ('B', 9, 7):  IntoReceive, into_uart_receive, 1;
+    ('C', 0, 2):  IntoTransmit, into_uart_transmit, 2;
+    ('C', 1, 2):  IntoReceive, into_uart_receive, 2;
+    ('C', 6, 4):  IntoTransmit, into_uart_transmit, 3;
+    ('C', 7, 4):  IntoReceive, into_uart_receive, 3;
+    ('D', 1, 5):  IntoTransmit, into_uart_transmit, 2;
+    ('D', 2, 5):  IntoReceive, into_uart_receive, 2;
+    ('D', 5, 5):  IntoTransmit, into_uart_transmit, 5;
+    ('D', 6, 5):  IntoReceive, into_uart_receive, 5;
+    ('D', 7, 5):  IntoTransmit, into_uart_transmit, 4;
+    ('D', 8, 5):  IntoReceive, into_uart_receive, 4;
+    ('D', 10, 5): IntoTransmit, into_uart_transmit, 3;
+    ('D', 11, 5): IntoReceive, into_uart_receive, 3;
+    ('D', 21, 4): IntoTransmit, into_uart_transmit, 1;
+    ('D', 22, 4): IntoReceive, into_uart_receive, 1;
+    ('E', 2, 3):  IntoTransmit, into_uart_transmit, 2;
+    ('E', 2, 6):  IntoTransmit, into_uart_transmit, 0;
+    ('E', 3, 3):  IntoReceive, into_uart_receive, 2;
+    ('E', 3, 6):  IntoReceive, into_uart_receive, 0;
+    ('E', 4, 3):  IntoTransmit, into_uart_transmit, 4;
+    ('E', 5, 3):  IntoReceive, into_uart_receive, 4;
+    ('E', 6, 3):  IntoTransmit, into_uart_transmit, 5;
+    ('E', 7, 3):  IntoReceive, into_uart_receive, 5;
+    ('E', 8, 5):  IntoTransmit, into_uart_transmit, 3;
+    ('E', 9, 5):  IntoReceive, into_uart_receive, 3;
+    ('E', 10, 3): IntoTransmit, into_uart_transmit, 1;
+    ('E', 11, 3): IntoReceive, into_uart_receive, 1;
+    ('G', 0, 3):  IntoTransmit, into_uart_transmit, 3;
+    ('G', 1, 3):  IntoReceive, into_uart_receive, 3;
+    ('G', 2, 5):  IntoTransmit, into_uart_transmit, 4;
+    ('G', 3, 5):  IntoReceive, into_uart_receive, 4;
+    ('G', 4, 3):  IntoTransmit, into_uart_transmit, 5;
+    ('G', 5, 3):  IntoReceive, into_uart_receive, 5;
+    ('G', 6, 2):  IntoTransmit, into_uart_transmit, 1;
+    ('G', 7, 2):  IntoReceive, into_uart_receive, 1;
+    ('G', 8, 5):  IntoTransmit, into_uart_transmit, 3;
+    ('G', 9, 5):  IntoReceive, into_uart_receive, 3;
+    ('G', 17, 2): IntoTransmit, into_uart_transmit, 2;
+    ('G', 18, 2): IntoReceive, into_uart_receive, 2;
+}
+
+impl_spi_pads! {
+    ('B', 9, 5): IntoMiso, into_spi_miso, 1;
+    ('B', 10, 5): IntoMosi, into_spi_mosi, 1;
+    ('B', 11, 5): IntoClk, into_spi_clk, 1;
+    ('C', 2, 2): IntoClk, into_spi_clk, 0;
+    ('C', 4, 2): IntoMosi, into_spi_mosi, 0;
+    ('C', 5, 2): IntoMiso, into_spi_miso, 0;
+    ('D', 11, 4): IntoClk, into_spi_clk, 1;
+    ('D', 12, 4): IntoMosi, into_spi_mosi, 1;
+    ('D', 13, 4): IntoMiso, into_spi_miso, 1;
+}
+
+// TODO constrain SMHC pads
+// // SMHC pins
+// impl_pins_trait! {
+//     ('F', 0, 2): smhc::Data<1>;
+//     ('F', 1, 2): smhc::Data<0>;
+//     ('F', 2, 2): smhc::Clk;
+//     ('F', 3, 2): smhc::Cmd;
+//     ('F', 4, 2): smhc::Data<3>;
+//     ('F', 5, 2): smhc::Data<2>;
+//     ('G', 0, 2): smhc::Clk;
+//     ('G', 1, 2): smhc::Cmd;
+//     ('G', 2, 2): smhc::Data<0>;
+//     ('G', 3, 2): smhc::Data<1>;
+//     ('G', 4, 2): smhc::Data<2>;
+//     ('G', 5, 2): smhc::Data<3>;
+//     ('C', 2, 3): smhc::Clk;
+//     ('C', 3, 3): smhc::Cmd;
+//     ('C', 4, 3): smhc::Data<2>;
+//     ('C', 5, 3): smhc::Data<1>;
+//     ('C', 6, 3): smhc::Data<0>;
+//     ('C', 7, 3): smhc::Data<3>;
+// }
+
+/// ROM clock configuration on current SoC.
+#[derive(Debug)]
+pub struct Clocks {
+    /// PSI clock frequency.
+    pub psi: Hertz,
+    /// Advanced Peripheral Bus 1 clock frequency.
+    pub apb1: Hertz,
+}
+
+impl allwinner_hal::uart::Clock for Clocks {
+    #[inline]
+    fn uart_clock(&self) -> embedded_time::rate::Hertz {
+        self.apb1
+    }
+}
+
+impl<'a> allwinner_hal::uart::Clock for &'a Clocks {
+    #[inline]
+    fn uart_clock(&self) -> embedded_time::rate::Hertz {
+        self.apb1
+    }
+}
+
+impl allwinner_hal::spi::Clock for Clocks {
+    #[inline]
+    fn spi_clock(&self) -> embedded_time::rate::Hertz {
+        // TODO calculate from more clock parameters
+        self.psi
+    }
+}
+
+impl allwinner_hal::smhc::Clock for Clocks {
+    #[inline]
+    fn smhc_clock(&self) -> embedded_time::rate::Hertz {
+        self.psi
+    }
+}
+
 #[doc(hidden)]
 #[inline]
 pub fn __rom_init_params() -> (Peripherals, Clocks) {
@@ -216,4 +346,53 @@ pub fn __rom_init_params() -> (Peripherals, Clocks) {
         apb1: 24_000_000.Hz(),
     };
     (peripherals, clocks)
+}
+
+/// Allwinner D1 C906 hart interrupts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u32)]
+pub enum Interrupt {
+    /// Universal Asynchronous Receiver-Transmitter 0.
+    UART0 = 18,
+    /// Universal Asynchronous Receiver-Transmitter 1.
+    UART1 = 19,
+    /// Universal Asynchronous Receiver-Transmitter 2.
+    UART2 = 20,
+    /// Universal Asynchronous Receiver-Transmitter 3.
+    UART3 = 21,
+    /// Universal Asynchronous Receiver-Transmitter 4.
+    UART4 = 22,
+    /// Universal Asynchronous Receiver-Transmitter 5.
+    UART5 = 23,
+    /// Serial Peripheral Interface 0.
+    SPI0 = 31,
+    /// Serial Peripheral Interface 1.
+    SPI1 = 32,
+}
+
+impl plic::InterruptSource for Interrupt {
+    fn id(self) -> NonZeroU32 {
+        // note(unwarp): self as u32 representation has no zero value.
+        NonZeroU32::new(self as u32).unwrap()
+    }
+}
+
+/// Machine mode hart context for Allwinner D1 T-Head C906 core.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Machine;
+
+impl plic::HartContext for Machine {
+    fn index(self) -> usize {
+        0
+    }
+}
+
+/// Supervisor mode hart context for Allwinner D1 T-Head C906 core.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Supevisor;
+
+impl plic::HartContext for Supevisor {
+    fn index(self) -> usize {
+        1
+    }
 }

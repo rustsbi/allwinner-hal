@@ -11,17 +11,6 @@ pub use pll::{PllCpuControl, PllDdrControl, PllPeri0Control};
 pub use register::*;
 pub use source::{CpuClockSource, DramClockSource, SmhcClockSource, SpiClockSource};
 
-use embedded_time::rate::Hertz;
-
-/// Clock configuration on current SoC.
-#[derive(Debug)]
-pub struct Clocks {
-    /// PSI clock frequency.
-    pub psi: Hertz,
-    /// Advanced Peripheral Bus 1 clock frequency.
-    pub apb1: Hertz,
-}
-
 /// Peripheral that have clock reset feature in CCU.
 pub trait ClockReset {
     /// Assert reset signal.

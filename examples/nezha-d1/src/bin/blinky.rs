@@ -3,7 +3,6 @@
 
 use allwinner_hal::prelude::*;
 use allwinner_rt::{Clocks, Peripherals, entry};
-use panic_halt as _;
 
 #[entry]
 fn main(p: Peripherals, _c: Clocks) {
