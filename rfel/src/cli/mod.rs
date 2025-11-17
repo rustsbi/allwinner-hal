@@ -1,3 +1,6 @@
+pub mod elf_to_bin;
+pub mod patch;
+
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 use log::{debug, error};
@@ -5,6 +8,9 @@ use std::error::Error;
 use std::fmt;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Write};
+use std::path::PathBuf;
+
+use elf_to_bin::{elf_to_bin, resolve_output_path};
 
 use crate::Progress;
 use crate::chips;
@@ -23,6 +29,8 @@ mod util;
     help_template = r#"rfel(v{version}) - https://github.com/rustsbi/allwinner-hal
 usage:
     rfel version                                        - Show chip version
+    rfel elf2bin --input <input-elf> [--output <output-bin>] - Convert ELF to raw binary data
+    rfel patch --input <input-bin>  [--output <output-img>] - Patch binary into bootable image
     rfel hexdump <address> <length>                     - Dumps memory region in hex
     rfel dump <address> <length>                        - Binary memory dump to stdout
     rfel read32 <address>                               - Read 32-bits value from device memory
@@ -58,6 +66,25 @@ pub struct Cli {
 pub enum Commands {
     /// Show chip version
     Version,
+    /// Convert ELF to raw binary data.
+    #[command(name = "elf2bin")]
+    Elf2Bin {
+        /// Input ELF file path.
+        #[arg(long = "input", short = 'i')]
+        input: PathBuf,
+        /// Output binary file path (optional).
+        #[arg(long = "output", short = 'o')]
+        output: Option<PathBuf>,
+    },
+    #[command(name = "patch")]
+    Patch {
+        /// Input ELF file path.
+        #[arg(long = "input", short = 'i')]
+        input: PathBuf,
+        /// Output binary file path (optional).
+        #[arg(long = "output", short = 'o')]
+        output: Option<PathBuf>,
+    },
     /// Dumps memory region in hexadecimal format
     Hexdump {
         /// The address to be dumped
@@ -129,6 +156,15 @@ pub enum Commands {
         #[arg(num_args = 1.., value_name = "args", trailing_var_arg = true)]
         args: Vec<String>,
     },
+}
+
+impl Commands {
+    fn requires_device(&self) -> bool {
+        match self {
+            Commands::Elf2Bin { .. } | Commands::Patch { .. } => false,
+            _ => true,
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -215,9 +251,15 @@ impl Error for CliError {
 }
 
 pub fn run(cli: Cli) -> Result<(), CliError> {
+    let Cli { verbose, command } = cli;
+
     env_logger::Builder::new()
-        .filter_level(cli.verbose.log_level_filter())
+        .filter_level(verbose.log_level_filter())
         .init();
+
+    if !command.requires_device() {
+        return execute_host_command(command);
+    }
 
     let devices: Vec<_> = nusb::list_devices()
         .map_err(CliError::DeviceList)?
@@ -229,6 +271,7 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
         error!("Cannot find any Allwinner FEL device connected.");
         return Err(CliError::NoDevice);
     }
+
     if devices.len() > 1 {
         error!("TODO: rfel does not support connecting to multiple Allwinner FEL devices by now.");
         return Err(CliError::MultipleDevices);
@@ -245,15 +288,57 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
         None => return Err(CliError::UnsupportedChip),
     };
 
-    execute_command(cli.command, &fel, chip.as_ref())
+    execute_device_command(command, &fel, chip.as_ref())
 }
 
-fn execute_command(
+fn execute_host_command(command: Commands) -> Result<(), CliError> {
+    match command {
+        Commands::Elf2Bin { input, output } => {
+            let output_path = resolve_output_path(&input, output, "bin");
+            match elf_to_bin(&input, &output_path) {
+                Ok(()) => {
+                    println!(
+                        "converted ELF {} -> binary {}",
+                        input.display(),
+                        output_path.display()
+                    );
+                    Ok(())
+                }
+                Err(err) => {
+                    println!("error: elf2bin: {}", err);
+                    Ok(())
+                }
+            }
+        }
+        Commands::Patch { input, output } => {
+            let output = output.unwrap_or_else(|| input.clone());
+            match patch::patch_image(&input, &output) {
+                Ok(()) => {
+                    println!(
+                        "patched Bin {} -> image {}",
+                        input.display(),
+                        output.display()
+                    );
+                    Ok(())
+                }
+                Err(err) => {
+                    println!("error: patch: {}", err);
+                    Ok(())
+                }
+            }
+        }
+        _ => unreachable!("host command invoked for device-only variant"),
+    }
+}
+
+fn execute_device_command(
     command: Commands,
     fel: &Fel<'_>,
     chip: &dyn chips::Chip,
 ) -> Result<(), CliError> {
     match command {
+        Commands::Elf2Bin { .. } => unreachable!("device command invoked for host-only variant"),
+        Commands::Patch { .. } => unreachable!("device command invoked for host-only variant"),
         Commands::Version => {
             let info = ops::op_version(fel);
             println!("chip: {}", chip.name());
