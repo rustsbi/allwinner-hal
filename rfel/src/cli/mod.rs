@@ -4,6 +4,7 @@ pub mod patch;
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 use log::{LevelFilter, debug, error};
+use std::env;
 use std::error::Error;
 use std::fmt;
 use std::fs::{self, File};
@@ -56,6 +57,7 @@ usage:
     rfel flash read <address> <length> <file>           - Auto-select flash for read
     rfel flash write <address> <file>                   - Auto-select flash for write
     rfel flash erase <address> <length>                 - Auto-select flash for erase
+    rfel run --elf <input-elf> [--address <address>]    - Convert, patch, and flash an ELF image
     rfel extra [...]                                    - The extra commands
 "#
 )]
@@ -159,6 +161,25 @@ pub enum Commands {
     Flash {
         #[command(subcommand)]
         command: Option<FlashCommand>,
+    },
+    /// Convert, patch, and flash an ELF payload in one step
+    Run {
+        /// Path to the ELF file that will be flashed
+        #[arg(long = "elf", value_name = "ELF")]
+        elf: PathBuf,
+        /// Base flash address (hex like 0x0 or decimal)
+        #[arg(long = "address", value_name = "ADDR", default_value = "0x0")]
+        address: String,
+        /// Directory for temporary artifacts (defaults to target/rfel-run)
+        #[arg(
+            long = "temp-dir",
+            value_name = "DIR",
+            default_value = "target/rfel-run"
+        )]
+        temp_dir: PathBuf,
+        /// Keep temporary files after flashing
+        #[arg(long = "keep-temps", default_value = "true")]
+        keep_temps: bool,
     },
     /// Placeholder for passthrough extras
     Extra {
@@ -963,6 +984,107 @@ fn execute_device_command(
                     }
                 },
                 Err(err) => println!("error: flash detect: {}", err),
+            }
+            Ok(())
+        }
+        Commands::Run {
+            elf,
+            address,
+            temp_dir,
+            keep_temps,
+        } => {
+            let elf = match fs::canonicalize(&elf) {
+                Ok(p) => p,
+                Err(err) => {
+                    println!("error: resolve ELF {}: {}", elf.display(), err);
+                    return Ok(());
+                }
+            };
+            let temp_dir = if temp_dir.is_absolute() {
+                temp_dir
+            } else {
+                match env::current_dir() {
+                    Ok(cwd) => cwd.join(&temp_dir),
+                    Err(err) => {
+                        println!("error: resolve temp dir {}: {}", temp_dir.display(), err);
+                        return Ok(());
+                    }
+                }
+            };
+            if let Err(err) = fs::create_dir_all(&temp_dir) {
+                println!("error: create temp dir {}: {}", temp_dir.display(), err);
+                return Ok(());
+            }
+            let bin_path = temp_dir.join("firmware.bin");
+            let img_path = temp_dir.join("firmware.img");
+
+            match elf_to_bin(&elf, &bin_path) {
+                Ok(()) => println!(
+                    "converted ELF {} -> binary {}",
+                    elf.display(),
+                    bin_path.display()
+                ),
+                Err(err) => {
+                    println!("error: elf2bin: {}", err);
+                    return Ok(());
+                }
+            }
+
+            match patch::patch_image(&bin_path, &img_path) {
+                Ok(()) => println!(
+                    "patched Bin {} -> image {}",
+                    bin_path.display(),
+                    img_path.display()
+                ),
+                Err(err) => {
+                    println!("error: patch: {}", err);
+                    return Ok(());
+                }
+            }
+
+            let flash_target = match flash::FlashAccess::detect(chip, fel) {
+                Ok(target) => target,
+                Err(err) => {
+                    println!("error: flash detect: {}", err);
+                    return Ok(());
+                }
+            };
+
+            let address = match util::parse_value::<u64>(&address) {
+                Ok(v) => v,
+                Err(err) => {
+                    println!("error: invalid address: {}", err);
+                    return Ok(());
+                }
+            };
+
+            let data = match fs::read(&img_path) {
+                Ok(d) => d,
+                Err(err) => {
+                    println!("error: read image {}: {}", img_path.display(), err);
+                    return Ok(());
+                }
+            };
+
+            let mut progress =
+                Progress::new(flash_target.kind.progress_tag_write(), data.len() as u64);
+            let write_result = flash_target.write(fel, address, &data, Some(&mut progress));
+            if !keep_temps {
+                let _ = fs::remove_file(&bin_path);
+                let _ = fs::remove_file(&img_path);
+            }
+            match write_result {
+                Ok(()) => {
+                    progress.finish();
+                    println!(
+                        "write {} bytes from {} -> {} 0x{:016x}",
+                        data.len(),
+                        elf.display(),
+                        flash_target.kind.display_name(),
+                        address
+                    );
+                }
+                Err(err) => println!("error: flash write: {}", err),
             }
             Ok(())
         }
