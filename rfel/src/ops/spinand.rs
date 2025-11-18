@@ -74,9 +74,15 @@ pub fn detect(chip: &dyn Chip, fel: &Fel<'_>) -> SpinandResult<DetectInfo> {
     })
 }
 
-pub fn erase(chip: &dyn Chip, fel: &Fel<'_>, address: u64, length: u64) -> SpinandResult<()> {
+pub fn erase(
+    chip: &dyn Chip,
+    fel: &Fel<'_>,
+    address: u64,
+    length: u64,
+    progress: Option<&mut Progress>,
+) -> SpinandResult<()> {
     let mut state = SpinandState::new(chip, fel)?;
-    state.erase_range(fel, address, length)
+    state.erase_range(fel, address, length, progress)
 }
 
 pub fn read(
@@ -186,7 +192,13 @@ impl<'chip> SpinandState<'chip> {
         self.session.context().swap_len as usize
     }
 
-    fn erase_range(&mut self, fel: &Fel<'_>, address: u64, length: u64) -> SpinandResult<()> {
+    fn erase_range(
+        &mut self,
+        fel: &Fel<'_>,
+        address: u64,
+        length: u64,
+        mut progress: Option<&mut Progress>,
+    ) -> SpinandResult<()> {
         let block = self.info.block_size();
         let mask = block as u64 - 1;
         let mut base = address & !mask;
@@ -198,6 +210,9 @@ impl<'chip> SpinandState<'chip> {
             self.erase_block(fel, base)?;
             base += block as u64;
             cnt = cnt.saturating_sub(block as u64);
+            if let Some(p) = &mut progress {
+                (**p).inc(block as u64);
+            }
         }
         Ok(())
     }
@@ -382,7 +397,7 @@ impl<'chip> SpinandState<'chip> {
             }
         }
         let erase_len = (nlen + emask) & !emask;
-        self.erase_range(fel, 0, erase_len)?;
+        self.erase_range(fel, 0, erase_len, None)?;
         let mut written = 0u64;
         while written < nlen {
             let chunk = (nlen - written).min(self.chunk_limit() as u64) as usize;

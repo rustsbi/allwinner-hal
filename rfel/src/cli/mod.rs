@@ -3,7 +3,7 @@ pub mod patch;
 
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
-use log::{debug, error};
+use log::{LevelFilter, debug, error};
 use std::error::Error;
 use std::fmt;
 use std::fs::{self, File};
@@ -15,7 +15,7 @@ use elf_to_bin::{elf_to_bin, resolve_output_path};
 use crate::Progress;
 use crate::chips;
 use crate::fel::Fel;
-use crate::ops::{self, spinand, spinor};
+use crate::ops::{self, flash, spinand, spinor};
 
 mod util;
 
@@ -52,6 +52,10 @@ usage:
     rfel spinand read <address> <length> <file>         - Read spi nand flash to file
     rfel spinand write <address> <file>                 - Write file to spi nand flash
     rfel spinand splwrite <split-size> <address> <file> - Write file to spi nand flash with split support
+    rfel flash                                          - Auto-detect SPI flash type
+    rfel flash read <address> <length> <file>           - Auto-select flash for read
+    rfel flash write <address> <file>                   - Auto-select flash for write
+    rfel flash erase <address> <length>                 - Auto-select flash for erase
     rfel extra [...]                                    - The extra commands
 "#
 )]
@@ -151,6 +155,11 @@ pub enum Commands {
         #[command(subcommand)]
         command: Option<SpinandCommand>,
     },
+    /// Auto-detect SPI flash type and operate on it
+    Flash {
+        #[command(subcommand)]
+        command: Option<FlashCommand>,
+    },
     /// Placeholder for passthrough extras
     Extra {
         #[arg(num_args = 1.., value_name = "args", trailing_var_arg = true)]
@@ -207,6 +216,22 @@ pub enum SpinandCommand {
     },
 }
 
+#[derive(Debug, Subcommand)]
+pub enum FlashCommand {
+    /// Detect SPI flash automatically
+    Detect,
+    /// Read from flash regardless of NAND/NOR type
+    Read {
+        address: String,
+        length: String,
+        file: String,
+    },
+    /// Write to flash regardless of NAND/NOR type
+    Write { address: String, file: String },
+    /// Erase flash regardless of NAND/NOR type
+    Erase { address: String, length: String },
+}
+
 #[derive(Debug)]
 pub enum CliError {
     DeviceList(nusb::Error),
@@ -254,7 +279,8 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
     let Cli { verbose, command } = cli;
 
     env_logger::Builder::new()
-        .filter_level(verbose.log_level_filter())
+        .filter_level(LevelFilter::Off)
+        .filter_module(env!("CARGO_CRATE_NAME"), verbose.log_level_filter())
         .init();
 
     if !command.requires_device() {
@@ -692,7 +718,7 @@ fn execute_device_command(
                             return Ok(());
                         }
                     };
-                    match spinand::erase(chip, fel, address, length) {
+                    match spinand::erase(chip, fel, address, length, None) {
                         Ok(()) => println!("erased {} bytes at 0x{:016x}", length, address),
                         Err(err) => println!("error: spinand erase: {}", err),
                     }
@@ -815,6 +841,128 @@ fn execute_device_command(
                         Err(err) => println!("error: spinand splwrite: {}", err),
                     }
                 }
+            }
+            Ok(())
+        }
+        Commands::Flash { command } => {
+            let sub = command.unwrap_or(FlashCommand::Detect);
+            match flash::FlashAccess::detect(chip, fel) {
+                Ok(target) => match sub {
+                    FlashCommand::Detect => {
+                        print_flash_info(target.kind.display_name(), &target.name, target.capacity)
+                    }
+                    FlashCommand::Read {
+                        address,
+                        length,
+                        file,
+                    } => {
+                        let address = match util::parse_value::<u64>(&address) {
+                            Ok(v) => v,
+                            Err(err) => {
+                                println!("error: invalid address: {}", err);
+                                return Ok(());
+                            }
+                        };
+                        let length = match util::parse_value::<usize>(&length) {
+                            Ok(v) => v,
+                            Err(err) => {
+                                println!("error: invalid length: {}", err);
+                                return Ok(());
+                            }
+                        };
+                        let file_handle = match File::create(&file) {
+                            Ok(f) => f,
+                            Err(err) => {
+                                println!("error: create file {}: {}", file, err);
+                                return Ok(());
+                            }
+                        };
+                        let mut writer = BufWriter::new(file_handle);
+                        let mut data = vec![0u8; length];
+                        let mut progress =
+                            Progress::new(target.kind.progress_tag_read(), length as u64);
+                        match target.read(fel, address, &mut data, Some(&mut progress)) {
+                            Ok(()) => {
+                                progress.finish();
+                                if let Err(err) = writer.write_all(&data) {
+                                    println!("error: write {}: {}", file, err);
+                                } else if let Err(err) = writer.flush() {
+                                    println!("error: flush {}: {}", file, err);
+                                } else {
+                                    println!(
+                                        "read {} bytes from {} 0x{:016x} -> {}",
+                                        data.len(),
+                                        target.kind.display_name(),
+                                        address,
+                                        file
+                                    );
+                                }
+                            }
+                            Err(err) => println!("error: flash read: {}", err),
+                        }
+                    }
+                    FlashCommand::Write { address, file } => {
+                        let address = match util::parse_value::<u64>(&address) {
+                            Ok(v) => v,
+                            Err(err) => {
+                                println!("error: invalid address: {}", err);
+                                return Ok(());
+                            }
+                        };
+                        let data = match fs::read(&file) {
+                            Ok(d) => d,
+                            Err(err) => {
+                                println!("error: read file {}: {}", file, err);
+                                return Ok(());
+                            }
+                        };
+                        let mut progress =
+                            Progress::new(target.kind.progress_tag_write(), data.len() as u64);
+                        match target.write(fel, address, &data, Some(&mut progress)) {
+                            Ok(()) => {
+                                progress.finish();
+                                println!(
+                                    "write {} bytes from {} -> {} 0x{:016x}",
+                                    data.len(),
+                                    file,
+                                    target.kind.display_name(),
+                                    address
+                                );
+                            }
+                            Err(err) => println!("error: flash write: {}", err),
+                        }
+                    }
+                    FlashCommand::Erase { address, length } => {
+                        let address = match util::parse_value::<u64>(&address) {
+                            Ok(v) => v,
+                            Err(err) => {
+                                println!("error: invalid address: {}", err);
+                                return Ok(());
+                            }
+                        };
+                        let length = match util::parse_value::<u64>(&length) {
+                            Ok(v) => v,
+                            Err(err) => {
+                                println!("error: invalid length: {}", err);
+                                return Ok(());
+                            }
+                        };
+                        let mut progress = Progress::new(target.kind.progress_tag_erase(), length);
+                        match target.erase(fel, address, length, Some(&mut progress)) {
+                            Ok(()) => {
+                                progress.finish();
+                                println!(
+                                    "erased {} bytes from {} 0x{:016x}",
+                                    length,
+                                    target.kind.display_name(),
+                                    address
+                                );
+                            }
+                            Err(err) => println!("error: flash erase: {}", err),
+                        }
+                    }
+                },
+                Err(err) => println!("error: flash detect: {}", err),
             }
             Ok(())
         }
