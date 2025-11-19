@@ -9,7 +9,6 @@ use allwinner_hal::{
 use allwinner_rt::{Clocks, Peripherals, entry};
 use embedded_io::Write;
 use embedded_sdmmc::VolumeManager;
-use panic_halt as _;
 
 struct MyTimeSource {}
 
@@ -22,9 +21,8 @@ impl embedded_sdmmc::TimeSource for MyTimeSource {
 
 #[entry]
 fn main(p: Peripherals, c: Clocks) {
-    let tx = p.gpio.pb8.into_function::<6>();
-    let rx = p.gpio.pb9.into_function::<6>();
-    let mut serial = p.uart0.serial((tx, rx), Config::default(), &c);
+    let pads = (p.gpio.pb8, p.gpio.pb9);
+    let mut serial = p.uart0.serial(pads, Config::default(), &c);
 
     writeln!(serial, "Hello World!").ok();
 
@@ -40,7 +38,7 @@ fn main(p: Peripherals, c: Clocks) {
     };
 
     writeln!(serial, "initialize smhc...").ok();
-    let mut smhc = Smhc::new::<0>(p.smhc0, sdmmc_pins, &c, &p.ccu);
+    let mut smhc = Smhc::new::<0>(p.smhc0, sdmmc_pins, c, &p.ccu);
 
     writeln!(serial, "initializing SD card...").ok();
     let sdcard = match SdCard::new(&mut smhc) {

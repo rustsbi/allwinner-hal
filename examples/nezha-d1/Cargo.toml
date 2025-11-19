@@ -10,6 +10,13 @@ repository.workspace = true
 allwinner-hal = { path = "../../allwinner-hal" }
 allwinner-rt = { path = "../../allwinner-rt", features = ["d1", "panic-halt"] }
 embedded-io = "0.6.1"
+embedded-sdmmc = "0.9.0"
+embedded-time = "0.12.1"
+
+[lib]
+name = "nezha_d1_example"
+test = false
+bench = false
 
 [[bin]]
 name = "blinky"
@@ -21,7 +28,7 @@ name = "uart"
 test = false
 bench = false
 
-[lib]
-name = "nezha_d1_example"
+[[bin]]
+name = "sdmmc"
 test = false
 bench = false
