@@ -3,7 +3,6 @@
 
 use allwinner_hal::{prelude::*, uart::Config};
 use allwinner_rt::{Clocks, Peripherals, entry};
-use embedded_io::{Read, Write};
 
 #[entry]
 fn main(p: Peripherals, c: Clocks) {

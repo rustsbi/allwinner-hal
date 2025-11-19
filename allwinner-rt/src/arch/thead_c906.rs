@@ -61,7 +61,7 @@ pub unsafe extern "C" fn thead_c906_start() -> ! {
 }
 
 #[cfg(not(any(all(feature = "d1", target_arch = "riscv64"), doc)))]
-pub unsafe extern "C" fn start() -> ! {
+pub unsafe extern "C" fn thead_c906_start() -> ! {
     unimplemented!()
 }
 
