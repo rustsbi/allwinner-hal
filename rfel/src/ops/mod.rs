@@ -1,4 +1,5 @@
 pub mod chip;
+pub mod flash;
 pub mod spinand;
 pub mod spinor;
 
@@ -6,6 +7,7 @@ pub use chip::{
     ChipOpError, ChipOpResult, DdrResult, JtagResult, ResetResult, SidResult, ddr as op_ddr,
     jtag as op_jtag, reset as op_reset, sid as op_sid,
 };
+pub use flash::{FlashAccess, FlashDetectError, FlashIoError, FlashKind};
 
 use crate::Progress;
 use crate::fel::{CHUNK_SIZE, Fel, Version};

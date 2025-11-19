@@ -1,15 +1,22 @@
+pub mod elf_to_bin;
+pub mod patch;
+
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
-use log::{debug, error};
+use log::{LevelFilter, debug, error};
+use std::env;
 use std::error::Error;
 use std::fmt;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Write};
+use std::path::PathBuf;
+
+use elf_to_bin::{elf_to_bin, resolve_output_path};
 
 use crate::Progress;
 use crate::chips;
 use crate::fel::Fel;
-use crate::ops::{self, spinand, spinor};
+use crate::ops::{self, flash, spinand, spinor};
 
 mod util;
 
@@ -23,6 +30,8 @@ mod util;
     help_template = r#"rfel(v{version}) - https://github.com/rustsbi/allwinner-hal
 usage:
     rfel version                                        - Show chip version
+    rfel elf2bin --input <input-elf> [--output <output-bin>] - Convert ELF to raw binary data
+    rfel patch --input <input-bin>  [--output <output-img>] - Patch binary into bootable image
     rfel hexdump <address> <length>                     - Dumps memory region in hex
     rfel dump <address> <length>                        - Binary memory dump to stdout
     rfel read32 <address>                               - Read 32-bits value from device memory
@@ -44,6 +53,11 @@ usage:
     rfel spinand read <address> <length> <file>         - Read spi nand flash to file
     rfel spinand write <address> <file>                 - Write file to spi nand flash
     rfel spinand splwrite <split-size> <address> <file> - Write file to spi nand flash with split support
+    rfel flash                                          - Auto-detect SPI flash type
+    rfel flash read <address> <length> <file>           - Auto-select flash for read
+    rfel flash write <address> <file>                   - Auto-select flash for write
+    rfel flash erase <address> <length>                 - Auto-select flash for erase
+    rfel run --elf <input-elf> [--address <address>]    - Convert, patch, and flash an ELF image
     rfel extra [...]                                    - The extra commands
 "#
 )]
@@ -58,6 +72,25 @@ pub struct Cli {
 pub enum Commands {
     /// Show chip version
     Version,
+    /// Convert ELF to raw binary data.
+    #[command(name = "elf2bin")]
+    Elf2Bin {
+        /// Input ELF file path.
+        #[arg(long = "input", short = 'i')]
+        input: PathBuf,
+        /// Output binary file path (optional).
+        #[arg(long = "output", short = 'o')]
+        output: Option<PathBuf>,
+    },
+    #[command(name = "patch")]
+    Patch {
+        /// Input ELF file path.
+        #[arg(long = "input", short = 'i')]
+        input: PathBuf,
+        /// Output binary file path (optional).
+        #[arg(long = "output", short = 'o')]
+        output: Option<PathBuf>,
+    },
     /// Dumps memory region in hexadecimal format
     Hexdump {
         /// The address to be dumped
@@ -124,11 +157,44 @@ pub enum Commands {
         #[command(subcommand)]
         command: Option<SpinandCommand>,
     },
+    /// Auto-detect SPI flash type and operate on it
+    Flash {
+        #[command(subcommand)]
+        command: Option<FlashCommand>,
+    },
+    /// Convert, patch, and flash an ELF payload in one step
+    Run {
+        /// Path to the ELF file that will be flashed
+        #[arg(long = "elf", value_name = "ELF")]
+        elf: PathBuf,
+        /// Base flash address (hex like 0x0 or decimal)
+        #[arg(long = "address", value_name = "ADDR", default_value = "0x0")]
+        address: String,
+        /// Directory for temporary artifacts (defaults to target/rfel-run)
+        #[arg(
+            long = "temp-dir",
+            value_name = "DIR",
+            default_value = "target/rfel-run"
+        )]
+        temp_dir: PathBuf,
+        /// Keep temporary files after flashing
+        #[arg(long = "keep-temps", default_value = "true")]
+        keep_temps: bool,
+    },
     /// Placeholder for passthrough extras
     Extra {
         #[arg(num_args = 1.., value_name = "args", trailing_var_arg = true)]
         args: Vec<String>,
     },
+}
+
+impl Commands {
+    fn requires_device(&self) -> bool {
+        match self {
+            Commands::Elf2Bin { .. } | Commands::Patch { .. } => false,
+            _ => true,
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -169,6 +235,22 @@ pub enum SpinandCommand {
         address: String,
         file: String,
     },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum FlashCommand {
+    /// Detect SPI flash automatically
+    Detect,
+    /// Read from flash regardless of NAND/NOR type
+    Read {
+        address: String,
+        length: String,
+        file: String,
+    },
+    /// Write to flash regardless of NAND/NOR type
+    Write { address: String, file: String },
+    /// Erase flash regardless of NAND/NOR type
+    Erase { address: String, length: String },
 }
 
 #[derive(Debug)]
@@ -215,9 +297,16 @@ impl Error for CliError {
 }
 
 pub fn run(cli: Cli) -> Result<(), CliError> {
+    let Cli { verbose, command } = cli;
+
     env_logger::Builder::new()
-        .filter_level(cli.verbose.log_level_filter())
+        .filter_level(LevelFilter::Off)
+        .filter_module(env!("CARGO_CRATE_NAME"), verbose.log_level_filter())
         .init();
+
+    if !command.requires_device() {
+        return execute_host_command(command);
+    }
 
     let devices: Vec<_> = nusb::list_devices()
         .map_err(CliError::DeviceList)?
@@ -229,6 +318,7 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
         error!("Cannot find any Allwinner FEL device connected.");
         return Err(CliError::NoDevice);
     }
+
     if devices.len() > 1 {
         error!("TODO: rfel does not support connecting to multiple Allwinner FEL devices by now.");
         return Err(CliError::MultipleDevices);
@@ -245,15 +335,57 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
         None => return Err(CliError::UnsupportedChip),
     };
 
-    execute_command(cli.command, &fel, chip.as_ref())
+    execute_device_command(command, &fel, chip.as_ref())
 }
 
-fn execute_command(
+fn execute_host_command(command: Commands) -> Result<(), CliError> {
+    match command {
+        Commands::Elf2Bin { input, output } => {
+            let output_path = resolve_output_path(&input, output, "bin");
+            match elf_to_bin(&input, &output_path) {
+                Ok(()) => {
+                    println!(
+                        "converted ELF {} -> binary {}",
+                        input.display(),
+                        output_path.display()
+                    );
+                    Ok(())
+                }
+                Err(err) => {
+                    println!("error: elf2bin: {}", err);
+                    Ok(())
+                }
+            }
+        }
+        Commands::Patch { input, output } => {
+            let output = output.unwrap_or_else(|| input.clone());
+            match patch::patch_image(&input, &output) {
+                Ok(()) => {
+                    println!(
+                        "patched Bin {} -> image {}",
+                        input.display(),
+                        output.display()
+                    );
+                    Ok(())
+                }
+                Err(err) => {
+                    println!("error: patch: {}", err);
+                    Ok(())
+                }
+            }
+        }
+        _ => unreachable!("host command invoked for device-only variant"),
+    }
+}
+
+fn execute_device_command(
     command: Commands,
     fel: &Fel<'_>,
     chip: &dyn chips::Chip,
 ) -> Result<(), CliError> {
     match command {
+        Commands::Elf2Bin { .. } => unreachable!("device command invoked for host-only variant"),
+        Commands::Patch { .. } => unreachable!("device command invoked for host-only variant"),
         Commands::Version => {
             let info = ops::op_version(fel);
             println!("chip: {}", chip.name());
@@ -607,7 +739,7 @@ fn execute_command(
                             return Ok(());
                         }
                     };
-                    match spinand::erase(chip, fel, address, length) {
+                    match spinand::erase(chip, fel, address, length, None) {
                         Ok(()) => println!("erased {} bytes at 0x{:016x}", length, address),
                         Err(err) => println!("error: spinand erase: {}", err),
                     }
@@ -730,6 +862,229 @@ fn execute_command(
                         Err(err) => println!("error: spinand splwrite: {}", err),
                     }
                 }
+            }
+            Ok(())
+        }
+        Commands::Flash { command } => {
+            let sub = command.unwrap_or(FlashCommand::Detect);
+            match flash::FlashAccess::detect(chip, fel) {
+                Ok(target) => match sub {
+                    FlashCommand::Detect => {
+                        print_flash_info(target.kind.display_name(), &target.name, target.capacity)
+                    }
+                    FlashCommand::Read {
+                        address,
+                        length,
+                        file,
+                    } => {
+                        let address = match util::parse_value::<u64>(&address) {
+                            Ok(v) => v,
+                            Err(err) => {
+                                println!("error: invalid address: {}", err);
+                                return Ok(());
+                            }
+                        };
+                        let length = match util::parse_value::<usize>(&length) {
+                            Ok(v) => v,
+                            Err(err) => {
+                                println!("error: invalid length: {}", err);
+                                return Ok(());
+                            }
+                        };
+                        let file_handle = match File::create(&file) {
+                            Ok(f) => f,
+                            Err(err) => {
+                                println!("error: create file {}: {}", file, err);
+                                return Ok(());
+                            }
+                        };
+                        let mut writer = BufWriter::new(file_handle);
+                        let mut data = vec![0u8; length];
+                        let mut progress =
+                            Progress::new(target.kind.progress_tag_read(), length as u64);
+                        match target.read(fel, address, &mut data, Some(&mut progress)) {
+                            Ok(()) => {
+                                progress.finish();
+                                if let Err(err) = writer.write_all(&data) {
+                                    println!("error: write {}: {}", file, err);
+                                } else if let Err(err) = writer.flush() {
+                                    println!("error: flush {}: {}", file, err);
+                                } else {
+                                    println!(
+                                        "read {} bytes from {} 0x{:016x} -> {}",
+                                        data.len(),
+                                        target.kind.display_name(),
+                                        address,
+                                        file
+                                    );
+                                }
+                            }
+                            Err(err) => println!("error: flash read: {}", err),
+                        }
+                    }
+                    FlashCommand::Write { address, file } => {
+                        let address = match util::parse_value::<u64>(&address) {
+                            Ok(v) => v,
+                            Err(err) => {
+                                println!("error: invalid address: {}", err);
+                                return Ok(());
+                            }
+                        };
+                        let data = match fs::read(&file) {
+                            Ok(d) => d,
+                            Err(err) => {
+                                println!("error: read file {}: {}", file, err);
+                                return Ok(());
+                            }
+                        };
+                        let mut progress =
+                            Progress::new(target.kind.progress_tag_write(), data.len() as u64);
+                        match target.write(fel, address, &data, Some(&mut progress)) {
+                            Ok(()) => {
+                                progress.finish();
+                                println!(
+                                    "write {} bytes from {} -> {} 0x{:016x}",
+                                    data.len(),
+                                    file,
+                                    target.kind.display_name(),
+                                    address
+                                );
+                            }
+                            Err(err) => println!("error: flash write: {}", err),
+                        }
+                    }
+                    FlashCommand::Erase { address, length } => {
+                        let address = match util::parse_value::<u64>(&address) {
+                            Ok(v) => v,
+                            Err(err) => {
+                                println!("error: invalid address: {}", err);
+                                return Ok(());
+                            }
+                        };
+                        let length = match util::parse_value::<u64>(&length) {
+                            Ok(v) => v,
+                            Err(err) => {
+                                println!("error: invalid length: {}", err);
+                                return Ok(());
+                            }
+                        };
+                        let mut progress = Progress::new(target.kind.progress_tag_erase(), length);
+                        match target.erase(fel, address, length, Some(&mut progress)) {
+                            Ok(()) => {
+                                progress.finish();
+                                println!(
+                                    "erased {} bytes from {} 0x{:016x}",
+                                    length,
+                                    target.kind.display_name(),
+                                    address
+                                );
+                            }
+                            Err(err) => println!("error: flash erase: {}", err),
+                        }
+                    }
+                },
+                Err(err) => println!("error: flash detect: {}", err),
+            }
+            Ok(())
+        }
+        Commands::Run {
+            elf,
+            address,
+            temp_dir,
+            keep_temps,
+        } => {
+            let elf = match fs::canonicalize(&elf) {
+                Ok(p) => p,
+                Err(err) => {
+                    println!("error: resolve ELF {}: {}", elf.display(), err);
+                    return Ok(());
+                }
+            };
+            let temp_dir = if temp_dir.is_absolute() {
+                temp_dir
+            } else {
+                match env::current_dir() {
+                    Ok(cwd) => cwd.join(&temp_dir),
+                    Err(err) => {
+                        println!("error: resolve temp dir {}: {}", temp_dir.display(), err);
+                        return Ok(());
+                    }
+                }
+            };
+            if let Err(err) = fs::create_dir_all(&temp_dir) {
+                println!("error: create temp dir {}: {}", temp_dir.display(), err);
+                return Ok(());
+            }
+            let bin_path = temp_dir.join("firmware.bin");
+            let img_path = temp_dir.join("firmware.img");
+
+            match elf_to_bin(&elf, &bin_path) {
+                Ok(()) => println!(
+                    "converted ELF {} -> binary {}",
+                    elf.display(),
+                    bin_path.display()
+                ),
+                Err(err) => {
+                    println!("error: elf2bin: {}", err);
+                    return Ok(());
+                }
+            }
+
+            match patch::patch_image(&bin_path, &img_path) {
+                Ok(()) => println!(
+                    "patched Bin {} -> image {}",
+                    bin_path.display(),
+                    img_path.display()
+                ),
+                Err(err) => {
+                    println!("error: patch: {}", err);
+                    return Ok(());
+                }
+            }
+
+            let flash_target = match flash::FlashAccess::detect(chip, fel) {
+                Ok(target) => target,
+                Err(err) => {
+                    println!("error: flash detect: {}", err);
+                    return Ok(());
+                }
+            };
+
+            let address = match util::parse_value::<u64>(&address) {
+                Ok(v) => v,
+                Err(err) => {
+                    println!("error: invalid address: {}", err);
+                    return Ok(());
+                }
+            };
+
+            let data = match fs::read(&img_path) {
+                Ok(d) => d,
+                Err(err) => {
+                    println!("error: read image {}: {}", img_path.display(), err);
+                    return Ok(());
+                }
+            };
+
+            let mut progress =
+                Progress::new(flash_target.kind.progress_tag_write(), data.len() as u64);
+            let write_result = flash_target.write(fel, address, &data, Some(&mut progress));
+            if !keep_temps {
+                let _ = fs::remove_file(&bin_path);
+                let _ = fs::remove_file(&img_path);
+            }
+            match write_result {
+                Ok(()) => {
+                    progress.finish();
+                    println!(
+                        "write {} bytes from {} -> {} 0x{:016x}",
+                        data.len(),
+                        elf.display(),
+                        flash_target.kind.display_name(),
+                        address
+                    );
+                }
+                Err(err) => println!("error: flash write: {}", err),
             }
             Ok(())
         }

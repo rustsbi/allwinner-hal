@@ -74,9 +74,15 @@ pub fn detect(chip: &dyn Chip, fel: &Fel<'_>) -> SpinandResult<DetectInfo> {
     })
 }
 
-pub fn erase(chip: &dyn Chip, fel: &Fel<'_>, address: u64, length: u64) -> SpinandResult<()> {
+pub fn erase(
+    chip: &dyn Chip,
+    fel: &Fel<'_>,
+    address: u64,
+    length: u64,
+    progress: Option<&mut Progress>,
+) -> SpinandResult<()> {
     let mut state = SpinandState::new(chip, fel)?;
-    state.erase_range(fel, address, length)
+    state.erase_range(fel, address, length, progress)
 }
 
 pub fn read(
@@ -121,6 +127,10 @@ pub fn write(
     let mut state = SpinandState::new(chip, fel)?;
     let mut processed = 0u64;
     let total = data.len() as u64;
+    println!(
+        "Writing {} bytes to SPI NAND at address 0x{:x}",
+        total, address
+    );
     while processed < total {
         let chunk = (total - processed).min(state.chunk_limit() as u64) as usize;
         state.write_range_segment(
@@ -128,6 +138,7 @@ pub fn write(
             address + processed,
             &data[processed as usize..processed as usize + chunk],
         )?;
+        log::debug!("  wrote {} bytes at offset 0x{:x}", chunk, processed);
         processed += chunk as u64;
         if let Some(p) = &mut progress {
             (**p).inc(chunk as u64);
@@ -181,7 +192,13 @@ impl<'chip> SpinandState<'chip> {
         self.session.context().swap_len as usize
     }
 
-    fn erase_range(&mut self, fel: &Fel<'_>, address: u64, length: u64) -> SpinandResult<()> {
+    fn erase_range(
+        &mut self,
+        fel: &Fel<'_>,
+        address: u64,
+        length: u64,
+        mut progress: Option<&mut Progress>,
+    ) -> SpinandResult<()> {
         let block = self.info.block_size();
         let mask = block as u64 - 1;
         let mut base = address & !mask;
@@ -193,6 +210,9 @@ impl<'chip> SpinandState<'chip> {
             self.erase_block(fel, base)?;
             base += block as u64;
             cnt = cnt.saturating_sub(block as u64);
+            if let Some(p) = &mut progress {
+                (**p).inc(block as u64);
+            }
         }
         Ok(())
     }
@@ -215,21 +235,39 @@ impl<'chip> SpinandState<'chip> {
     fn read_range_segment(
         &mut self,
         fel: &Fel<'_>,
-        address: u64,
+        mut address: u64,
         out: &mut [u8],
     ) -> SpinandResult<()> {
-        let page_size = self.info.page_size as u64;
-        let page = u32::try_from(address / page_size).map_err(|_| SpinandError::AddressOverflow)?;
-        let column = (address % page_size) as u16;
-        self.load_page(fel, page)?;
-        self.wait_ready(fel)?;
+        let page_size = self.info.page_size as usize;
+        if page_size == 0 {
+            return Err(SpinandError::Unsupported("invalid page size"));
+        }
+
         let mut remaining = out;
-        let mut offset = column as usize;
         while !remaining.is_empty() {
-            let chunk = remaining.len().min(self.chunk_limit());
-            self.read_cache(fel, offset as u16, &mut remaining[..chunk])?;
-            remaining = &mut remaining[chunk..];
-            offset += chunk;
+            let page = u32::try_from(address / page_size as u64)
+                .map_err(|_| SpinandError::AddressOverflow)?;
+            let mut column = (address % page_size as u64) as usize;
+            self.load_page(fel, page)?;
+            self.wait_ready(fel)?;
+
+            while !remaining.is_empty() && column < page_size {
+                let bytes_left_in_page = page_size - column;
+                if bytes_left_in_page == 0 {
+                    break;
+                }
+                let chunk = remaining
+                    .len()
+                    .min(bytes_left_in_page)
+                    .min(self.chunk_limit());
+                self.read_cache(fel, column as u16, &mut remaining[..chunk])?;
+                remaining = &mut remaining[chunk..];
+                address += chunk as u64;
+                column += chunk;
+                if column == page_size {
+                    break;
+                }
+            }
         }
         Ok(())
     }
@@ -237,25 +275,53 @@ impl<'chip> SpinandState<'chip> {
     fn write_range_segment(
         &mut self,
         fel: &Fel<'_>,
-        address: u64,
-        data: &[u8],
+        mut address: u64,
+        mut data: &[u8],
     ) -> SpinandResult<()> {
-        let page_size = self.info.page_size as u64;
-        let page = u32::try_from(address / page_size).map_err(|_| SpinandError::AddressOverflow)?;
-        let column = (address % page_size) as u16;
-        let mut remaining = data;
-        let mut offset = column as usize;
-        self.write_enable(fel)?;
-        self.wait_ready(fel)?;
-        while !remaining.is_empty() {
-            let chunk = remaining.len().min(self.chunk_limit());
-            self.program_load(fel, offset as u16, &remaining[..chunk])?;
-            self.wait_ready(fel)?;
-            remaining = &remaining[chunk..];
-            offset += chunk;
+        let page_size = self.info.page_size as usize;
+        if page_size == 0 {
+            return Err(SpinandError::Unsupported("invalid page size"));
         }
-        self.program_exec(fel, page)?;
-        self.wait_ready(fel)
+
+        while !data.is_empty() {
+            let page = u32::try_from(address / page_size as u64)
+                .map_err(|_| SpinandError::AddressOverflow)?;
+            let mut column = (address % page_size as u64) as usize;
+            self.write_enable(fel)?;
+            log::debug!(
+                "  writing page 0x{:x} starting at column 0x{:x}\n  remaining 0x{:x} bytes",
+                page,
+                column,
+                data.len()
+            );
+            self.wait_ready(fel)?;
+
+            while !data.is_empty() && column < page_size {
+                let bytes_left_in_page = page_size - column;
+                if bytes_left_in_page == 0 {
+                    break;
+                }
+                let chunk = data.len().min(bytes_left_in_page).min(self.chunk_limit());
+                self.program_load(fel, column as u16, &data[..chunk])?;
+                self.wait_ready(fel)?;
+                data = &data[chunk..];
+                address += chunk as u64;
+                column += chunk;
+                log::debug!(
+                    "    programmed 0x{:x} bytes, 0x{:x} bytes remaining, current offset 0x{:x}",
+                    chunk,
+                    data.len(),
+                    column
+                );
+                if column == page_size {
+                    break;
+                }
+            }
+
+            self.program_exec(fel, page)?;
+            self.wait_ready(fel)?;
+        }
+        Ok(())
     }
 
     fn write_spl(
@@ -331,7 +397,7 @@ impl<'chip> SpinandState<'chip> {
             }
         }
         let erase_len = (nlen + emask) & !emask;
-        self.erase_range(fel, 0, erase_len)?;
+        self.erase_range(fel, 0, erase_len, None)?;
         let mut written = 0u64;
         while written < nlen {
             let chunk = (nlen - written).min(self.chunk_limit() as u64) as usize;

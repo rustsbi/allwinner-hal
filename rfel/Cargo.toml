@@ -6,6 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+byteorder = "1.5.0"
 clap = { version = "4.5.20", features = ["derive"] }
 clap-verbosity-flag = "2.2.2"
 env_logger = "0.11.5"
@@ -13,3 +14,7 @@ futures = "0.3.31"
 log = "0.4.22"
 num-traits = "0.2.19"
 nusb = "0.1.10"
+object = "0.37.3"
+project-root = "0.2.2"
+same-file = "1.0.6"
+thiserror = "2.0.17"

@@ -2,4 +2,4 @@
 rfel = "run --package rfel --release --"
 
 [target.'cfg(target_os = "none")']
-runner = "cargo rfel"
+runner = "cargo rfel run --elf"

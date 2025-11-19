@@ -91,6 +91,7 @@ impl<'a> Fel<'a> {
         trace!("exec");
         self.send_fel_request(FelRequest::exec(address));
         self.read_fel_status();
+        log::debug!("Execution started at 0x{:08x},", address);
     }
 
     fn send_fel_request(&self, request: FelRequest) {
