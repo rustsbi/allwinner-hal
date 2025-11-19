@@ -4,7 +4,10 @@ use super::{
         AccessMode, BlockSize, BusWidth, CardType, Command, RegisterBlock, TransferDirection,
     },
 };
-use crate::ccu::{self, Clocks, SmhcClockSource};
+use crate::{
+    ccu::{self, SmhcClockSource},
+    smhc::Clock,
+};
 use core::arch::asm;
 use embedded_sdmmc::{Block, BlockDevice, BlockIdx};
 
@@ -181,12 +184,12 @@ impl<SMHC: AsRef<RegisterBlock>, PADS> Smhc<SMHC, PADS> {
     pub fn new<const SMHC_IDX: usize>(
         smhc: SMHC,
         pads: PADS,
-        clocks: &Clocks,
+        clock: impl Clock,
         ccu: &ccu::RegisterBlock,
     ) -> Self {
         let divider = 2;
         let (factor_n, factor_m) =
-            ccu::calculate_best_peripheral_factors_nm(clocks.psi.0, 20_000_000);
+            ccu::calculate_best_peripheral_factors_nm(clock.smhc_clock().0, 20_000_000);
         unsafe {
             smhc.as_ref()
                 .clock_control

@@ -1,7 +1,6 @@
 //! V821 chip platforms.
 
-use allwinner_hal::ccu::Clocks;
-use embedded_time::rate::Extensions;
+use embedded_time::rate::{Extensions, Hertz};
 
 /// ROM runtime peripheral ownership and configurations.
 pub struct Peripherals {
@@ -56,6 +55,15 @@ impl<const P: char, const N: u8> Pad<P, N> {
     pub const fn __new() -> Self {
         Self { _private: () }
     }
+}
+
+/// Clock configuration on current SoC.
+#[derive(Debug)]
+pub struct Clocks {
+    /// PSI clock frequency.
+    pub psi: Hertz,
+    /// Advanced Peripheral Bus 1 clock frequency.
+    pub apb1: Hertz,
 }
 
 #[doc(hidden)]

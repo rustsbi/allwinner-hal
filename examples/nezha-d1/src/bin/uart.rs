@@ -4,13 +4,11 @@
 use allwinner_hal::{prelude::*, uart::Config};
 use allwinner_rt::{Clocks, Peripherals, entry};
 use embedded_io::{Read, Write};
-use panic_halt as _;
 
 #[entry]
 fn main(p: Peripherals, c: Clocks) {
-    let tx = p.gpio.pb8.into_function::<6>();
-    let rx = p.gpio.pb9.into_function::<6>();
-    let mut serial = p.uart0.serial((tx, rx), Config::default(), &c, &p.ccu);
+    let pads = (p.gpio.pb8, p.gpio.pb9);
+    let mut serial = p.uart0.serial(pads, Config::default(), &c);
 
     writeln!(serial, "Hello World!").ok();
 

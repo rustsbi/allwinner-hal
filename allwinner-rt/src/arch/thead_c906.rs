@@ -9,7 +9,7 @@
 #[cfg(any(all(feature = "d1", target_arch = "riscv64"), doc))]
 #[unsafe(naked)]
 #[unsafe(link_section = ".text.entry")]
-pub unsafe extern "C" fn start() -> ! {
+pub unsafe extern "C" fn thead_c906_start() -> ! {
     use super::riscv_fpu::init_floating_point;
     use crate::main;
     const STACK_SIZE: usize = 8 * 1024;
@@ -51,11 +51,30 @@ pub unsafe extern "C" fn start() -> ! {
         // Start Rust main function
         "call   {main}",
         // Platform halt if main function returns
-    "3: wfi
-        j       3b",
+        "call   {thead_c906_halt}",
         stack      =   sym STACK,
         stack_size = const STACK_SIZE,
         init_floating_point = sym init_floating_point,
         main       =   sym main,
+        thead_c906_halt = sym thead_c906_halt,
+    )
+}
+
+#[cfg(not(any(all(feature = "d1", target_arch = "riscv64"), doc)))]
+pub unsafe extern "C" fn start() -> ! {
+    unimplemented!()
+}
+
+/// Stop a T-Head C906 core.
+#[unsafe(naked)]
+pub unsafe extern "C" fn thead_c906_halt() -> ! {
+    core::arch::naked_asm!(
+        "li     x3, 0x20aaa
+        csrs    mie, x3
+        csrci   mstatus, 0x8
+        csrci   0x7C5, 0x4
+        .insn i 0x0B, 0, x0, x0, 0x001
+        csrci   0x7C1, 0x2
+        wfi",
     )
 }

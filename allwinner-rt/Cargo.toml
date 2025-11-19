@@ -18,7 +18,7 @@ categories = ["embedded", "hardware-support", "no-std"]
 
 [dependencies]
 allwinner-rt-macros = { version = "0.0.0", path = "macros" }
-allwinner-hal = { version = "0.0.0", features = ["d1"], path = "../allwinner-hal" }
+allwinner-hal = { version = "0.0.0", path = "../allwinner-hal" }
 embedded-hal = "1.0.0"
 embedded-time = "0.12.1"
 nb = "1.1.0"
@@ -29,9 +29,12 @@ cfg-if = "1.0"
 riscv-target-parser = "0.1.3"
 
 [features]
-default = ["nezha"]
+default = ["nezha", "panic-halt"]
+# D1-like chips: D1-H, D1s, F133.
 d1 = []
 v821 = []
 
 nezha = []
 lichee = []
+
+panic-halt = []
