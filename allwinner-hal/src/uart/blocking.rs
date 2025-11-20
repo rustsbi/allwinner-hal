@@ -71,7 +71,7 @@ impl<'a> Serial<'a> {
 impl<'a> Serial<'a> {
     /// Split serial instance into transmit and receive halves.
     #[inline]
-    pub fn split<const I: usize>(self) -> (TransmitHalf<'a>, ReceiveHalf<'a>) {
+    pub fn split(self) -> (TransmitHalf<'a>, ReceiveHalf<'a>) {
         (
             TransmitHalf {
                 uart: self.uart,
