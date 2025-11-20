@@ -6,6 +6,13 @@ use allwinner_rt::{Clocks, Peripherals, entry};
 
 #[entry]
 fn main(p: Peripherals, c: Clocks) {
+    // TODO make it clean
+    unsafe {
+        p.ccu
+            .uart_bgr
+            .modify(|v| v.gate_pass::<0>().deassert_reset::<0>())
+    };
+
     let pads = (p.gpio.pb8, p.gpio.pb9);
     let mut serial = p.uart0.serial(pads, Config::default(), &c);
 
