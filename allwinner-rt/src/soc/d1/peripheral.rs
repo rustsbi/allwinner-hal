@@ -6,6 +6,8 @@ pub struct Peripherals {
     pub gpio: Pads,
     /// Clock control unit peripheral.
     pub ccu: CCU,
+    /// LED control peripheral.
+    pub ledc: LEDC,
     /// Universal Asynchronous Receiver/Transmitter 0.
     pub uart0: UART0,
     /// Common control peripheral of DDR SDRAM.
@@ -31,6 +33,7 @@ impl Peripherals {
         Peripherals {
             gpio: Pads::__new(),
             ccu: CCU { _private: () },
+            ledc: LEDC { _private: () },
             uart0: UART0 { _private: () },
             com: COM { _private: () },
             phy: PHY { _private: () },
@@ -46,6 +49,8 @@ impl Peripherals {
 soc! {
     /// General Purpose Input/Output peripheral.
     pub struct GPIO => 0x02000000, allwinner_hal::gpio::RegisterBlock;
+    /// LED control peripheral.
+    pub struct LEDC => 0x02008000, allwinner_hal::ledc::RegisterBlock;
     /// Clock control unit peripheral.
     pub struct CCU => 0x02001000, allwinner_hal::ccu::RegisterBlock;
     /// Universal Asynchronous Receiver/Transmitter 0.
