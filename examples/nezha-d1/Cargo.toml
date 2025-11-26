@@ -19,7 +19,12 @@ test = false
 bench = false
 
 [[bin]]
-name = "blinky"
+name = "lcpi-blinky"
+test = false
+bench = false
+
+[[bin]]
+name = "nezha-d1-blinky"
 test = false
 bench = false
 

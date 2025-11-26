@@ -1,4 +1,4 @@
-use super::CCU;
+use super::peripheral::CCU;
 use embedded_time::rate::Hertz;
 
 /// ROM clock configuration on current SoC.
