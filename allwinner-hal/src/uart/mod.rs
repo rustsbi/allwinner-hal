@@ -21,7 +21,7 @@ pub trait UartExt<'a, const I: usize> {
         self,
         pads: impl Pads<'a, I>,
         config: impl Into<Config>,
-        clock: impl Clock,
+        clock: impl Clock<I>,
     ) -> BlockingSerial<'a>;
 }
 
@@ -62,8 +62,8 @@ where
     }
 }
 
-/// Valid clock input for UART peripheral.
-pub trait Clock {
+/// Valid clock input for UART peripheral `I`.
+pub trait Clock<const I: usize> {
     /// UART clock frequency in hertz.
     fn uart_clock(&self) -> Hertz;
 }

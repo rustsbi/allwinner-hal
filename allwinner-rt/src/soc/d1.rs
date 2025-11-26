@@ -1,8 +1,12 @@
 //! D1-H, D1s, F133, F133A/B chip platforms.
 
+mod clock;
+
+pub use clock::{Clocks, UartClock};
+
 use allwinner_hal::{gpio::PadExt, uart::UartExt};
 use core::num::NonZeroU32;
-use embedded_time::rate::{Extensions, Hertz};
+use embedded_time::rate::Extensions;
 
 /// ROM runtime peripheral ownership and configurations.
 pub struct Peripherals {
@@ -287,44 +291,6 @@ impl_spi_pads! {
 //     ('C', 6, 3): smhc::Data<0>;
 //     ('C', 7, 3): smhc::Data<3>;
 // }
-
-/// ROM clock configuration on current SoC.
-#[derive(Debug)]
-pub struct Clocks {
-    /// PSI clock frequency.
-    pub psi: Hertz,
-    /// Advanced Peripheral Bus 1 clock frequency.
-    pub apb1: Hertz,
-}
-
-impl allwinner_hal::uart::Clock for Clocks {
-    #[inline]
-    fn uart_clock(&self) -> embedded_time::rate::Hertz {
-        self.apb1
-    }
-}
-
-impl<'a> allwinner_hal::uart::Clock for &'a Clocks {
-    #[inline]
-    fn uart_clock(&self) -> embedded_time::rate::Hertz {
-        self.apb1
-    }
-}
-
-impl allwinner_hal::spi::Clock for Clocks {
-    #[inline]
-    fn spi_clock(&self) -> embedded_time::rate::Hertz {
-        // TODO calculate from more clock parameters
-        self.psi
-    }
-}
-
-impl allwinner_hal::smhc::Clock for Clocks {
-    #[inline]
-    fn smhc_clock(&self) -> embedded_time::rate::Hertz {
-        self.psi
-    }
-}
 
 #[doc(hidden)]
 #[inline]

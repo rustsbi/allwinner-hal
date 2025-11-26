@@ -19,7 +19,7 @@ impl<'a> Serial<'a> {
         uart: impl Instance<'a>,
         pads: impl Pads<'a, I>,
         config: impl Into<Config>,
-        clock: impl Clock,
+        clock: impl Clock<I>,
     ) -> Serial<'a> {
         // 1. unwrap parameters
         let Config {

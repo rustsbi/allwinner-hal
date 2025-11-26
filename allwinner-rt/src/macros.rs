@@ -84,7 +84,7 @@ macro_rules! impl_uart {
                     self,
                     pads: impl allwinner_hal::uart::Pads<'a, $i>,
                     config: impl Into<allwinner_hal::uart::Config>,
-                    clock: impl allwinner_hal::uart::Clock,
+                    clock: impl allwinner_hal::uart::Clock<$i>,
                 ) -> allwinner_hal::uart::BlockingSerial<'a> {
                     allwinner_hal::uart::BlockingSerial::new(self, pads, config, clock)
                 }
@@ -95,7 +95,7 @@ macro_rules! impl_uart {
                     self,
                     pads: impl allwinner_hal::uart::Pads<'static, $i>,
                     config: impl Into<allwinner_hal::uart::Config>,
-                    clock: impl allwinner_hal::uart::Clock,
+                    clock: impl allwinner_hal::uart::Clock<$i>,
                 ) -> allwinner_hal::uart::BlockingSerial<'static> {
                     allwinner_hal::uart::BlockingSerial::new(self, pads, config, clock)
                 }

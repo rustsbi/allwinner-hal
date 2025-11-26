@@ -21,8 +21,9 @@ impl embedded_sdmmc::TimeSource for MyTimeSource {
 
 #[entry]
 fn main(p: Peripherals, c: Clocks) {
+    let clk = c.enable_uart(&p.ccu);
     let pads = (p.gpio.pb8, p.gpio.pb9);
-    let mut serial = p.uart0.serial(pads, Config::default(), &c);
+    let mut serial = p.uart0.serial(pads, Config::default(), &clk);
 
     writeln!(serial, "Hello World!").ok();
 
