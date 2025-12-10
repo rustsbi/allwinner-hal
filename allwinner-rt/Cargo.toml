@@ -30,11 +30,19 @@ riscv-target-parser = "0.1.3"
 
 [features]
 default = ["nezha", "panic-halt"]
-# D1-like chips: D1-H, D1s, F133.
-d1 = []
-v821 = []
+panic-halt = []
+
+# SoC hart cluster specific features.
+# D1-like chips: D1-H, D1s, F133. Only one cluster per chip.
+d1 = ["thead-c906"]
+# V821 chip. There are both CPU cluster and MCU cluster.
+v821-cpu = ["andes-a27l2"]
+v821-mcu = [] # TODO thead-e907
+
+# Microarchitecture specific features.
+andes-a27l2 = []
+thead-c906 = []
+thead-c907 = []
 
 nezha = []
 lichee = []
-
-panic-halt = []

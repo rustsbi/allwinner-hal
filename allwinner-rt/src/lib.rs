@@ -34,6 +34,7 @@ pub mod arch {
     pub mod riscv_fpu;
     pub mod thead_c906;
     pub mod thead_c907;
+    pub mod thead_e907;
 }
 
 pub mod soc {
@@ -55,7 +56,7 @@ cfg_if::cfg_if! {
             self::arch::thead_c906::{thead_c906_start as start, thead_c906_halt as halt},
             self::soc::d1::{__rom_init_params, Peripherals, Clocks},
         };
-    } else if #[cfg(feature = "v821")] {
+    } else if #[cfg(feature = "v821-cpu")] {
         pub use {
             self::arch::andes_a27l2::start,
             self::soc::v821::{__rom_init_params, Peripherals, Clocks},

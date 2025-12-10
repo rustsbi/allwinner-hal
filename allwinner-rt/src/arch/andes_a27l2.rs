@@ -2,7 +2,7 @@
 ///
 /// TODO Andes start code.
 #[cfg_attr(
-    any(all(feature = "v821", target_arch = "riscv64"), doc),
+    any(all(feature = "andes-a27l2", target_arch = "riscv64"), doc),
     unsafe(link_section = ".text.entry")
 )]
 #[unsafe(naked)]

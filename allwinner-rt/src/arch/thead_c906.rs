@@ -7,7 +7,7 @@
 /// NOTE: `mxstatus` is a custom T-Head register. Do not confuse with `mstatus`.
 /// It allows for configuring special eXtensions. See further below for details.
 #[cfg_attr(
-    any(all(feature = "d1", target_arch = "riscv64"), doc),
+    any(all(feature = "thead-c906", target_arch = "riscv64"), doc),
     unsafe(link_section = ".text.entry")
 )]
 #[unsafe(naked)]
