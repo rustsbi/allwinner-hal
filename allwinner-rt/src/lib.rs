@@ -33,6 +33,7 @@ pub mod arch {
     pub mod andes_a27l2;
     pub mod riscv_fpu;
     pub mod thead_c906;
+    pub mod thead_c907;
 }
 
 pub mod soc {
