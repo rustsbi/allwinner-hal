@@ -6,9 +6,11 @@
 ///
 /// NOTE: `mxstatus` is a custom T-Head register. Do not confuse with `mstatus`.
 /// It allows for configuring special eXtensions. See further below for details.
-#[cfg(any(all(feature = "d1", target_arch = "riscv64"), doc))]
+#[cfg_attr(
+    any(all(feature = "d1", target_arch = "riscv64"), doc),
+    unsafe(link_section = ".text.entry")
+)]
 #[unsafe(naked)]
-#[unsafe(link_section = ".text.entry")]
 pub unsafe extern "C" fn thead_c906_start() -> ! {
     use super::riscv_fpu::init_floating_point;
     use crate::main;
@@ -58,11 +60,6 @@ pub unsafe extern "C" fn thead_c906_start() -> ! {
         main       =   sym main,
         thead_c906_halt = sym thead_c906_halt,
     )
-}
-
-#[cfg(not(any(all(feature = "d1", target_arch = "riscv64"), doc)))]
-pub unsafe extern "C" fn thead_c906_start() -> ! {
-    unimplemented!()
 }
 
 /// Stop a T-Head C906 core.

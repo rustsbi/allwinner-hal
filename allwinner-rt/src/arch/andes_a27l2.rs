@@ -1,9 +1,11 @@
 /// Jump over head data to executable code.
 ///
 /// TODO Andes start code.
-#[cfg(feature = "v821")]
+#[cfg_attr(
+    any(all(feature = "v821", target_arch = "riscv64"), doc),
+    unsafe(link_section = ".text.entry")
+)]
 #[unsafe(naked)]
-#[unsafe(link_section = ".text.entry")]
 pub unsafe extern "C" fn start() -> ! {
     const STACK_SIZE: usize = 8 * 1024;
     #[unsafe(link_section = ".bss.uninit")]
