@@ -1,15 +1,9 @@
 use std::fmt;
 
 use crate::chips::{Chip, ChipError, ChipSpi, SpiContext};
+use crate::consts::*;
 use crate::fel::Fel;
 use crate::transfer::{read_all, write_all};
-
-const SPI_CMD_END: u8 = 0x00;
-const SPI_CMD_INIT: u8 = 0x01;
-const SPI_CMD_SELECT: u8 = 0x02;
-const SPI_CMD_DESELECT: u8 = 0x03;
-const SPI_CMD_TXBUF: u8 = 0x05;
-const SPI_CMD_RXBUF: u8 = 0x06;
 
 #[derive(Debug)]
 pub enum SpiError {
@@ -17,6 +11,85 @@ pub enum SpiError {
     Unsupported(&'static str),
     CommandTooLarge(usize),
     LengthOverflow,
+}
+
+#[derive(Debug)]
+pub struct Command {
+    commands: Vec<u8>,
+    data: Vec<u8>,
+}
+
+impl Command {
+    pub fn new() -> Self {
+        Self {
+            commands: vec![],
+            data: vec![],
+        }
+    }
+    pub fn wait_ready_nor(&mut self) {
+        self.commands
+            .extend_from_slice(&[SPI_CMD_SELECT, SPI_CMD_SPINOR_WAIT, SPI_CMD_DESELECT]);
+    }
+    pub fn wait_ready_nand(&mut self) {
+        self.commands
+            .extend_from_slice(&[SPI_CMD_SELECT, SPI_CMD_SPINAND_WAIT, SPI_CMD_DESELECT]);
+    }
+    pub fn enable_write(&mut self) {
+        self.commands.extend_from_slice(&[
+            SPI_CMD_SELECT,
+            SPI_CMD_FAST,
+            1,
+            OPCODE_WRITE_ENABLE,
+            SPI_CMD_DESELECT,
+        ]);
+    }
+    pub fn program_load(&mut self, session: &SpiSession<'_>, column: u16, data: &[u8]) {
+        let swap_base = session.context.swap_base;
+        self.data.push(OPCODE_PROGRAM_LOAD);
+        self.data.push(((column >> 8) & 0xff) as u8);
+        self.data.push((column & 0xff) as u8);
+        self.data.extend_from_slice(data);
+        self.commands.push(SPI_CMD_SELECT);
+        self.commands.push(SPI_CMD_TXBUF);
+        self.commands.extend_from_slice(&swap_base.to_le_bytes());
+        self.commands
+            .extend_from_slice(&((data.len() + 3) as u32).to_le_bytes());
+        self.commands.push(SPI_CMD_DESELECT);
+    }
+    pub fn program_exec(&mut self, page: u32) {
+        self.commands.extend_from_slice(&[
+            SPI_CMD_SELECT,
+            SPI_CMD_FAST,
+            4,
+            OPCODE_PROGRAM_EXEC,
+            ((page >> 16) & 0xff) as u8,
+            ((page >> 8) & 0xff) as u8,
+            (page & 0xff) as u8,
+            SPI_CMD_DESELECT,
+        ]);
+    }
+    pub fn block_erase(&mut self, pa: u32) {
+        self.commands.extend_from_slice(&[
+            SPI_CMD_SELECT,
+            SPI_CMD_FAST,
+            4,
+            OPCODE_BLOCK_ERASE,
+            ((pa >> 16) & 0xff) as u8,
+            ((pa >> 8) & 0xff) as u8,
+            (pa & 0xff) as u8,
+            SPI_CMD_DESELECT,
+        ]);
+    }
+    pub fn exec(&mut self, fel: &Fel<'_>, session: &SpiSession<'_>) -> Result<(), SpiError> {
+        let swap_base = session.context.swap_base;
+
+        self.commands.push(SPI_CMD_END);
+        if self.data.len() != 0 {
+            write_all(fel, swap_base, &self.data[..]);
+        }
+        session.run_commands(fel, &self.commands)?;
+        Ok(())
+    }
 }
 
 impl fmt::Display for SpiError {

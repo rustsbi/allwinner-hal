@@ -1,0 +1,22 @@
+pub const SPI_CMD_END: u8 = 0x00;
+pub const SPI_CMD_INIT: u8 = 0x01;
+pub const SPI_CMD_SELECT: u8 = 0x02;
+pub const SPI_CMD_DESELECT: u8 = 0x03;
+pub const SPI_CMD_FAST: u8 = 0x04;
+pub const SPI_CMD_TXBUF: u8 = 0x05;
+pub const SPI_CMD_RXBUF: u8 = 0x06;
+pub const SPI_CMD_SPINOR_WAIT: u8 = 0x07;
+pub const SPI_CMD_SPINAND_WAIT: u8 = 0x08;
+pub const OPCODE_READ_PAGE_TO_CACHE: u8 = 0x13;
+pub const OPCODE_READ_PAGE_FROM_CACHE: u8 = 0x03;
+pub const OPCODE_WRITE_ENABLE: u8 = 0x06;
+pub const OPCODE_BLOCK_ERASE: u8 = 0xd8;
+pub const OPCODE_PROGRAM_LOAD: u8 = 0x02;
+pub const OPCODE_PROGRAM_EXEC: u8 = 0x10;
+pub const OPCODE_RESET: u8 = 0xff;
+
+pub const OPCODE_RDID: u8 = 0x9f;
+pub const OPCODE_GET_FEATURE: u8 = 0x0f;
+pub const OPCODE_SET_FEATURE: u8 = 0x1f;
+pub const FEATURE_PROTECT: u8 = 0xa0;
+pub const FEATURE_STATUS: u8 = 0xc0;
