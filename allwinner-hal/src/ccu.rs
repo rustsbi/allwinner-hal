@@ -308,3 +308,48 @@ impl<const I: usize> ClockConfig for SPI<I> {
         }
     }
 }
+
+/// LED Control (LEDC) clock type.
+pub struct LEDC;
+
+impl ClockReset for LEDC {
+    #[inline]
+    unsafe fn deassert_reset_only(ccu: &RegisterBlock) {
+        unsafe {
+            ccu.ledc_bgr.modify(|v| v.deassert_reset());
+        }
+    }
+    #[inline]
+    unsafe fn assert_reset_only(ccu: &RegisterBlock) {
+        unsafe {
+            ccu.ledc_bgr.modify(|v| v.assert_reset());
+        }
+    }
+}
+
+impl ClockGate for LEDC {
+    #[inline]
+    unsafe fn unmask_gate_only(ccu: &RegisterBlock) {
+        unsafe {
+            ccu.ledc_bgr.modify(|v| v.gate_pass());
+        }
+    }
+    #[inline]
+    unsafe fn mask_gate_only(ccu: &RegisterBlock) {
+        unsafe {
+            ccu.ledc_bgr.modify(|v| v.gate_mask());
+        }
+    }
+    #[inline]
+    unsafe fn disable_in(ccu: &RegisterBlock) {
+        unsafe {
+            ccu.ledc_bgr.modify(|v| v.gate_mask().assert_reset());
+        }
+    }
+    #[inline]
+    unsafe fn enable_in(ccu: &RegisterBlock) {
+        unsafe {
+            ccu.ledc_bgr.modify(|v| v.gate_pass().deassert_reset());
+        }
+    }
+}

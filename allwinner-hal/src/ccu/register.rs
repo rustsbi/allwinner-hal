@@ -44,6 +44,12 @@ pub struct RegisterBlock {
     _reserved10: [u32; 9],
     /// 0x96c - SPI Bus Gating Reset register.
     pub spi_bgr: RW<SpiBusGating>,
+    _reserved11: [u32; 0xA0],
+    /// 0xbf0 - LDEC Clock register.
+    pub ledc_clk: RW<LedcClock>,
+    _reserved12: [u32; 2],
+    /// 0xbfc - LDEC Bus Gating Reset register.
+    pub ledc_bgr: RW<LedcBusGating>,
 }
 
 /// CPU AXI Configuration register.
@@ -493,6 +499,113 @@ impl SmhcBusGating {
     }
 }
 
+/// LEDC Clock register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct LedcClock(u32);
+
+impl LedcClock {
+    const CLK_SRC_SEL: u32 = 1 << 24;
+    const FACTOR_N: u32 = 0x3 << 8;
+    const FACTOR_M: u32 = 0xf << 0;
+    const CLK_GATING: u32 = 1 << 31;
+
+    /// Get LEDC clock source.
+    #[inline]
+    pub const fn clock_source(self) -> SmhcClockSource {
+        match (self.0 & Self::CLK_SRC_SEL) >> 24 {
+            0x0 => SmhcClockSource::Hosc,
+            0x1 => SmhcClockSource::PllPeri1x,
+            _ => panic!("impossible clock source"),
+        }
+    }
+    /// Set LEDC clock source.
+    #[inline]
+    pub const fn set_clock_source(self, val: SmhcClockSource) -> Self {
+        let val = match val {
+            SmhcClockSource::Hosc => 0x0,
+            SmhcClockSource::PllPeri1x => 0x1,
+            _ => panic!("impossible clock source"),
+        };
+        Self((self.0 & !Self::CLK_SRC_SEL) | (val << 24))
+    }
+    /// Get LEDC clock divide factor N.
+    #[inline]
+    pub const fn factor_n(self) -> PeriFactorN {
+        match (self.0 & Self::FACTOR_N) >> 8 {
+            0 => PeriFactorN::N1,
+            1 => PeriFactorN::N2,
+            2 => PeriFactorN::N4,
+            3 => PeriFactorN::N8,
+            _ => unreachable!(),
+        }
+    }
+    /// Set LEDC clock divide factor N.
+    #[inline]
+    pub const fn set_factor_n(self, val: PeriFactorN) -> Self {
+        let val = match val {
+            PeriFactorN::N1 => 0,
+            PeriFactorN::N2 => 1,
+            PeriFactorN::N4 => 2,
+            PeriFactorN::N8 => 3,
+        };
+        Self((self.0 & !Self::FACTOR_N) | (val << 8))
+    }
+    /// Get LEDC clock divide factor M.
+    #[inline]
+    pub const fn factor_m(self) -> u8 {
+        (self.0 & Self::FACTOR_M) as u8
+    }
+    /// Set LEDC clock divide factor M.
+    #[inline]
+    pub const fn set_factor_m(self, val: u8) -> Self {
+        Self((self.0 & !Self::FACTOR_M) | val as u32)
+    }
+    /// Enable clock gating.
+    #[inline]
+    pub const fn enable_clock_gating(self) -> Self {
+        Self(self.0 | Self::CLK_GATING)
+    }
+    /// Disable clock gating.
+    #[inline]
+    pub const fn disable_clock_gating(self) -> Self {
+        Self(self.0 & !Self::CLK_GATING)
+    }
+    /// Get if clock gating is enabled.
+    #[inline]
+    pub const fn is_clock_gating_enabled(self) -> bool {
+        self.0 & Self::CLK_GATING != 0
+    }
+}
+
+/// LEDC Clock Reset register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct LedcBusGating(u32);
+
+impl LedcBusGating {
+    /// Disable clock gate for LEDC.
+    #[inline]
+    pub const fn gate_mask(self) -> Self {
+        Self(self.0 & !(1 << 0))
+    }
+    /// Enable clock gate for LEDC.
+    #[inline]
+    pub const fn gate_pass(self) -> Self {
+        Self(self.0 | (1 << 0))
+    }
+    /// Assert reset signal for LEDC.
+    #[inline]
+    pub const fn assert_reset(self) -> Self {
+        Self(self.0 & !(1 << (0 + 16)))
+    }
+    /// Deassert reset signal for LEDC.
+    #[inline]
+    pub const fn deassert_reset(self) -> Self {
+        Self(self.0 | (1 << (0 + 16)))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -514,6 +627,8 @@ mod tests {
         assert_eq!(offset_of!(RegisterBlock, uart_bgr), 0x90c);
         assert_eq!(offset_of!(RegisterBlock, spi_clk), 0x940);
         assert_eq!(offset_of!(RegisterBlock, spi_bgr), 0x96c);
+        assert_eq!(offset_of!(RegisterBlock, ledc_clk), 0xbf0);
+        assert_eq!(offset_of!(RegisterBlock, ledc_bgr), 0xbfc);
     }
 
     #[test]
