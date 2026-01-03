@@ -145,6 +145,7 @@ fn process_sections(sections: Vec<object::Section>) -> Result<Vec<u8>> {
 
     // Gather file-backed sections with their raw file ranges & data
     struct Entry<'a> {
+        address: u64,
         name: String,
         file_off: u64,
         data: &'a [u8],
@@ -169,6 +170,7 @@ fn process_sections(sections: Vec<object::Section>) -> Result<Vec<u8>> {
         // artificial zero padding that objcopy would not synthesize.
         entries.push(Entry {
             name,
+            address: s.address(),
             file_off: fr.offset,
             data,
         });
@@ -178,30 +180,31 @@ fn process_sections(sections: Vec<object::Section>) -> Result<Vec<u8>> {
         return Ok(Vec::new());
     }
 
-    entries.sort_by_key(|e| e.file_off);
-    let total_len = entries.iter().try_fold(0u64, |acc, e| {
-        let len = e.data.len() as u64;
-        acc.checked_add(len)
-            .ok_or(Elf2BinError::SectionSizeOverflow(acc.saturating_add(len)))
-    })?;
+    entries.sort_by_key(|e| e.address);
+    let first_address = entries.first().unwrap().address;
+    let total_len = entries
+        .iter()
+        .map(|x| x.address + x.data.len() as u64 - first_address)
+        .max()
+        .unwrap_or_else(0);
     let total_len =
         usize::try_from(total_len).map_err(|_| Elf2BinError::SectionSizeOverflow(total_len))?;
 
-    let mut output = Vec::with_capacity(total_len);
-    let mut cursor = 0usize;
+    let mut output = vec![0; total_len];
 
     for e in entries {
-        let next = cursor + e.data.len();
+        let base = e.address - first_address;
         println!(
             "Writing section: {} file_off=0x{:x} data_len=0x{:x} -> out[0x{:x}..0x{:x}]",
             e.name,
             e.file_off,
             e.data.len(),
-            cursor,
-            next
+            base,
+            base + e.data.len() as u64
         );
-        output.extend_from_slice(e.data);
-        cursor = next;
+        let (_, output_slice) = output.split_at_mut(base as usize);
+        let (output_slice, _) = output_slice.split_at_mut(e.data.len());
+        output_slice.copy_from_slice(e.data);
     }
 
     Ok(output)
