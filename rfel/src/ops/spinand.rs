@@ -3,23 +3,12 @@ use std::fmt;
 use std::time::{Duration, Instant};
 
 use crate::chips::Chip;
+use crate::consts::*;
 use crate::fel::Fel;
 use crate::progress::Progress;
-use crate::spi::{self, SpiError, SpiSession};
+use crate::spi::{self, Command, SpiError, SpiSession};
 
 const WAIT_TIMEOUT: Duration = Duration::from_secs(5);
-const OPCODE_RDID: u8 = 0x9f;
-const OPCODE_GET_FEATURE: u8 = 0x0f;
-const OPCODE_SET_FEATURE: u8 = 0x1f;
-const FEATURE_PROTECT: u8 = 0xa0;
-const FEATURE_STATUS: u8 = 0xc0;
-const OPCODE_READ_PAGE_TO_CACHE: u8 = 0x13;
-const OPCODE_READ_PAGE_FROM_CACHE: u8 = 0x03;
-const OPCODE_WRITE_ENABLE: u8 = 0x06;
-const OPCODE_BLOCK_ERASE: u8 = 0xd8;
-const OPCODE_PROGRAM_LOAD: u8 = 0x02;
-const OPCODE_PROGRAM_EXEC: u8 = 0x10;
-const OPCODE_RESET: u8 = 0xff;
 
 #[derive(Debug)]
 pub enum SpinandError {
@@ -125,6 +114,7 @@ pub fn write(
     mut progress: Option<&mut Progress>,
 ) -> SpinandResult<()> {
     let mut state = SpinandState::new(chip, fel)?;
+    state.erase_range(fel, address, address + data.len() as u64, None)?;
     let mut processed = 0u64;
     let total = data.len() as u64;
     println!(
@@ -220,16 +210,13 @@ impl<'chip> SpinandState<'chip> {
     fn erase_block(&mut self, fel: &Fel<'_>, address: u64) -> SpinandResult<()> {
         let page_size = self.info.page_size as u64;
         let pa = u32::try_from(address / page_size).map_err(|_| SpinandError::AddressOverflow)?;
-        self.write_enable(fel)?;
-        self.wait_ready(fel)?;
-        let tx = [
-            OPCODE_BLOCK_ERASE,
-            ((pa >> 16) & 0xff) as u8,
-            ((pa >> 8) & 0xff) as u8,
-            (pa & 0xff) as u8,
-        ];
-        spi::transfer(fel, &self.session, Some(&tx), None)?;
-        self.wait_ready(fel)
+        let mut command = Command::new();
+        command.enable_write();
+        command.wait_ready_nand();
+        command.block_erase(pa);
+        command.wait_ready_nand();
+        command.exec(fel, &self.session)?;
+        Ok(())
     }
 
     fn read_range_segment(
@@ -301,7 +288,15 @@ impl<'chip> SpinandState<'chip> {
                 if bytes_left_in_page == 0 {
                     break;
                 }
+                let mut commands = Command::new();
                 let chunk = data.len().min(bytes_left_in_page).min(self.chunk_limit());
+                commands.enable_write();
+                commands.wait_ready_nand();
+                commands.program_load(&self.session, column as u16, &data[..chunk]);
+                commands.wait_ready_nand();
+                commands.program_exec(page);
+                commands.wait_ready_nand();
+                commands.exec(fel, &self.session)?;
                 self.program_load(fel, column as u16, &data[..chunk])?;
                 self.wait_ready(fel)?;
                 data = &data[chunk..];
@@ -317,9 +312,6 @@ impl<'chip> SpinandState<'chip> {
                     break;
                 }
             }
-
-            self.program_exec(fel, page)?;
-            self.wait_ready(fel)?;
         }
         Ok(())
     }
@@ -480,6 +472,7 @@ impl<'chip> SpinandState<'chip> {
         Ok(())
     }
 
+    #[allow(unused)]
     fn program_exec(&mut self, fel: &Fel<'_>, page: u32) -> SpinandResult<()> {
         let tx = [
             OPCODE_PROGRAM_EXEC,
