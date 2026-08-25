@@ -112,6 +112,7 @@ impl Version {
     pub fn chip(self) -> Option<Chip> {
         match self.id {
             0x0018_5900 => Some(Chip::D1),
+            0x0018_8200 => Some(Chip::V821),
             _ => None,
         }
     }
@@ -154,6 +155,8 @@ impl From<[u8; 32]> for Version {
 pub enum Chip {
     /// D1-H, D1s or F133 chip.
     D1 = 0x0018_5900,
+    /// V821 chip.
+    V821 = 0x0018_8200,
 }
 
 #[cfg(test)]
@@ -236,5 +239,10 @@ mod tests {
         assert_eq!(v.id(), 0x0018_5900);
         assert_eq!(v.scratchpad(), 0x20000);
         assert!(matches!(v.chip(), Some(Chip::D1)));
+
+        raw[8..12].copy_from_slice(&0x0018_8200u32.to_le_bytes());
+        let v: Version = raw.into();
+        assert_eq!(v.id(), 0x0018_8200);
+        assert!(matches!(v.chip(), Some(Chip::V821)));
     }
 }

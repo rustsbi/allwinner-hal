@@ -8,6 +8,7 @@ use crate::fel::error::FelError;
 pub mod d1;
 pub mod payload;
 pub mod util;
+pub mod v821;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DdrProfile {
@@ -102,6 +103,7 @@ pub fn detect_from_fel(fel: &Fel<'_>) -> crate::fel::error::FelResult<Option<Box
     debug!("detect_from_fel: version = {:x?}", v);
     Ok(match v.chip() {
         Some(crate::Chip::D1) => Some(Box::new(d1::D1)),
+        Some(crate::Chip::V821) => Some(Box::new(v821::V821)),
         _ => None,
     })
 }
@@ -117,6 +119,7 @@ mod tests {
         assert_eq!("d1-h".parse::<DdrProfile>(), Ok(DdrProfile::D1));
         assert_eq!("f133".parse::<DdrProfile>(), Ok(DdrProfile::F133));
         assert_eq!("T113".parse::<DdrProfile>(), Ok(DdrProfile::F133));
+        assert!("V821".parse::<DdrProfile>().is_err());
         assert!("abc".parse::<DdrProfile>().is_err());
     }
 }

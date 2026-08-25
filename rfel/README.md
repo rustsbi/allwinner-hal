@@ -2,6 +2,11 @@
 
 Rust Allwinner FEL command-line tool.
 
+Supported chips:
+
+- D1 / D1s / D1-H / F133
+- V821
+
 ## Reference
 
 XFEL project: https://github.com/xboot/xfel

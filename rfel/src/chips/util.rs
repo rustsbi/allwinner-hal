@@ -59,8 +59,7 @@ pub fn read32_via_stub(fel: &Fel<'_>, addr: u32) -> Result<u32, ChipError> {
             "read32 stub missing: put assets/payloads/read32.bin",
         ));
     }
-    let out = exec_stub(fel, payload, &u32_params_le(&[addr]), 4)?;
-    Ok(u32::from_le_bytes(out.try_into().unwrap()))
+    read32_via_payload(fel, payload, addr)
 }
 
 /// Write a 32-bit register via write32 stub (executes at scratchpad)
@@ -71,6 +70,22 @@ pub fn write32_via_stub(fel: &Fel<'_>, addr: u32, val: u32) -> Result<(), ChipEr
             "write32 stub missing: put assets/payloads/write32.bin",
         ));
     }
+    write32_via_payload(fel, payload, addr, val)
+}
+
+/// Read a 32-bit register using the supplied architecture-specific payload.
+pub fn read32_via_payload(fel: &Fel<'_>, payload: &[u8], addr: u32) -> Result<u32, ChipError> {
+    let out = exec_stub(fel, payload, &u32_params_le(&[addr]), 4)?;
+    Ok(u32::from_le_bytes(out.try_into().unwrap()))
+}
+
+/// Write a 32-bit register using the supplied architecture-specific payload.
+pub fn write32_via_payload(
+    fel: &Fel<'_>,
+    payload: &[u8],
+    addr: u32,
+    val: u32,
+) -> Result<(), ChipError> {
     let _ = exec_stub(fel, payload, &u32_params_le(&[addr, val]), 0)?;
     Ok(())
 }

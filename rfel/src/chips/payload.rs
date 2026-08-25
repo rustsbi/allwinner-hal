@@ -8,6 +8,15 @@ pub const WRITE32: &[u8] = include_bytes!(concat!(
     "/assets/payloads/write32.bin"
 ));
 
+pub const READ32_V821: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/payloads/read32_v821.bin"
+));
+pub const WRITE32_V821: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/payloads/write32_v821.bin"
+));
+
 // JTAG/DDR payload
 pub const JTAG_ENABLE_D1: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -26,6 +35,14 @@ pub const SPI_INIT_D1: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/assets/payloads/spi_d1.bin"
 ));
+pub const DDR_INIT_V821: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/payloads/ddr_v821.bin"
+));
+pub const SPI_INIT_V821: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/payloads/spi_v821.bin"
+));
 
 #[cfg(test)]
 mod tests {
@@ -36,9 +53,19 @@ mod tests {
         // The repo includes these payloads under assets/payloads, ensure they got embedded.
         assert!(!READ32.is_empty(), "read32.bin should be embedded");
         assert!(!WRITE32.is_empty(), "write32.bin should be embedded");
+        assert!(
+            !READ32_V821.is_empty(),
+            "read32_v821.bin should be embedded"
+        );
+        assert!(
+            !WRITE32_V821.is_empty(),
+            "write32_v821.bin should be embedded"
+        );
         assert!(!JTAG_ENABLE_D1.is_empty(), "jtag_d1.bin should be embedded");
         assert!(!DDR_INIT_D1.is_empty(), "ddr_d1.bin should be embedded");
         assert!(!DDR_INIT_F133.is_empty(), "ddr_f133.bin should be embedded");
         assert!(!SPI_INIT_D1.is_empty(), "spi_d1.bin should be embedded");
+        assert!(!DDR_INIT_V821.is_empty(), "ddr_v821.bin should be embedded");
+        assert!(!SPI_INIT_V821.is_empty(), "spi_v821.bin should be embedded");
     }
 }

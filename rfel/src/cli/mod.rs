@@ -597,7 +597,7 @@ fn execute_device_command(
                     let profile_label = result
                         .profile
                         .map(|p| format!("{p:?}"))
-                        .unwrap_or_else(|| "unknown".to_string());
+                        .unwrap_or_else(|| "built-in".to_string());
                     println!(
                         "ddr init done (chip: {}, profile: {profile_label})",
                         result.chip_name
