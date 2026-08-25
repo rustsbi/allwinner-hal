@@ -3,6 +3,7 @@ use std::error::Error;
 use std::fmt;
 
 use crate::Fel;
+use crate::fel::error::FelError;
 
 pub mod d1;
 pub mod payload;
@@ -30,6 +31,8 @@ impl core::str::FromStr for DdrProfile {
 
 #[derive(Debug)]
 pub enum ChipError {
+    /// FEL protocol error
+    Fel(FelError),
     /// NotImplemented
     NotImplemented(&'static str),
     /// Unsupported operation or args
@@ -41,6 +44,7 @@ pub enum ChipError {
 impl fmt::Display for ChipError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            ChipError::Fel(err) => write!(f, "FEL error: {err}"),
             ChipError::NotImplemented(msg) => write!(f, "not implemented: {msg}"),
             ChipError::Unsupported(msg) => write!(f, "unsupported operation: {msg}"),
             ChipError::Other(msg) => write!(f, "chip error: {msg}"),
@@ -48,7 +52,20 @@ impl fmt::Display for ChipError {
     }
 }
 
-impl Error for ChipError {}
+impl Error for ChipError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            ChipError::Fel(err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
+impl From<FelError> for ChipError {
+    fn from(err: FelError) -> Self {
+        ChipError::Fel(err)
+    }
+}
 
 pub trait Chip {
     fn name(&self) -> String;
@@ -80,13 +97,13 @@ pub trait ChipSpi {
     ) -> Result<(), ChipError>;
 }
 
-pub fn detect_from_fel(fel: &Fel<'_>) -> Option<Box<dyn Chip>> {
-    let v = fel.get_version();
+pub fn detect_from_fel(fel: &Fel<'_>) -> crate::fel::error::FelResult<Option<Box<dyn Chip>>> {
+    let v = fel.get_version()?;
     debug!("detect_from_fel: version = {:x?}", v);
-    match v.chip() {
+    Ok(match v.chip() {
         Some(crate::Chip::D1) => Some(Box::new(d1::D1)),
         _ => None,
-    }
+    })
 }
 
 #[cfg(test)]

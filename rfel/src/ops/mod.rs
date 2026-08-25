@@ -10,6 +10,7 @@ pub use chip::{
 pub use flash::{FlashAccess, FlashDetectError, FlashIoError, FlashKind};
 
 use crate::Progress;
+use crate::fel::error::FelError;
 use crate::fel::{CHUNK_SIZE, Fel, Version};
 use crate::transfer::{read_to_writer, write_from_reader};
 use std::error::Error;
@@ -48,12 +49,14 @@ pub struct HexdumpLine<'a> {
 
 #[derive(Debug)]
 pub enum FelOpError {
+    Fel(FelError),
     Io(std::io::Error),
 }
 
 impl fmt::Display for FelOpError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            FelOpError::Fel(err) => write!(f, "FEL error: {err}"),
             FelOpError::Io(err) => write!(f, "I/O error: {}", err),
         }
     }
@@ -62,6 +65,7 @@ impl fmt::Display for FelOpError {
 impl Error for FelOpError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
+            FelOpError::Fel(err) => Some(err),
             FelOpError::Io(err) => Some(err),
         }
     }
@@ -70,6 +74,12 @@ impl Error for FelOpError {
 impl From<std::io::Error> for FelOpError {
     fn from(err: std::io::Error) -> Self {
         FelOpError::Io(err)
+    }
+}
+
+impl From<FelError> for FelOpError {
+    fn from(err: FelError) -> Self {
+        FelOpError::Fel(err)
     }
 }
 
@@ -109,7 +119,7 @@ pub fn op_write(
 /// Read a 32-bit value from the specified address.
 pub fn op_read32(fel: &Fel<'_>, address: u32) -> FelOpResult<Read32Result> {
     let mut buf = [0u8; 4];
-    fel.read_address(address, &mut buf);
+    fel.read_address(address, &mut buf)?;
     Ok(Read32Result {
         address,
         value: u32::from_le_bytes(buf),
@@ -118,21 +128,21 @@ pub fn op_read32(fel: &Fel<'_>, address: u32) -> FelOpResult<Read32Result> {
 
 /// Write a 32-bit value to the specified address.
 pub fn op_write32(fel: &Fel<'_>, address: u32, value: u32) -> FelOpResult<()> {
-    fel.write_address(address, &value.to_le_bytes());
+    fel.write_address(address, &value.to_le_bytes())?;
     Ok(())
 }
 
 /// Execute code at the given address.
 pub fn op_exec(fel: &Fel<'_>, address: u32) -> FelOpResult<()> {
-    fel.exec(address);
+    fel.exec(address)?;
     Ok(())
 }
 
 /// Retrieve the device version reported by FEL.
-pub fn op_version(fel: &Fel<'_>) -> VersionInfo {
-    VersionInfo {
-        version: fel.get_version(),
-    }
+pub fn op_version(fel: &Fel<'_>) -> FelOpResult<VersionInfo> {
+    Ok(VersionInfo {
+        version: fel.get_version()?,
+    })
 }
 
 /// Perform a hexdump in 16-byte lines and emit each line through the provided callback.
@@ -148,7 +158,7 @@ where
     let mut buf = vec![0u8; CHUNK_SIZE];
     while length > 0 {
         let chunk_len = length.min(buf.len());
-        fel.read_address(address as u32, &mut buf[..chunk_len]);
+        fel.read_address(address as u32, &mut buf[..chunk_len])?;
         for line_offset in (0..chunk_len).step_by(16) {
             let line_len = (chunk_len - line_offset).min(16);
             sink(HexdumpLine {

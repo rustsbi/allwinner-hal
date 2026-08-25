@@ -3,11 +3,13 @@ use std::fmt;
 use crate::chips::{Chip, ChipError, ChipSpi, SpiContext};
 use crate::consts::*;
 use crate::fel::Fel;
+use crate::fel::error::FelError;
 use crate::transfer::{read_all, write_all};
 
 #[derive(Debug)]
 pub enum SpiError {
     Chip(ChipError),
+    Fel(FelError),
     Unsupported(&'static str),
     CommandTooLarge(usize),
     LengthOverflow,
@@ -82,7 +84,7 @@ impl Command {
 
         self.commands.push(SPI_CMD_END);
         if !self.data.is_empty() {
-            write_all(fel, swap_base, &self.data[..]);
+            write_all(fel, swap_base, &self.data[..])?;
         }
         session.run_commands(fel, &self.commands)?;
         Ok(())
@@ -93,6 +95,7 @@ impl fmt::Display for SpiError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SpiError::Chip(err) => write!(f, "SPI helper error: {err}"),
+            SpiError::Fel(err) => write!(f, "FEL error: {err}"),
             SpiError::Unsupported(msg) => write!(f, "unsupported SPI operation: {msg}"),
             SpiError::CommandTooLarge(len) => {
                 write!(f, "spi command buffer too large ({len} bytes)")
@@ -106,6 +109,7 @@ impl std::error::Error for SpiError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             SpiError::Chip(err) => Some(err),
+            SpiError::Fel(err) => Some(err),
             _ => None,
         }
     }
@@ -114,6 +118,12 @@ impl std::error::Error for SpiError {
 impl From<ChipError> for SpiError {
     fn from(value: ChipError) -> Self {
         SpiError::Chip(value)
+    }
+}
+
+impl From<FelError> for SpiError {
+    fn from(value: FelError) -> Self {
+        SpiError::Fel(value)
     }
 }
 
@@ -172,7 +182,7 @@ pub fn transfer(
                 swap_base,
                 ensure_u32(buf.len())?,
             );
-            write_all(fel, swap_base, buf);
+            write_all(fel, swap_base, buf)?;
         }
         if let Some(buf) = rx.as_ref() {
             push_descriptor(
@@ -186,7 +196,7 @@ pub fn transfer(
         commands.push(SPI_CMD_END);
         session.run_commands(fel, &commands)?;
         if let Some(buf) = rx {
-            read_all(fel, swap_base, buf);
+            read_all(fel, swap_base, buf)?;
         }
         return Ok(());
     }
@@ -246,7 +256,7 @@ fn push_single_transfer(
     commands.extend_from_slice(&len.to_le_bytes());
     commands.push(SPI_CMD_END);
     if opcode == SPI_CMD_TXBUF {
-        write_all(fel, addr, payload);
+        write_all(fel, addr, payload)?;
     }
     session.run_commands(fel, &commands)
 }
@@ -264,6 +274,6 @@ fn single_receive(
     commands.extend_from_slice(&len.to_le_bytes());
     commands.push(SPI_CMD_END);
     session.run_commands(fel, &commands)?;
-    read_all(fel, addr, out);
+    read_all(fel, addr, out)?;
     Ok(())
 }

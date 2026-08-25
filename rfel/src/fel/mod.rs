@@ -1,7 +1,9 @@
+pub mod error;
 mod protocol;
 
 pub use protocol::{Chip, FelRequest, UsbRequest, Version};
 
+use error::{FelError, FelResult, check_fel_ack};
 use futures::executor::block_on;
 use log::{debug, error, trace};
 use nusb::transfer::EndpointType;
@@ -18,11 +20,7 @@ pub struct Fel<'a> {
 
 impl<'a> Fel<'a> {
     #[inline]
-    #[allow(
-        clippy::result_unit_err,
-        reason = "preserve the existing public API until a versioned error type is introduced"
-    )]
-    pub fn open_interface(iface: &'a mut nusb::Interface) -> Result<Self, ()> {
+    pub fn open_interface(iface: &'a mut nusb::Interface) -> FelResult<Self> {
         let mut endpoint_in = None;
         let mut endpoint_out = None;
         for descriptor in iface.descriptors() {
@@ -41,7 +39,7 @@ impl<'a> Fel<'a> {
             error!(
                 "Malformed device. Allwinner USB FEL device should include exactly one bulk in and one bulk out endpoint."
             );
-            return Err(());
+            return Err(FelError::MissingBulkEndpoints);
         };
 
         debug!(
@@ -57,17 +55,19 @@ impl<'a> Fel<'a> {
         })
     }
 
-    pub fn get_version(&self) -> Version {
-        self.version.unwrap_or_else(|| {
-            let mut buf = [0u8; 32];
-            self.send_fel_request(FelRequest::get_version());
-            self.usb_read(&mut buf);
-            self.read_fel_status();
-            buf.into()
-        })
+    pub fn get_version(&self) -> FelResult<Version> {
+        if let Some(version) = self.version {
+            return Ok(version);
+        }
+
+        let mut buf = [0u8; 32];
+        self.send_fel_request(FelRequest::get_version());
+        self.usb_read(&mut buf);
+        self.read_fel_status()?;
+        Ok(buf.into())
     }
 
-    pub fn read_address(&self, address: u32, buf: &mut [u8]) -> usize {
+    pub fn read_address(&self, address: u32, buf: &mut [u8]) -> FelResult<()> {
         trace!("read_address(single chunk)");
         debug_assert!(
             buf.len() <= CHUNK_SIZE,
@@ -75,11 +75,10 @@ impl<'a> Fel<'a> {
         );
         self.send_fel_request(FelRequest::read_raw(address, buf.len() as u32));
         self.usb_read(buf);
-        self.read_fel_status();
-        buf.len()
+        self.read_fel_status()
     }
 
-    pub fn write_address(&self, address: u32, buf: &[u8]) -> usize {
+    pub fn write_address(&self, address: u32, buf: &[u8]) -> FelResult<()> {
         trace!("write_address(single chunk)");
         debug_assert!(
             buf.len() <= CHUNK_SIZE,
@@ -87,15 +86,15 @@ impl<'a> Fel<'a> {
         );
         self.send_fel_request(FelRequest::write_raw(address, buf.len() as u32));
         self.usb_write(buf);
-        self.read_fel_status();
-        buf.len()
+        self.read_fel_status()
     }
 
-    pub fn exec(&self, address: u32) {
+    pub fn exec(&self, address: u32) -> FelResult<()> {
         trace!("exec");
         self.send_fel_request(FelRequest::exec(address));
-        self.read_fel_status();
+        self.read_fel_status()?;
         log::debug!("Execution started at 0x{:08x},", address);
+        Ok(())
     }
 
     fn send_fel_request(&self, request: FelRequest) {
@@ -104,10 +103,11 @@ impl<'a> Fel<'a> {
         self.usb_write(&buf);
     }
 
-    fn read_fel_status(&self) {
+    fn read_fel_status(&self) -> FelResult<()> {
         trace!("read_fel_status");
         let mut buf = [0u8; 8];
         self.usb_read(&mut buf);
+        check_fel_ack(buf)
     }
 
     fn usb_read(&self, buf: &mut [u8]) {

@@ -16,7 +16,7 @@ pub fn read_to_writer(
     while length > 0 {
         let n = length.min(CHUNK_SIZE);
         let slice = &mut buf[..n];
-        fel.read_address(address, slice);
+        fel.read_address(address, slice).map_err(io::Error::other)?;
         writer.write_all(slice)?;
         written += n;
         if let Some(p) = progress.as_deref_mut() {
@@ -42,7 +42,8 @@ pub fn write_from_reader(
         if n == 0 {
             break;
         }
-        fel.write_address(address, &buf[..n]);
+        fel.write_address(address, &buf[..n])
+            .map_err(io::Error::other)?;
         total += n;
         if let Some(p) = progress.as_deref_mut() {
             p.inc(n as u64);
@@ -53,22 +54,32 @@ pub fn write_from_reader(
 }
 
 /// Write the entire buffer to the target address, chunk by chunk.
-pub fn write_all(fel: &Fel<'_>, mut addr: u32, mut data: &[u8]) {
+pub fn write_all(
+    fel: &Fel<'_>,
+    mut addr: u32,
+    mut data: &[u8],
+) -> crate::fel::error::FelResult<()> {
     while !data.is_empty() {
         let n = data.len().min(CHUNK_SIZE);
-        fel.write_address(addr, &data[..n]);
+        fel.write_address(addr, &data[..n])?;
         addr = addr.wrapping_add(n as u32);
         data = &data[n..];
     }
+    Ok(())
 }
 
 /// Fill the output buffer by reading from the given address in chunks.
-pub fn read_all(fel: &Fel<'_>, mut addr: u32, mut out: &mut [u8]) {
+pub fn read_all(
+    fel: &Fel<'_>,
+    mut addr: u32,
+    mut out: &mut [u8],
+) -> crate::fel::error::FelResult<()> {
     while !out.is_empty() {
         let n = out.len().min(CHUNK_SIZE);
         let (head, tail) = out.split_at_mut(n);
-        fel.read_address(addr, head);
+        fel.read_address(addr, head)?;
         addr = addr.wrapping_add(n as u32);
         out = tail;
     }
+    Ok(())
 }

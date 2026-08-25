@@ -15,7 +15,7 @@ pub fn exec_stub(
     if payload.is_empty() {
         return Err(ChipError::NotImplemented("payload is empty"));
     }
-    let base = fel.get_version().scratchpad();
+    let base = fel.get_version()?.scratchpad();
 
     trace!(
         "exec_stub: base=0x{base:08x}, payload_len={}, params_len={}, out_len={}",
@@ -25,12 +25,12 @@ pub fn exec_stub(
     );
 
     // Write payload in chunks
-    write_all(fel, base, payload);
+    write_all(fel, base, payload)?;
     // Write params in chunks, immediately after the payload
     let params_addr = base.wrapping_add(payload.len() as u32);
-    write_all(fel, params_addr, params_le);
+    write_all(fel, params_addr, params_le)?;
     // Execute
-    fel.exec(base);
+    fel.exec(base)?;
 
     // Read return buffer (if requested)
     if out_len == 0 {
@@ -38,7 +38,7 @@ pub fn exec_stub(
     }
     let out_addr = params_addr.wrapping_add(params_le.len() as u32);
     let mut out = vec![0u8; out_len];
-    read_all(fel, out_addr, &mut out);
+    read_all(fel, out_addr, &mut out)?;
     Ok(out)
 }
 

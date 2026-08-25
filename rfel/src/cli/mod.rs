@@ -257,7 +257,7 @@ pub enum CliError {
     MultipleDevices,
     OpenDevice(nusb::Error),
     ClaimInterface(nusb::Error),
-    FelInterface,
+    Fel(crate::fel::error::FelError),
     UnsupportedChip,
     UnimplementedCommand(String),
 }
@@ -273,7 +273,7 @@ impl fmt::Display for CliError {
             ),
             CliError::OpenDevice(_) => write!(f, "failed to open USB device"),
             CliError::ClaimInterface(_) => write!(f, "failed to claim USB interface 0"),
-            CliError::FelInterface => write!(f, "open usb interface as an FEL device"),
+            CliError::Fel(err) => write!(f, "FEL error: {err}"),
             CliError::UnsupportedChip => write!(f, "error: unsupported chip"),
             CliError::UnimplementedCommand(cmd) => {
                 write!(f, "command '{cmd}' is not implemented yet")
@@ -288,6 +288,7 @@ impl Error for CliError {
             CliError::DeviceList(err)
             | CliError::OpenDevice(err)
             | CliError::ClaimInterface(err) => Some(err),
+            CliError::Fel(err) => Some(err),
             _ => None,
         }
     }
@@ -326,8 +327,8 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
     let mut interface = device
         .claim_interface(0)
         .map_err(CliError::ClaimInterface)?;
-    let fel = Fel::open_interface(&mut interface).map_err(|_| CliError::FelInterface)?;
-    let chip = match chips::detect_from_fel(&fel) {
+    let fel = Fel::open_interface(&mut interface).map_err(CliError::Fel)?;
+    let chip = match chips::detect_from_fel(&fel).map_err(CliError::Fel)? {
         Some(chip) => chip,
         None => return Err(CliError::UnsupportedChip),
     };
@@ -384,9 +385,13 @@ fn execute_device_command(
         Commands::Elf2Bin { .. } => unreachable!("device command invoked for host-only variant"),
         Commands::Patch { .. } => unreachable!("device command invoked for host-only variant"),
         Commands::Version => {
-            let info = ops::op_version(fel);
-            println!("chip: {}", chip.name());
-            println!("{:x?}", info.version);
+            match ops::op_version(fel) {
+                Ok(info) => {
+                    println!("chip: {}", chip.name());
+                    println!("{:x?}", info.version);
+                }
+                Err(err) => println!("error: version: {err}"),
+            }
             Ok(())
         }
         Commands::Hexdump { address, length } => {

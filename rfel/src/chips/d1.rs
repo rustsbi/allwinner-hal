@@ -57,8 +57,8 @@ impl Chip for D1 {
             payload::JTAG_ENABLE_D1.len()
         );
         // Write in chunks and execute
-        write_all(fel, D1_SRAM_BASE, payload::JTAG_ENABLE_D1);
-        fel.exec(D1_SRAM_BASE);
+        write_all(fel, D1_SRAM_BASE, payload::JTAG_ENABLE_D1)?;
+        fel.exec(D1_SRAM_BASE)?;
         Ok(())
     }
 
@@ -110,9 +110,9 @@ impl Chip for D1 {
                     payload::DDR_INIT_D1.len(),
                     params.len() * 4
                 );
-                write_all(fel, D1_SRAM_BASE, payload::DDR_INIT_D1);
-                write_all(fel, DDR_PARAM_ADDR, &u32_params_le(&params));
-                fel.exec(D1_SRAM_BASE);
+                write_all(fel, D1_SRAM_BASE, payload::DDR_INIT_D1)?;
+                write_all(fel, DDR_PARAM_ADDR, &u32_params_le(&params))?;
+                fel.exec(D1_SRAM_BASE)?;
                 Ok(())
             }
             DdrProfile::F133 => {
@@ -154,9 +154,9 @@ impl Chip for D1 {
                     payload::DDR_INIT_F133.len(),
                     params.len() * 4
                 );
-                write_all(fel, D1_SRAM_BASE, payload::DDR_INIT_F133);
-                write_all(fel, DDR_PARAM_ADDR, &u32_params_le(&params));
-                fel.exec(D1_SRAM_BASE);
+                write_all(fel, D1_SRAM_BASE, payload::DDR_INIT_F133)?;
+                write_all(fel, DDR_PARAM_ADDR, &u32_params_le(&params))?;
+                fel.exec(D1_SRAM_BASE)?;
                 Ok(())
             }
         }
@@ -178,7 +178,7 @@ impl ChipSpi for D1 {
             "loading SPI helper payload at 0x{SPI_PAYLOAD_BASE:08x} ({} bytes)",
             payload::SPI_INIT_D1.len()
         );
-        write_all(fel, SPI_PAYLOAD_BASE, payload::SPI_INIT_D1);
+        write_all(fel, SPI_PAYLOAD_BASE, payload::SPI_INIT_D1)?;
         Ok(SpiContext {
             payload_base: SPI_PAYLOAD_BASE,
             command_base: SPI_COMMAND_BASE,
@@ -202,8 +202,8 @@ impl ChipSpi for D1 {
             commands.len(),
             context.command_base
         );
-        write_all(fel, context.command_base, commands);
-        fel.exec(context.payload_base);
+        write_all(fel, context.command_base, commands)?;
+        fel.exec(context.payload_base)?;
         Ok(())
     }
 }

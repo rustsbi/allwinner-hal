@@ -1,6 +1,7 @@
 pub mod chips;
 pub mod cli;
 pub mod consts;
+pub mod error;
 pub mod fel;
 pub mod ops;
 pub mod progress;
