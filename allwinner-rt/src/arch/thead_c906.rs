@@ -1,4 +1,4 @@
-/// Jump over head data to executable code.
+/// Initialize the runtime and return to the BootROM when `main` returns.
 ///
 /// # Safety
 ///
@@ -11,15 +11,31 @@
     unsafe(link_section = ".text.entry")
 )]
 #[unsafe(naked)]
-pub unsafe extern "C" fn thead_c906_start() -> ! {
+pub unsafe extern "C" fn thead_c906_start() {
     use super::riscv_fpu::init_floating_point;
     use crate::main;
     const STACK_SIZE: usize = 8 * 1024;
+
+    #[repr(align(16))]
+    #[allow(dead_code)] // Accessed directly by the startup assembly.
+    struct RuntimeStack([u8; STACK_SIZE]);
+
     #[unsafe(link_section = ".bss.uninit")]
-    static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
+    static mut STACK: RuntimeStack = RuntimeStack([0; STACK_SIZE]);
+
     core::arch::naked_asm!(
         // Disable interrupt
         "csrw   mie, zero",
+        // Preserve the ROM call frame.
+        "addi   sp, sp, -48
+        sd      ra, 0(sp)
+        sd      t0, 8(sp)
+        sd      t1, 16(sp)
+        sd      t2, 24(sp)
+        sd      s11, 32(sp)
+        addi    t0, sp, 48
+        sd      t0, 40(sp)
+        csrw    mscratch, sp",
         // Enable T-Head ISA extension
         "li     t1, 1 << 22",
         "csrs   0x7C0, t1",
@@ -52,13 +68,22 @@ pub unsafe extern "C" fn thead_c906_start() -> ! {
         "call   {init_floating_point}",
         // Start Rust main function
         "call   {main}",
-        // Platform halt if main function returns
-        "call   {thead_c906_halt}",
+        // Restore the ROM call frame only when returning from `main`.
+        "fence rw, rw
+        csrci   0x7C1, 2
+        fence.i
+        csrr    sp, mscratch
+        ld      ra, 0(sp)
+        ld      t0, 8(sp)
+        ld      t1, 16(sp)
+        ld      t2, 24(sp)
+        ld      s11, 32(sp)
+        ld      sp, 40(sp)
+        ret",
         stack      =   sym STACK,
         stack_size = const STACK_SIZE,
         init_floating_point = sym init_floating_point,
         main       =   sym main,
-        thead_c906_halt = sym thead_c906_halt,
     )
 }
 
