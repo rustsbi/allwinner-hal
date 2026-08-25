@@ -186,7 +186,7 @@ fn process_sections(sections: Vec<object::Section>) -> Result<Vec<u8>> {
         .iter()
         .map(|x| x.address + x.data.len() as u64 - first_address)
         .max()
-        .unwrap_or_else(0);
+        .unwrap_or(0);
     let total_len =
         usize::try_from(total_len).map_err(|_| Elf2BinError::SectionSizeOverflow(total_len))?;
 
