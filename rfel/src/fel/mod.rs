@@ -112,7 +112,7 @@ impl<'a> Fel<'a> {
 
     fn usb_read(&self, buf: &mut [u8]) {
         trace!("usb_read");
-        let buf_1: [u8; 36] = UsbRequest::usb_read(buf.len() as u32).into();
+        let buf_1: [u8; 32] = UsbRequest::usb_read(buf.len() as u32).into();
         block_on(self.iface.bulk_out(self.endpoint_out, buf_1.to_vec()))
             .status
             .expect("send_usb_request on usb_read transfer");
@@ -132,7 +132,7 @@ impl<'a> Fel<'a> {
 
     fn usb_write(&self, buf: &[u8]) {
         trace!("usb_write");
-        let buf_1: [u8; 36] = UsbRequest::usb_write(buf.len() as u32).into();
+        let buf_1: [u8; 32] = UsbRequest::usb_write(buf.len() as u32).into();
         block_on(self.iface.bulk_out(self.endpoint_out, buf_1.to_vec()))
             .status
             .expect("send_usb_request on usb_write transfer");

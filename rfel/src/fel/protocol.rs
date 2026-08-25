@@ -1,46 +1,39 @@
 use core::fmt;
 
 /// USB request layout used by the FEL protocol transport.
-#[repr(C)]
 pub struct UsbRequest {
-    magic: [u8; 8],
     length: u32,
-    unknown1: u32,
     request: u16,
-    length2: u32,
-    pad: [u8; 10],
 }
 
 impl UsbRequest {
     #[inline]
     pub const fn usb_write(length: u32) -> Self {
         Self {
-            magic: *b"AWUC\0\0\0\0",
             request: 0x12,
             length,
-            length2: length,
-            unknown1: 0x0c00_0000,
-            pad: [0; 10],
         }
     }
 
     #[inline]
     pub const fn usb_read(length: u32) -> Self {
         Self {
-            magic: *b"AWUC\0\0\0\0",
             request: 0x11,
             length,
-            length2: length,
-            unknown1: 0x0c00_0000,
-            pad: [0; 10],
         }
     }
 }
 
-impl From<UsbRequest> for [u8; 36] {
+impl From<UsbRequest> for [u8; 32] {
     #[inline]
     fn from(value: UsbRequest) -> Self {
-        unsafe { core::mem::transmute(value) }
+        let mut bytes = [0; 32];
+        bytes[0..8].copy_from_slice(b"AWUC\0\0\0\0");
+        bytes[8..12].copy_from_slice(&value.length.to_le_bytes());
+        bytes[12..16].copy_from_slice(&0x0c00_0000u32.to_le_bytes());
+        bytes[16..18].copy_from_slice(&value.request.to_le_bytes());
+        bytes[18..22].copy_from_slice(&value.length.to_le_bytes());
+        bytes
     }
 }
 
@@ -168,9 +161,8 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg(target_endian = "little")]
     fn test_usb_request_pack_read_write() {
-        let b_read: [u8; 36] = UsbRequest::usb_read(0x1234).into();
+        let b_read: [u8; 32] = UsbRequest::usb_read(0x1234).into();
         assert_eq!(&b_read[0..8], b"AWUC\0\0\0\0");
         assert_eq!(
             u32::from_le_bytes(b_read[8..12].try_into().unwrap()),
@@ -182,11 +174,12 @@ mod tests {
         );
         assert_eq!(u16::from_le_bytes(b_read[16..18].try_into().unwrap()), 0x11);
         assert_eq!(
-            u32::from_le_bytes(b_read[20..24].try_into().unwrap()),
+            u32::from_le_bytes(b_read[18..22].try_into().unwrap()),
             0x1234
         );
+        assert_eq!(&b_read[22..32], &[0; 10]);
 
-        let b_write: [u8; 36] = UsbRequest::usb_write(0x5678).into();
+        let b_write: [u8; 32] = UsbRequest::usb_write(0x5678).into();
         assert_eq!(&b_write[0..8], b"AWUC\0\0\0\0");
         assert_eq!(
             u32::from_le_bytes(b_write[8..12].try_into().unwrap()),
@@ -201,9 +194,10 @@ mod tests {
             0x12
         );
         assert_eq!(
-            u32::from_le_bytes(b_write[20..24].try_into().unwrap()),
+            u32::from_le_bytes(b_write[18..22].try_into().unwrap()),
             0x5678
         );
+        assert_eq!(&b_write[22..32], &[0; 10]);
     }
 
     #[test]
