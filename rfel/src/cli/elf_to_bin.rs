@@ -39,7 +39,7 @@ pub(crate) fn resolve_output_path(
 /// objcopy::elf::executeObjcopyOnBinary()` method
 pub fn elf_to_bin_bytes(elf_data: &[u8]) -> Result<Vec<u8>> {
     // Parse the ELF file
-    let elf_file = object::File::parse(elf_data).map_err(|e| Elf2BinError::ObjectError(e))?;
+    let elf_file = object::File::parse(elf_data).map_err(Elf2BinError::ObjectError)?;
 
     // Get loadable sections
     let mut sections = get_loadable_sections(&elf_file);
@@ -58,13 +58,13 @@ pub fn elf_to_bin_bytes(elf_data: &[u8]) -> Result<Vec<u8>> {
 /// Wrapper function for converting ELF to binary, takes input and output file paths
 pub fn elf_to_bin(input_path: impl AsRef<Path>, output_path: impl AsRef<Path>) -> Result<()> {
     // Read the ELF file
-    let elf_data = fs::read(input_path).map_err(|e| Elf2BinError::IoError(e))?;
+    let elf_data = fs::read(input_path).map_err(Elf2BinError::IoError)?;
 
     // Convert ELF to binary
     let bin_data = elf_to_bin_bytes(&elf_data)?;
 
     // Write the binary data to the output file
-    fs::write(output_path, bin_data).map_err(|e| Elf2BinError::IoError(e))?;
+    fs::write(output_path, bin_data).map_err(Elf2BinError::IoError)?;
 
     Ok(())
 }

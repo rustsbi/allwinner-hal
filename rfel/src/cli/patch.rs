@@ -27,11 +27,11 @@ pub fn patch_image(
     let mut input_file = std::fs::OpenOptions::new()
         .read(true)
         .open(&input_path)
-        .map_err(|e| PatchError::IoError(e))?;
+        .map_err(PatchError::IoError)?;
     debug!("opened input file: {}", input_path.as_ref().display());
 
     // Check input file length
-    let input_metadata = input_file.metadata().map_err(|e| PatchError::IoError(e))?;
+    let input_metadata = input_file.metadata().map_err(PatchError::IoError)?;
     let total_length = input_metadata.len();
     if total_length < EGON_HEADER_LENGTH {
         error!(
@@ -55,7 +55,7 @@ pub fn patch_image(
     // so we copy the file first then open it for read and write
     // Do NOT create a new file when opening output file path since it leads to creating an empty file and will break the consistency when input and output paths not same
     // If `is_same_file` fails, we just assume they are different and proceed
-    let same_path = is_same_file(&input_path, &output_path).unwrap_or_else(|_| false);
+    let same_path = is_same_file(&input_path, &output_path).unwrap_or(false);
     debug!(
         "input and output file same check: {}",
         if same_path { "same" } else { "different" }
@@ -76,9 +76,7 @@ pub fn patch_image(
     let mut output_file = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
-        .create(true)
-        .open(&output_path)
-        .map_err(|e| PatchError::IoError(e))?;
+        .open(&output_path)?;
     debug!("opened output file: {}", output_path.as_ref().display());
 
     let new_len = align_up_to(total_length, 16 * 1024); // align up to 16KB

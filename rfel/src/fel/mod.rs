@@ -18,6 +18,10 @@ pub struct Fel<'a> {
 
 impl<'a> Fel<'a> {
     #[inline]
+    #[allow(
+        clippy::result_unit_err,
+        reason = "preserve the existing public API until a versioned error type is introduced"
+    )]
     pub fn open_interface(iface: &'a mut nusb::Interface) -> Result<Self, ()> {
         let mut endpoint_in = None;
         let mut endpoint_out = None;

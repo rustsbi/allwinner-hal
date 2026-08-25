@@ -190,10 +190,7 @@ pub enum Commands {
 
 impl Commands {
     fn requires_device(&self) -> bool {
-        match self {
-            Commands::Elf2Bin { .. } | Commands::Patch { .. } => false,
-            _ => true,
-        }
+        !matches!(self, Commands::Elf2Bin { .. } | Commands::Patch { .. })
     }
 }
 

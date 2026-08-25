@@ -30,7 +30,7 @@ impl Chip for D1 {
     fn sid(&self, fel: &Fel<'_>) -> Result<Vec<u8>, ChipError> {
         // Read 4 words via read32 stub from SID base
         const SID_BASE: u32 = 0x0300_6200;
-        let w0 = read32_via_stub(fel, SID_BASE + 0x0)?;
+        let w0 = read32_via_stub(fel, SID_BASE)?;
         let w1 = read32_via_stub(fel, SID_BASE + 0x4)?;
         let w2 = read32_via_stub(fel, SID_BASE + 0x8)?;
         let w3 = read32_via_stub(fel, SID_BASE + 0xC)?;

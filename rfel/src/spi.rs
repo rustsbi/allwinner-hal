@@ -13,7 +13,7 @@ pub enum SpiError {
     LengthOverflow,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Command {
     commands: Vec<u8>,
     data: Vec<u8>,
@@ -21,10 +21,7 @@ pub struct Command {
 
 impl Command {
     pub fn new() -> Self {
-        Self {
-            commands: vec![],
-            data: vec![],
-        }
+        Self::default()
     }
     pub fn wait_ready_nor(&mut self) {
         self.commands
@@ -84,7 +81,7 @@ impl Command {
         let swap_base = session.context.swap_base;
 
         self.commands.push(SPI_CMD_END);
-        if self.data.len() != 0 {
+        if !self.data.is_empty() {
             write_all(fel, swap_base, &self.data[..]);
         }
         session.run_commands(fel, &self.commands)?;
@@ -157,7 +154,7 @@ pub fn transfer(
     fel: &Fel<'_>,
     session: &SpiSession<'_>,
     tx: Option<&[u8]>,
-    mut rx: Option<&mut [u8]>,
+    rx: Option<&mut [u8]>,
 ) -> Result<(), SpiError> {
     let swap_base = session.context.swap_base;
     let swap_len = session.context.swap_len as usize;
@@ -188,7 +185,7 @@ pub fn transfer(
         commands.push(SPI_CMD_DESELECT);
         commands.push(SPI_CMD_END);
         session.run_commands(fel, &commands)?;
-        if let Some(buf) = rx.as_deref_mut() {
+        if let Some(buf) = rx {
             read_all(fel, swap_base, buf);
         }
         return Ok(());
@@ -211,7 +208,7 @@ pub fn transfer(
         }
     }
 
-    if let Some(buf) = rx.as_deref_mut() {
+    if let Some(buf) = rx {
         let mut offset = 0usize;
         while offset < buf.len() {
             let chunk = (buf.len() - offset).min(swap_len);

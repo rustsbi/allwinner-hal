@@ -98,10 +98,10 @@ pub fn read(
             (**p).inc(chunk as u64);
         }
     }
-    if let Some(p) = &mut progress {
-        if processed == total {
-            (**p).finish();
-        }
+    if let Some(p) = &mut progress
+        && processed == total
+    {
+        (**p).finish();
     }
     Ok(())
 }
@@ -134,10 +134,10 @@ pub fn write(
             (**p).inc(chunk as u64);
         }
     }
-    if let Some(p) = &mut progress {
-        if processed == total {
-            (**p).finish();
-        }
+    if let Some(p) = &mut progress
+        && processed == total
+    {
+        (**p).finish();
     }
     Ok(())
 }

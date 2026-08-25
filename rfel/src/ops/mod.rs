@@ -81,9 +81,9 @@ pub fn op_read(
     address: u32,
     length: usize,
     writer: &mut impl Write,
-    mut progress: Option<&mut Progress>,
+    progress: Option<&mut Progress>,
 ) -> FelOpResult<ReadResult> {
-    let written = read_to_writer(fel, address, length, writer, progress.as_deref_mut())?;
+    let written = read_to_writer(fel, address, length, writer, progress)?;
     Ok(ReadResult {
         address,
         length: written,
@@ -96,9 +96,9 @@ pub fn op_write(
     address: u32,
     reader: &mut impl Read,
     total_hint: u64,
-    mut progress: Option<&mut Progress>,
+    progress: Option<&mut Progress>,
 ) -> FelOpResult<WriteResult> {
-    let written = write_from_reader(fel, address, reader, progress.as_deref_mut())?;
+    let written = write_from_reader(fel, address, reader, progress)?;
     Ok(WriteResult {
         address,
         written,

@@ -144,7 +144,7 @@ impl<'chip> SpinorState<'chip> {
         if blocks.is_empty() {
             return Err(SpinorError::Unsupported("no erase opcode available"));
         }
-        blocks.sort_by(|a, b| b.size.cmp(&a.size));
+        blocks.sort_by_key(|block| std::cmp::Reverse(block.size));
         let smallest = blocks.iter().map(|b| b.size).min().unwrap_or(4096) as u64;
         let mask = smallest - 1;
         let mut base = address & !mask;
@@ -156,7 +156,7 @@ impl<'chip> SpinorState<'chip> {
             let mut erased = false;
             for block in &blocks {
                 let bsz = block.size as u64;
-                if base % bsz == 0 && cnt >= bsz {
+                if base.is_multiple_of(bsz) && cnt >= bsz {
                     self.erase_block(fel, base, block)?;
                     base += bsz;
                     cnt -= bsz;
