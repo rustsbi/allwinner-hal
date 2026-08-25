@@ -1,4 +1,4 @@
-/// Jump over head data to executable code.
+/// Initialize the runtime and return to the BootROM when `main` returns.
 ///
 /// # Safety
 ///
@@ -11,15 +11,67 @@
     unsafe(link_section = ".text.entry")
 )]
 #[unsafe(naked)]
-pub unsafe extern "C" fn thead_c906_start() -> ! {
+pub unsafe extern "C" fn thead_c906_start() {
     use super::riscv_fpu::init_floating_point;
     use crate::main;
     const STACK_SIZE: usize = 8 * 1024;
+
+    #[repr(C)]
+    #[allow(dead_code)] // Accessed directly by the startup assembly.
+    struct RomContext {
+        sp: usize,
+        ra: usize,
+        t0: usize,
+        t1: usize,
+        t2: usize,
+        mie: usize,
+        mstatus: usize,
+        mxstatus: usize,
+        mhcr: usize,
+        mhint: usize,
+    }
+
+    #[repr(align(16))]
+    #[allow(dead_code)] // Accessed directly by the startup assembly.
+    struct RuntimeStack([u8; STACK_SIZE]);
+
     #[unsafe(link_section = ".bss.uninit")]
-    static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
+    static mut ROM_CONTEXT: core::mem::MaybeUninit<RomContext> = core::mem::MaybeUninit::uninit();
+
+    #[unsafe(link_section = ".bss.uninit")]
+    static mut STACK: core::mem::MaybeUninit<RuntimeStack> = core::mem::MaybeUninit::uninit();
+
     core::arch::naked_asm!(
-        // Disable interrupt
-        "csrw   mie, zero",
+        // Use a temporary ROM stack frame while locating the private runtime
+        // context. No scratch register has to carry its address across main.
+        "addi   sp, sp, -32
+        sd      ra, 0(sp)
+        sd      t0, 8(sp)
+        sd      t1, 16(sp)
+        sd      t2, 24(sp)
+        la      t0, {rom_context}
+        addi    t1, sp, 32
+        sd      t1, {rom_sp}(t0)
+        ld      t1, 0(sp)
+        sd      t1, {rom_ra}(t0)
+        ld      t1, 8(sp)
+        sd      t1, {rom_t0}(t0)
+        ld      t1, 16(sp)
+        sd      t1, {rom_t1}(t0)
+        ld      t1, 24(sp)
+        sd      t1, {rom_t2}(t0)
+        csrr    t1, mie
+        sd      t1, {rom_mie}(t0)
+        csrrci  t1, mstatus, 0x8
+        sd      t1, {rom_mstatus}(t0)
+        csrr    t1, 0x7C0
+        sd      t1, {rom_mxstatus}(t0)
+        csrr    t1, 0x7C1
+        sd      t1, {rom_mhcr}(t0)
+        csrr    t1, 0x7C5
+        sd      t1, {rom_mhint}(t0)
+        addi    sp, sp, 32
+        csrw    mie, zero",
         // Enable T-Head ISA extension
         "li     t1, 1 << 22",
         "csrs   0x7C0, t1",
@@ -52,13 +104,47 @@ pub unsafe extern "C" fn thead_c906_start() -> ! {
         "call   {init_floating_point}",
         // Start Rust main function
         "call   {main}",
-        // Platform halt if main function returns
-        "call   {thead_c906_halt}",
-        stack      =   sym STACK,
-        stack_size = const STACK_SIZE,
+        // Make all runtime writes visible before restoring the BootROM cache
+        // policy. These encodings are C906 dcache.ciall, sync.s, icache.iall,
+        // and sync.s respectively.
+        "fence rw, rw
+        .word   0x0030000b
+        .word   0x01b0000b
+        .word   0x0100000b
+        .word   0x01b0000b
+        fence.i
+        la      a0, {rom_context}
+        ld      t0, {rom_mhint}(a0)
+        csrw    0x7C5, t0
+        ld      t0, {rom_mhcr}(a0)
+        csrw    0x7C1, t0
+        ld      a1, {rom_mxstatus}(a0)
+        ld      a2, {rom_mie}(a0)
+        ld      a3, {rom_mstatus}(a0)
+        ld      ra, {rom_ra}(a0)
+        ld      t0, {rom_t0}(a0)
+        ld      t1, {rom_t1}(a0)
+        ld      t2, {rom_t2}(a0)
+        ld      sp, {rom_sp}(a0)
+        csrw    0x7C0, a1
+        csrw    mie, a2
+        csrw    mstatus, a3
+        ret",
+        rom_context = sym ROM_CONTEXT,
+        rom_sp       = const core::mem::offset_of!(RomContext, sp),
+        rom_ra       = const core::mem::offset_of!(RomContext, ra),
+        rom_t0       = const core::mem::offset_of!(RomContext, t0),
+        rom_t1       = const core::mem::offset_of!(RomContext, t1),
+        rom_t2       = const core::mem::offset_of!(RomContext, t2),
+        rom_mie      = const core::mem::offset_of!(RomContext, mie),
+        rom_mstatus  = const core::mem::offset_of!(RomContext, mstatus),
+        rom_mxstatus = const core::mem::offset_of!(RomContext, mxstatus),
+        rom_mhcr     = const core::mem::offset_of!(RomContext, mhcr),
+        rom_mhint    = const core::mem::offset_of!(RomContext, mhint),
+        stack        = sym STACK,
+        stack_size   = const STACK_SIZE,
         init_floating_point = sym init_floating_point,
-        main       =   sym main,
-        thead_c906_halt = sym thead_c906_halt,
+        main         = sym main,
     )
 }
 
