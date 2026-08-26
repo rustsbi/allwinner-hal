@@ -61,7 +61,7 @@ impl<'a> Fel<'a> {
         }
 
         let mut buf = [0u8; 32];
-        self.send_fel_request(FelRequest::get_version());
+        self.send_fel_request(FelRequest::get_version())?;
         self.usb_read(&mut buf)?;
         self.read_fel_status()?;
         Ok(buf.into())
@@ -73,7 +73,7 @@ impl<'a> Fel<'a> {
             buf.len() <= CHUNK_SIZE,
             "read_address expects a single chunk (<= {CHUNK_SIZE} bytes)"
         );
-        self.send_fel_request(FelRequest::read_raw(address, buf.len() as u32));
+        self.send_fel_request(FelRequest::read_raw(address, buf.len() as u32))?;
         self.usb_read(buf)?;
         self.read_fel_status()
     }
@@ -84,23 +84,23 @@ impl<'a> Fel<'a> {
             buf.len() <= CHUNK_SIZE,
             "write_address expects a single chunk (<= {CHUNK_SIZE} bytes)"
         );
-        self.send_fel_request(FelRequest::write_raw(address, buf.len() as u32));
-        self.usb_write(buf);
+        self.send_fel_request(FelRequest::write_raw(address, buf.len() as u32))?;
+        self.usb_write(buf)?;
         self.read_fel_status()
     }
 
     pub fn exec(&self, address: u32) -> FelResult<()> {
         trace!("exec");
-        self.send_fel_request(FelRequest::exec(address));
+        self.send_fel_request(FelRequest::exec(address))?;
         self.read_fel_status()?;
         log::debug!("Execution started at 0x{:08x},", address);
         Ok(())
     }
 
-    fn send_fel_request(&self, request: FelRequest) {
+    fn send_fel_request(&self, request: FelRequest) -> FelResult<()> {
         trace!("send_fel_request");
         let buf: [u8; 16] = request.into();
-        self.usb_write(&buf);
+        self.usb_write(&buf)
     }
 
     fn read_fel_status(&self) -> FelResult<()> {
@@ -113,41 +113,41 @@ impl<'a> Fel<'a> {
     fn usb_read(&self, buf: &mut [u8]) -> FelResult<()> {
         trace!("usb_read");
         let buf_1: [u8; 32] = UsbRequest::usb_read(buf.len() as u32).into();
-        block_on(self.iface.bulk_out(self.endpoint_out, buf_1.to_vec()))
-            .status
-            .expect("send_usb_request on usb_read transfer");
-        let buf_2 = nusb::transfer::RequestBuffer::new(buf.len());
-        let ans = block_on(self.iface.bulk_in(self.endpoint_in, buf_2));
-        ans.status.expect("usb bulk out on usb_read transfer");
-        let buf_3 = nusb::transfer::RequestBuffer::new(13);
-        let ans_1 = block_on(self.iface.bulk_in(self.endpoint_in, buf_3));
-        ans_1
-            .status
-            .expect("read_usb_response on usb_read transfer");
-        if ans_1.data != *b"AWUS\0\0\0\0\0\0\0\0\0" {
-            panic!("invalid data received from read_usb_response")
+        self.bulk_out(buf_1.to_vec(), "sending a USB read request")?;
+        let data = self.bulk_in(buf.len(), "receiving USB read data")?;
+        let response = self.bulk_in(13, "receiving the USB read response")?;
+        if response != *b"AWUS\0\0\0\0\0\0\0\0\0" {
+            return Err(FelError::InvalidUsbResponse);
         }
-        check_usb_read_length(&ans.data, buf.len())?;
-        buf.copy_from_slice(&ans.data);
+        check_usb_read_length(&data, buf.len())?;
+        buf.copy_from_slice(&data);
         Ok(())
     }
 
-    fn usb_write(&self, buf: &[u8]) {
+    fn usb_write(&self, buf: &[u8]) -> FelResult<()> {
         trace!("usb_write");
         let buf_1: [u8; 32] = UsbRequest::usb_write(buf.len() as u32).into();
-        block_on(self.iface.bulk_out(self.endpoint_out, buf_1.to_vec()))
-            .status
-            .expect("send_usb_request on usb_write transfer");
-        block_on(self.iface.bulk_out(self.endpoint_out, buf.to_vec()))
-            .status
-            .expect("usb bulk out on usb_write transfer");
-        let buf_3 = nusb::transfer::RequestBuffer::new(13);
-        let ans_1 = block_on(self.iface.bulk_in(self.endpoint_in, buf_3));
-        ans_1
-            .status
-            .expect("read_usb_response on usb_write transfer");
-        if ans_1.data != *b"AWUS\0\0\0\0\0\0\0\0\0" {
-            panic!("invalid data received from read_usb_response")
+        self.bulk_out(buf_1.to_vec(), "sending a USB write request")?;
+        self.bulk_out(buf.to_vec(), "sending USB write data")?;
+        let response = self.bulk_in(13, "receiving the USB write response")?;
+        if response != *b"AWUS\0\0\0\0\0\0\0\0\0" {
+            return Err(FelError::InvalidUsbResponse);
         }
+        Ok(())
+    }
+
+    fn bulk_in(&self, length: usize, stage: &'static str) -> FelResult<Vec<u8>> {
+        let buffer = nusb::transfer::RequestBuffer::new(length);
+        let completion = block_on(self.iface.bulk_in(self.endpoint_in, buffer));
+        completion
+            .status
+            .map_err(|source| FelError::UsbTransfer { stage, source })?;
+        Ok(completion.data)
+    }
+
+    fn bulk_out(&self, data: Vec<u8>, stage: &'static str) -> FelResult<()> {
+        block_on(self.iface.bulk_out(self.endpoint_out, data))
+            .status
+            .map_err(|source| FelError::UsbTransfer { stage, source })
     }
 }

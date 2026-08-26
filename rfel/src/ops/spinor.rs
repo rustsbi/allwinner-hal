@@ -7,8 +7,13 @@ use crate::fel::Fel;
 use crate::progress::Progress;
 use crate::spi::{self, SpiError, SpiSession};
 
+use super::{erase_span, range_in_bounds};
+
 const OPCODE_SFDP: u8 = 0x5a;
 const OPCODE_RDID: u8 = 0x9f;
+const OPCODE_READ: u8 = 0x03;
+const OPCODE_PAGE_PROGRAM: u8 = 0x02;
+const OPCODE_WRITE_ENABLE: u8 = 0x06;
 const OPCODE_WRSR: u8 = 0x01;
 const OPCODE_RDSR: u8 = 0x05;
 const OPCODE_ENTER_4B: u8 = 0xb7;
@@ -17,6 +22,7 @@ const OPCODE_RESET_MEMORY: u8 = 0x99;
 const OPCODE_GLOBAL_UNLOCK: u8 = 0x98;
 const WAIT_TIMEOUT: Duration = Duration::from_secs(5);
 const SFDP_MAX_PARAMETERS: usize = 6;
+const FLASH_TRANSFER_CHUNK: usize = 64 * 1024;
 
 #[derive(Debug)]
 pub enum SpinorError {
@@ -99,6 +105,7 @@ pub fn write(
     progress: Option<&mut Progress>,
 ) -> SpinorResult<()> {
     let mut state = SpinorState::new(chip, fel)?;
+    state.erase_range(fel, address, data.len() as u64, None)?;
     state.write_range(fel, address, data, progress)
 }
 
@@ -140,18 +147,18 @@ impl<'chip> SpinorState<'chip> {
         length: u64,
         mut progress: Option<&mut Progress>,
     ) -> SpinorResult<()> {
+        self.validate_range(address, length)?;
+        if length == 0 {
+            return Ok(());
+        }
         let mut blocks = self.info.erase_blocks();
         if blocks.is_empty() {
             return Err(SpinorError::Unsupported("no erase opcode available"));
         }
         blocks.sort_by_key(|block| std::cmp::Reverse(block.size));
         let smallest = blocks.iter().map(|b| b.size).min().unwrap_or(4096) as u64;
-        let mask = smallest - 1;
-        let mut base = address & !mask;
-        let mut cnt = (address & mask) + length;
-        if cnt & mask != 0 {
-            cnt = (cnt + smallest) & !mask;
-        }
+        let (mut base, mut cnt) =
+            erase_span(address, length, smallest).ok_or(SpinorError::AddressOverflow)?;
         while cnt > 0 {
             let mut erased = false;
             for block in &blocks {
@@ -183,14 +190,15 @@ impl<'chip> SpinorState<'chip> {
         mut out: &mut [u8],
         mut progress: Option<&mut Progress>,
     ) -> SpinorResult<()> {
+        self.validate_range(address, out.len() as u64)?;
         while !out.is_empty() {
             let chunk = out
                 .len()
-                .min(self.read_chunk_size())
-                .min(self.session.context().swap_len as usize);
+                .min(self.session.context().swap_len as usize)
+                .min(FLASH_TRANSFER_CHUNK);
             let addr32 = self.addr_to_u32(address)?;
             let mut tx = Vec::with_capacity(1 + self.info.address_length as usize);
-            tx.push(self.info.opcode_read);
+            tx.push(OPCODE_READ);
             push_address(&mut tx, addr32, self.info.address_length);
             let (head, tail) = out.split_at_mut(chunk);
             spi::transfer(fel, &self.session, Some(&tx), Some(head))?;
@@ -210,15 +218,21 @@ impl<'chip> SpinorState<'chip> {
         mut data: &[u8],
         mut progress: Option<&mut Progress>,
     ) -> SpinorResult<()> {
+        self.validate_range(address, data.len() as u64)?;
         while !data.is_empty() {
             let max_payload = self.session.context().swap_len as usize;
             let overhead = self.info.address_length as usize + 1;
-            let available = max_payload.saturating_sub(overhead).max(1);
-            let chunk = data.len().min(self.write_chunk_size()).min(available);
+            let available = max_payload
+                .checked_sub(overhead)
+                .filter(|&limit| limit != 0)
+                .ok_or(SpinorError::Unsupported("SPI swap buffer is too small"))?;
+            let page_size = self.info.page_size.max(1) as usize;
+            let bytes_left_in_page = page_size - (address % page_size as u64) as usize;
+            let chunk = data.len().min(bytes_left_in_page).min(available);
             let addr32 = self.addr_to_u32(address)?;
             self.write_enable(fel)?;
             let mut tx = Vec::with_capacity(1 + self.info.address_length as usize + chunk);
-            tx.push(self.info.opcode_write);
+            tx.push(OPCODE_PAGE_PROGRAM);
             push_address(&mut tx, addr32, self.info.address_length);
             tx.extend_from_slice(&data[..chunk]);
             spi::transfer(fel, &self.session, Some(&tx), None)?;
@@ -247,21 +261,19 @@ impl<'chip> SpinorState<'chip> {
         self.wait_ready(fel)
     }
 
-    fn read_chunk_size(&self) -> usize {
-        let gran = self.info.read_granularity.max(1) as usize;
-        gran.min(self.session.context().swap_len as usize)
-    }
-
-    fn write_chunk_size(&self) -> usize {
-        let gran = self.info.write_granularity.max(1) as usize;
-        gran.min(self.session.context().swap_len as usize)
-    }
-
     fn addr_to_u32(&self, address: u64) -> SpinorResult<u32> {
         if self.info.address_length == 3 && address >= (1 << 24) {
             return Err(SpinorError::AddressOverflow);
         }
         u32::try_from(address).map_err(|_| SpinorError::AddressOverflow)
+    }
+
+    fn validate_range(&self, address: u64, length: u64) -> SpinorResult<()> {
+        if range_in_bounds(address, length, self.info.capacity) {
+            Ok(())
+        } else {
+            Err(SpinorError::AddressOverflow)
+        }
     }
 
     fn reset(&mut self, fel: &Fel<'_>) -> SpinorResult<()> {
@@ -276,12 +288,7 @@ impl<'chip> SpinorState<'chip> {
     }
 
     fn write_enable(&mut self, fel: &Fel<'_>) -> SpinorResult<()> {
-        spi::transfer(
-            fel,
-            &self.session,
-            Some(&[self.info.opcode_write_enable]),
-            None,
-        )?;
+        spi::transfer(fel, &self.session, Some(&[OPCODE_WRITE_ENABLE]), None)?;
         Ok(())
     }
 
@@ -313,17 +320,9 @@ impl<'chip> SpinorState<'chip> {
 
 struct SpinorInfo {
     name: String,
-    #[allow(dead_code)]
-    id: u32,
     capacity: u64,
-    #[allow(dead_code)]
-    block_size: u32,
-    read_granularity: u32,
-    write_granularity: u32,
+    page_size: u32,
     address_length: u8,
-    opcode_read: u8,
-    opcode_write: u8,
-    opcode_write_enable: u8,
     opcode_erase_4k: Option<u8>,
     opcode_erase_32k: Option<u8>,
     opcode_erase_64k: Option<u8>,
@@ -359,8 +358,12 @@ impl SpinorInfo {
         if &header[0..4] != b"SFDP" {
             return Ok(None);
         }
-        let minor = header[4];
-        let major = header[5];
+        log::debug!(
+            "SFDP header version {}.{}, {} parameter headers",
+            header[5],
+            header[4],
+            header[6] as usize + 1
+        );
         let nph = header[6];
         let param_count = ((nph as usize) + 1).min(SFDP_MAX_PARAMETERS);
         let mut basic: Option<(SfdpParameterHeader, Vec<u8>)> = None;
@@ -377,6 +380,12 @@ impl SpinorInfo {
             spi::transfer(fel, session, Some(&tx), Some(&mut param_raw))?;
             let param = SfdpParameterHeader::from_bytes(param_raw);
             if param.id_lsb == 0x00 && param.id_msb == 0xff {
+                log::debug!(
+                    "SFDP basic parameter table version {}.{}, {} DWORDs",
+                    param.major,
+                    param.minor,
+                    param.length
+                );
                 let mut table = vec![0u8; param.length as usize * 4];
                 let base = ((param.ptp[2] as u32) << 16)
                     | ((param.ptp[1] as u32) << 8)
@@ -396,85 +405,65 @@ impl SpinorInfo {
         let Some((param, table)) = basic else {
             return Ok(None);
         };
-        let info = Self::from_sfdp_table(major, minor, &param, &table)?;
+        let info = Self::from_sfdp_table(&param, &table)?;
         Ok(Some(info))
     }
 
-    fn from_sfdp_table(
-        major: u8,
-        minor: u8,
-        _param: &SfdpParameterHeader,
-        table: &[u8],
-    ) -> SpinorResult<Self> {
-        if table.len() < 64 {
+    fn from_sfdp_table(param: &SfdpParameterHeader, table: &[u8]) -> SpinorResult<Self> {
+        if table.len() < 8 {
             return Err(SpinorError::InvalidResponse("sfdp basic table too short"));
         }
-        let capacity_raw = u32::from_le_bytes([table[4], table[5], table[6], table[7]]);
+        let capacity_raw = read_dword(table, 4).unwrap();
         let capacity = if capacity_raw & 0x8000_0000 != 0 {
-            let exp = (capacity_raw & 0x7fff_ffff) - 3;
-            1u64 << exp
+            let exp = (capacity_raw & 0x7fff_ffff)
+                .checked_sub(3)
+                .ok_or(SpinorError::InvalidResponse("invalid sfdp density"))?;
+            1u64.checked_shl(exp)
+                .ok_or(SpinorError::InvalidResponse("invalid sfdp density"))?
         } else {
             ((capacity_raw as u64) + 1) / 8
         };
-        let dw1 = u32::from_le_bytes([table[0], table[1], table[2], table[3]]);
-        let mut address_length = 4u8;
-        if capacity <= 16 * 1024 * 1024 && ((dw1 >> 17) & 0x3) != 0x2 {
-            address_length = 3;
-        }
-        let mut erase4 = None;
+        let dw1 = read_dword(table, 0).unwrap();
+        let address_length = if capacity <= 16 * 1024 * 1024 && ((dw1 >> 17) & 0x3) != 0x2 {
+            3
+        } else {
+            4
+        };
+        let mut erase = [None; 4];
         if (dw1 & 0x3) == 0x1 {
-            erase4 = Some(((dw1 >> 8) & 0xff) as u8);
+            erase[0] = Some((dw1 >> 8) as u8);
         }
-        let mut erase32 = None;
-        let mut erase64 = None;
-        let mut erase256 = None;
-        for &offset in &[28usize, 32usize, 36usize] {
-            let dw = u32::from_le_bytes([
-                table[offset],
-                table[offset + 1],
-                table[offset + 2],
-                table[offset + 3],
-            ]);
-            match dw & 0xff {
-                12 => erase4 = Some((dw >> 8) as u8),
-                15 => erase32 = Some((dw >> 8) as u8),
-                16 => erase64 = Some((dw >> 8) as u8),
-                18 => erase256 = Some((dw >> 8) as u8),
-                _ => {}
-            }
-            match (dw >> 16) & 0xff {
-                12 => erase4 = Some((dw >> 24) as u8),
-                15 => erase32 = Some((dw >> 24) as u8),
-                16 => erase64 = Some((dw >> 24) as u8),
-                18 => erase256 = Some((dw >> 24) as u8),
-                _ => {}
+        for &offset in &[28usize, 32usize] {
+            let Some(dw) = read_dword(table, offset) else {
+                continue;
+            };
+            for shift in [0, 16] {
+                let index = match (dw >> shift) & 0xff {
+                    12 => 0,
+                    15 => 1,
+                    16 => 2,
+                    18 => 3,
+                    _ => continue,
+                };
+                erase[index] = Some((dw >> (shift + 8)) as u8);
             }
         }
-        let block_size = erase4
-            .map(|_| 4096)
-            .or_else(|| erase32.map(|_| 32 * 1024))
-            .or_else(|| erase64.map(|_| 64 * 1024))
-            .or_else(|| erase256.map(|_| 256 * 1024))
-            .unwrap_or(4096);
-        let write_granularity = if major == 1 && minor < 5 {
-            if (dw1 >> 2) & 0x1 == 0x1 { 64 } else { 1 }
-        } else if major == 1 {
-            let dw11 = u32::from_le_bytes([table[40], table[41], table[42], table[43]]);
+        let [erase4, erase32, erase64, erase256] = erase;
+        let page_size = if param.major == 1 && param.minor >= 5 {
+            let dw11 = read_dword(table, 40).ok_or(SpinorError::InvalidResponse(
+                "sfdp basic table missing page size",
+            ))?;
             1 << ((dw11 >> 4) & 0xf)
         } else {
+            // Older basic tables do not report the page size. 256 bytes is
+            // the conservative default used by mature SPI NOR stacks.
             256
         };
         Ok(Self {
             name: "SFDP".to_string(),
-            id: 0,
             capacity,
-            block_size,
-            read_granularity: 1,
-            write_granularity,
+            page_size,
             address_length,
-            opcode_read: 0x03,
-            opcode_write: 0x02,
-            opcode_write_enable: 0x06,
             opcode_erase_4k: erase4,
             opcode_erase_32k: erase32,
             opcode_erase_64k: erase64,
@@ -483,32 +472,15 @@ impl SpinorInfo {
     }
 
     fn erase_blocks(&self) -> Vec<EraseOpcode> {
-        let mut blocks = Vec::with_capacity(4);
-        if let Some(op) = self.opcode_erase_256k {
-            blocks.push(EraseOpcode {
-                size: 256 * 1024,
-                opcode: op,
-            });
-        }
-        if let Some(op) = self.opcode_erase_64k {
-            blocks.push(EraseOpcode {
-                size: 64 * 1024,
-                opcode: op,
-            });
-        }
-        if let Some(op) = self.opcode_erase_32k {
-            blocks.push(EraseOpcode {
-                size: 32 * 1024,
-                opcode: op,
-            });
-        }
-        if let Some(op) = self.opcode_erase_4k {
-            blocks.push(EraseOpcode {
-                size: 4 * 1024,
-                opcode: op,
-            });
-        }
-        blocks
+        [
+            (self.opcode_erase_256k, 256 * 1024),
+            (self.opcode_erase_64k, 64 * 1024),
+            (self.opcode_erase_32k, 32 * 1024),
+            (self.opcode_erase_4k, 4 * 1024),
+        ]
+        .into_iter()
+        .filter_map(|(opcode, size)| opcode.map(|opcode| EraseOpcode { size, opcode }))
+        .collect()
     }
 }
 
@@ -521,13 +493,8 @@ struct SpinorKnown {
     name: &'static str,
     id: u32,
     capacity: u32,
-    block_size: u32,
-    read_granularity: u32,
-    write_granularity: u32,
+    page_size: u32,
     address_length: u8,
-    opcode_read: u8,
-    opcode_write: u8,
-    opcode_write_enable: u8,
     opcode_erase_4k: Option<u8>,
     opcode_erase_32k: Option<u8>,
     opcode_erase_64k: Option<u8>,
@@ -538,15 +505,9 @@ impl SpinorKnown {
     fn to_info(&self) -> SpinorInfo {
         SpinorInfo {
             name: self.name.to_string(),
-            id: self.id,
             capacity: self.capacity as u64,
-            block_size: self.block_size,
-            read_granularity: self.read_granularity,
-            write_granularity: self.write_granularity,
+            page_size: self.page_size,
             address_length: self.address_length,
-            opcode_read: self.opcode_read,
-            opcode_write: self.opcode_write,
-            opcode_write_enable: self.opcode_write_enable,
             opcode_erase_4k: self.opcode_erase_4k,
             opcode_erase_32k: self.opcode_erase_32k,
             opcode_erase_64k: self.opcode_erase_64k,
@@ -557,13 +518,16 @@ impl SpinorKnown {
 
 struct SfdpParameterHeader {
     id_lsb: u8,
-    #[allow(dead_code)]
     minor: u8,
-    #[allow(dead_code)]
     major: u8,
     length: u8,
     ptp: [u8; 3],
     id_msb: u8,
+}
+
+fn read_dword(table: &[u8], offset: usize) -> Option<u32> {
+    let bytes: [u8; 4] = table.get(offset..offset + 4)?.try_into().ok()?;
+    Some(u32::from_le_bytes(bytes))
 }
 
 impl SfdpParameterHeader {
@@ -601,13 +565,8 @@ const KNOWN_DEVICES: &[SpinorKnown] = &[
         name: "W25X40",
         id: 0xef3013,
         capacity: 512 * 1024,
-        block_size: 4096,
-        read_granularity: 1,
-        write_granularity: 256,
+        page_size: 256,
         address_length: 3,
-        opcode_read: 0x03,
-        opcode_write: 0x02,
-        opcode_write_enable: 0x06,
         opcode_erase_4k: Some(0x20),
         opcode_erase_32k: None,
         opcode_erase_64k: Some(0xd8),
@@ -617,13 +576,8 @@ const KNOWN_DEVICES: &[SpinorKnown] = &[
         name: "W25Q128JVEIQ",
         id: 0xefc018,
         capacity: 16 * 1024 * 1024,
-        block_size: 4096,
-        read_granularity: 1,
-        write_granularity: 256,
+        page_size: 256,
         address_length: 3,
-        opcode_read: 0x03,
-        opcode_write: 0x02,
-        opcode_write_enable: 0x06,
         opcode_erase_4k: Some(0x20),
         opcode_erase_32k: Some(0x52),
         opcode_erase_64k: Some(0xd8),
@@ -633,13 +587,8 @@ const KNOWN_DEVICES: &[SpinorKnown] = &[
         name: "W25Q256JVEIQ",
         id: 0xef4019,
         capacity: 32 * 1024 * 1024,
-        block_size: 4096,
-        read_granularity: 1,
-        write_granularity: 256,
+        page_size: 256,
         address_length: 4,
-        opcode_read: 0x03,
-        opcode_write: 0x02,
-        opcode_write_enable: 0x06,
         opcode_erase_4k: Some(0x20),
         opcode_erase_32k: Some(0x52),
         opcode_erase_64k: Some(0xd8),
@@ -649,16 +598,61 @@ const KNOWN_DEVICES: &[SpinorKnown] = &[
         name: "GD25D10B",
         id: 0xc84011,
         capacity: 128 * 1024,
-        block_size: 4096,
-        read_granularity: 1,
-        write_granularity: 256,
+        page_size: 256,
         address_length: 3,
-        opcode_read: 0x03,
-        opcode_write: 0x02,
-        opcode_write_enable: 0x06,
         opcode_erase_4k: Some(0x20),
         opcode_erase_32k: Some(0x52),
         opcode_erase_64k: Some(0xd8),
         opcode_erase_256k: None,
     },
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_short_sfdp_1_0_basic_table() {
+        let param = SfdpParameterHeader {
+            id_lsb: 0,
+            minor: 0,
+            major: 1,
+            length: 9,
+            ptp: [0; 3],
+            id_msb: 0xff,
+        };
+        let mut table = vec![0u8; 9 * 4];
+        table[0..4].copy_from_slice(&0x0000_2001u32.to_le_bytes());
+        table[4..8].copy_from_slice(&0x07ff_ffffu32.to_le_bytes());
+        table[28..32].copy_from_slice(&0xd810_200cu32.to_le_bytes());
+
+        let info = SpinorInfo::from_sfdp_table(&param, &table).unwrap();
+
+        assert_eq!(info.capacity, 16 * 1024 * 1024);
+        assert_eq!(info.address_length, 3);
+        assert_eq!(info.page_size, 256);
+        assert_eq!(info.opcode_erase_4k, Some(0x20));
+        assert_eq!(info.opcode_erase_64k, Some(0xd8));
+    }
+
+    #[test]
+    fn requires_page_size_for_sfdp_1_5() {
+        let param = SfdpParameterHeader {
+            id_lsb: 0,
+            minor: 5,
+            major: 1,
+            length: 9,
+            ptp: [0; 3],
+            id_msb: 0xff,
+        };
+        let mut table = vec![0u8; 9 * 4];
+        table[4..8].copy_from_slice(&0x07ff_ffffu32.to_le_bytes());
+
+        assert!(matches!(
+            SpinorInfo::from_sfdp_table(&param, &table),
+            Err(SpinorError::InvalidResponse(
+                "sfdp basic table missing page size"
+            ))
+        ));
+    }
+}

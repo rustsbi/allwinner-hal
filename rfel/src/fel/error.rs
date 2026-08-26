@@ -1,7 +1,7 @@
 /// Result type for FEL protocol operations.
 pub type FelResult<T> = core::result::Result<T, FelError>;
 
-/// Errors reported by a FEL status acknowledgment.
+/// Errors reported while exchanging FEL requests over USB.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum FelError {
     /// The claimed USB interface does not expose both FEL bulk endpoints.
@@ -16,6 +16,16 @@ pub enum FelError {
     /// A USB read completed with a payload shorter or longer than requested.
     #[error("unexpected FEL USB read length: expected {expected} bytes, received {actual}")]
     UnexpectedReadLength { expected: usize, actual: usize },
+    /// A bulk transfer failed before the FEL protocol exchange completed.
+    #[error("USB transfer failed during {stage}: {source}")]
+    UsbTransfer {
+        stage: &'static str,
+        #[source]
+        source: nusb::transfer::TransferError,
+    },
+    /// The device did not return the expected 13-byte AWUS response marker.
+    #[error("invalid response to FEL USB transfer")]
+    InvalidUsbResponse,
 }
 
 pub(crate) fn check_fel_ack(bytes: [u8; 8]) -> FelResult<()> {

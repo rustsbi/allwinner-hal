@@ -8,7 +8,10 @@ use crate::fel::Fel;
 use crate::progress::Progress;
 use crate::spi::{self, Command, SpiError, SpiSession};
 
+use super::{erase_span, range_in_bounds};
+
 const WAIT_TIMEOUT: Duration = Duration::from_secs(5);
+const FLASH_TRANSFER_CHUNK: usize = 64 * 1024;
 
 #[derive(Debug)]
 pub enum SpinandError {
@@ -83,24 +86,16 @@ pub fn read(
 ) -> SpinandResult<()> {
     let mut state = SpinandState::new(chip, fel)?;
     let total = buffer.len() as u64;
-    let mut processed = 0u64;
-    let mut offset = 0usize;
-    while offset < buffer.len() {
-        let chunk = (buffer.len() - offset).min(state.chunk_limit());
-        state.read_range_segment(
-            fel,
-            address + processed,
-            &mut buffer[offset..offset + chunk],
-        )?;
-        processed += chunk as u64;
-        offset += chunk;
+    state.validate_range(address, total)?;
+    let mut current = address;
+    for chunk in buffer.chunks_mut(state.chunk_limit()) {
+        state.read_range_segment(fel, current, chunk)?;
+        current += chunk.len() as u64;
         if let Some(p) = &mut progress {
-            (**p).inc(chunk as u64);
+            (**p).inc(chunk.len() as u64);
         }
     }
-    if let Some(p) = &mut progress
-        && processed == total
-    {
+    if let Some(p) = &mut progress {
         (**p).finish();
     }
     Ok(())
@@ -114,29 +109,22 @@ pub fn write(
     mut progress: Option<&mut Progress>,
 ) -> SpinandResult<()> {
     let mut state = SpinandState::new(chip, fel)?;
-    state.erase_range(fel, address, address + data.len() as u64, None)?;
-    let mut processed = 0u64;
+    state.erase_range(fel, address, data.len() as u64, None)?;
     let total = data.len() as u64;
     println!(
         "Writing {} bytes to SPI NAND at address 0x{:x}",
         total, address
     );
-    while processed < total {
-        let chunk = (total - processed).min(state.chunk_limit() as u64) as usize;
-        state.write_range_segment(
-            fel,
-            address + processed,
-            &data[processed as usize..processed as usize + chunk],
-        )?;
-        log::debug!("  wrote {} bytes at offset 0x{:x}", chunk, processed);
-        processed += chunk as u64;
+    let mut current = address;
+    for chunk in data.chunks(state.chunk_limit()) {
+        state.write_range_segment(fel, current, chunk)?;
+        log::debug!("  wrote {} bytes at address 0x{:x}", chunk.len(), current);
+        current += chunk.len() as u64;
         if let Some(p) = &mut progress {
-            (**p).inc(chunk as u64);
+            (**p).inc(chunk.len() as u64);
         }
     }
-    if let Some(p) = &mut progress
-        && processed == total
-    {
+    if let Some(p) = &mut progress {
         (**p).finish();
     }
     Ok(())
@@ -179,7 +167,15 @@ impl<'chip> SpinandState<'chip> {
     }
 
     fn chunk_limit(&self) -> usize {
-        self.session.context().swap_len as usize
+        (self.session.context().swap_len as usize).min(FLASH_TRANSFER_CHUNK)
+    }
+
+    fn validate_range(&self, address: u64, length: u64) -> SpinandResult<()> {
+        if range_in_bounds(address, length, self.info.capacity()) {
+            Ok(())
+        } else {
+            Err(SpinandError::AddressOverflow)
+        }
     }
 
     fn erase_range(
@@ -189,13 +185,13 @@ impl<'chip> SpinandState<'chip> {
         length: u64,
         mut progress: Option<&mut Progress>,
     ) -> SpinandResult<()> {
-        let block = self.info.block_size();
-        let mask = block as u64 - 1;
-        let mut base = address & !mask;
-        let mut cnt = (address & mask) + length;
-        if cnt & mask != 0 {
-            cnt = (cnt + mask + 1) & !mask;
+        self.validate_range(address, length)?;
+        if length == 0 {
+            return Ok(());
         }
+        let block = self.info.block_size();
+        let (mut base, mut cnt) =
+            erase_span(address, length, block as u64).ok_or(SpinandError::AddressOverflow)?;
         while cnt > 0 {
             self.erase_block(fel, base)?;
             base += block as u64;
@@ -269,27 +265,29 @@ impl<'chip> SpinandState<'chip> {
         if page_size == 0 {
             return Err(SpinandError::Unsupported("invalid page size"));
         }
+        let program_limit = self
+            .chunk_limit()
+            .checked_sub(3)
+            .filter(|&limit| limit != 0)
+            .ok_or(SpinandError::Unsupported("SPI swap buffer is too small"))?;
 
         while !data.is_empty() {
             let page = u32::try_from(address / page_size as u64)
                 .map_err(|_| SpinandError::AddressOverflow)?;
             let mut column = (address % page_size as u64) as usize;
-            self.write_enable(fel)?;
             log::debug!(
                 "  writing page 0x{:x} starting at column 0x{:x}\n  remaining 0x{:x} bytes",
                 page,
                 column,
                 data.len()
             );
-            self.wait_ready(fel)?;
-
             while !data.is_empty() && column < page_size {
                 let bytes_left_in_page = page_size - column;
                 if bytes_left_in_page == 0 {
                     break;
                 }
                 let mut commands = Command::new();
-                let chunk = data.len().min(bytes_left_in_page).min(self.chunk_limit());
+                let chunk = data.len().min(bytes_left_in_page).min(program_limit);
                 commands.enable_write();
                 commands.wait_ready_nand();
                 commands.program_load(&self.session, column as u16, &data[..chunk]);
@@ -297,8 +295,6 @@ impl<'chip> SpinandState<'chip> {
                 commands.program_exec(page);
                 commands.wait_ready_nand();
                 commands.exec(fel, &self.session)?;
-                self.program_load(fel, column as u16, &data[..chunk])?;
-                self.wait_ready(fel)?;
                 data = &data[chunk..];
                 address += chunk as u64;
                 column += chunk;
@@ -331,64 +327,56 @@ impl<'chip> SpinandState<'chip> {
         if split & 0x3ff != 0 {
             return Err(SpinandError::Unsupported("split size must align to 1 KiB"));
         }
-        if data.len() < 20 {
-            return Err(SpinandError::InvalidImage("buffer too small"));
-        }
-        if &data[4..12] != b"eGON.BT0" {
-            return Err(SpinandError::InvalidImage("missing eGON.BT0 signature"));
-        }
-        let splsz = u32::from_be_bytes([data[16], data[17], data[18], data[19]]);
-        if splsz as usize > data.len() {
+        let splsz = parse_spl_size(data)?;
+        if !splsz.is_multiple_of(split) {
             return Err(SpinandError::InvalidImage(
-                "reported SPL size exceeds buffer",
+                "reported SPL size is not split-size aligned",
             ));
         }
+        self.validate_range(address, data.len() as u64)?;
         let block = self.info.block_size() as u64;
         let page_size = self.info.page_size as u64;
         let emask = block - 1;
-        let mut tsplsz = (splsz as u64 * page_size) / split as u64;
-        tsplsz = (tsplsz + block) & !emask;
-        let mut nbuf: Vec<u8>;
-        let nlen: u64;
-        if address >= tsplsz {
-            let mut copies = 0usize;
-            let mut total = 0u64;
-            while total < address {
-                total += tsplsz;
-                copies += 1;
-            }
-            total += data.len() as u64;
-            nlen = total;
-            nbuf = vec![0xff; total as usize];
-            let mut src_off = 0usize;
-            let mut dst_off = 0usize;
-            while src_off < splsz as usize {
-                let chunk = split as usize;
-                let end = src_off + chunk;
-                nbuf[dst_off..dst_off + chunk].copy_from_slice(&data[src_off..end]);
-                src_off += chunk;
-                dst_off += page_size as usize;
-            }
-            for i in 1..copies {
-                let start = i * tsplsz as usize;
-                nbuf.copy_within(0..tsplsz as usize, start);
-            }
-            let tail_start = (total - data.len() as u64) as usize;
-            nbuf[tail_start..tail_start + data.len()].copy_from_slice(data);
-        } else {
-            nlen = tsplsz;
-            nbuf = vec![0xff; tsplsz as usize];
-            let mut src_off = 0usize;
-            let mut dst_off = 0usize;
-            while src_off < splsz as usize {
-                let chunk = split as usize;
-                let end = src_off + chunk;
-                nbuf[dst_off..dst_off + chunk].copy_from_slice(&data[src_off..end]);
-                src_off += chunk;
-                dst_off += page_size as usize;
-            }
+        let spl_span = ((splsz as u64 * page_size) / split as u64)
+            .checked_add(block)
+            .ok_or(SpinandError::AddressOverflow)?
+            & !emask;
+        self.validate_range(0, spl_span)?;
+        let spl_span_usize =
+            usize::try_from(spl_span).map_err(|_| SpinandError::AddressOverflow)?;
+        let mut spl = vec![0xff; spl_span_usize];
+        for (src, dst) in data[..splsz as usize]
+            .chunks_exact(split as usize)
+            .zip(spl.chunks_exact_mut(page_size as usize))
+        {
+            dst[..src.len()].copy_from_slice(src);
         }
-        let erase_len = (nlen + emask) & !emask;
+
+        let (nbuf, nlen) = if address < spl_span {
+            (spl, spl_span)
+        } else {
+            let copies = address.div_ceil(spl_span);
+            let prefix_len = spl_span
+                .checked_mul(copies)
+                .ok_or(SpinandError::AddressOverflow)?;
+            let nlen = prefix_len
+                .checked_add(data.len() as u64)
+                .ok_or(SpinandError::AddressOverflow)?;
+            self.validate_range(0, nlen)?;
+            let prefix_len =
+                usize::try_from(prefix_len).map_err(|_| SpinandError::AddressOverflow)?;
+            let nlen_usize = usize::try_from(nlen).map_err(|_| SpinandError::AddressOverflow)?;
+            let mut expanded = vec![0xff; nlen_usize];
+            for dst in expanded[..prefix_len].chunks_exact_mut(spl_span_usize) {
+                dst.copy_from_slice(&spl);
+            }
+            expanded[prefix_len..].copy_from_slice(data);
+            (expanded, nlen)
+        };
+        let erase_len = nlen
+            .checked_add(emask)
+            .ok_or(SpinandError::AddressOverflow)?
+            & !emask;
         self.erase_range(fel, 0, erase_len, None)?;
         let mut written = 0u64;
         while written < nlen {
@@ -435,11 +423,6 @@ impl<'chip> SpinandState<'chip> {
         Ok(())
     }
 
-    fn write_enable(&mut self, fel: &Fel<'_>) -> SpinandResult<()> {
-        spi::transfer(fel, &self.session, Some(&[OPCODE_WRITE_ENABLE]), None)?;
-        Ok(())
-    }
-
     fn load_page(&mut self, fel: &Fel<'_>, page: u32) -> SpinandResult<()> {
         let tx = [
             OPCODE_READ_PAGE_TO_CACHE,
@@ -459,28 +442,6 @@ impl<'chip> SpinandState<'chip> {
             0x00,
         ];
         spi::transfer(fel, &self.session, Some(&tx), Some(out))?;
-        Ok(())
-    }
-
-    fn program_load(&mut self, fel: &Fel<'_>, column: u16, data: &[u8]) -> SpinandResult<()> {
-        let mut tx = Vec::with_capacity(3 + data.len());
-        tx.push(OPCODE_PROGRAM_LOAD);
-        tx.push(((column >> 8) & 0xff) as u8);
-        tx.push((column & 0xff) as u8);
-        tx.extend_from_slice(data);
-        spi::transfer(fel, &self.session, Some(&tx), None)?;
-        Ok(())
-    }
-
-    #[allow(unused)]
-    fn program_exec(&mut self, fel: &Fel<'_>, page: u32) -> SpinandResult<()> {
-        let tx = [
-            OPCODE_PROGRAM_EXEC,
-            ((page >> 16) & 0xff) as u8,
-            ((page >> 8) & 0xff) as u8,
-            (page & 0xff) as u8,
-        ];
-        spi::transfer(fel, &self.session, Some(&tx), None)?;
         Ok(())
     }
 }
@@ -545,6 +506,25 @@ struct SpinandKnown {
     ndies: u32,
 }
 
+fn parse_spl_size(data: &[u8]) -> SpinandResult<u32> {
+    if data.len() < 20 {
+        return Err(SpinandError::InvalidImage("buffer too small"));
+    }
+    if &data[4..12] != b"eGON.BT0" {
+        return Err(SpinandError::InvalidImage("missing eGON.BT0 signature"));
+    }
+    let size = u32::from_le_bytes([data[16], data[17], data[18], data[19]]);
+    if size == 0 {
+        return Err(SpinandError::InvalidImage("reported SPL size is zero"));
+    }
+    if size as usize > data.len() {
+        return Err(SpinandError::InvalidImage(
+            "reported SPL size exceeds buffer",
+        ));
+    }
+    Ok(size)
+}
+
 impl SpinandKnown {
     fn matches(&self, id: &[u8]) -> bool {
         if self.id.len() > id.len() {
@@ -583,6 +563,16 @@ const KNOWN_DEVICES: &[SpinandKnown] = &[
         id: &[0xef, 0xaa, 0x21],
         page_size: 2048,
         spare_size: 64,
+        pages_per_block: 64,
+        blocks_per_die: 1024,
+        planes_per_die: 1,
+        ndies: 1,
+    },
+    SpinandKnown {
+        name: "W25N01KV",
+        id: &[0xef, 0xae, 0x21],
+        page_size: 2048,
+        spare_size: 128,
         pages_per_block: 64,
         blocks_per_die: 1024,
         planes_per_die: 1,
@@ -1509,3 +1499,26 @@ const KNOWN_DEVICES: &[SpinandKnown] = &[
         ndies: 1,
     },
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_spl_size_as_little_endian() {
+        let mut image = vec![0u8; 4096];
+        image[4..12].copy_from_slice(b"eGON.BT0");
+        image[16..20].copy_from_slice(&4096u32.to_le_bytes());
+
+        assert_eq!(parse_spl_size(&image).unwrap(), 4096);
+    }
+
+    #[test]
+    fn detects_w25n01kv() {
+        let info = SpinandInfo::from_known(&[0xef, 0xae, 0x21, 0]).unwrap();
+
+        assert_eq!(info.name, "W25N01KV");
+        assert_eq!(info.capacity(), 128 * 1024 * 1024);
+        assert_eq!(info.spare_size, 128);
+    }
+}

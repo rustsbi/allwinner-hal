@@ -18,6 +18,18 @@ use std::error::Error;
 use std::fmt;
 use std::io::{Read, Write};
 
+fn erase_span(address: u64, length: u64, block: u64) -> Option<(u64, u64)> {
+    let mask = block.checked_sub(1)?;
+    let count = (address & mask).checked_add(length)?.checked_add(mask)? & !mask;
+    Some((address & !mask, count))
+}
+
+fn range_in_bounds(address: u64, length: u64, capacity: u64) -> bool {
+    address
+        .checked_add(length)
+        .is_some_and(|end| end <= capacity)
+}
+
 #[derive(Debug)]
 pub struct ReadResult {
     pub address: u32,
