@@ -1,8 +1,11 @@
 use crate::chips::{self, DdrProfile};
+use crate::fel::CHUNK_SIZE;
 use crate::fel::Fel;
+use crate::ops::{HexdumpLine, Read32Result, ReadResult};
+use crate::progress::Progress;
 use std::error::Error;
 use std::fmt;
-use std::io;
+use std::io::{self, Write};
 
 #[derive(Debug)]
 pub struct ResetResult {
@@ -67,6 +70,73 @@ impl From<io::Error> for ChipOpError {
 }
 
 pub type ChipOpResult<T> = Result<T, ChipOpError>;
+
+/// Read memory through the access path selected by the detected chip.
+pub fn read(
+    chip: &dyn chips::Chip,
+    fel: &Fel<'_>,
+    mut address: u32,
+    mut length: usize,
+    writer: &mut impl Write,
+    mut progress: Option<&mut Progress>,
+) -> ChipOpResult<ReadResult> {
+    let start = address;
+    let mut total = 0usize;
+    let mut buf = vec![0u8; CHUNK_SIZE];
+    while length > 0 {
+        let chunk_len = length.min(buf.len());
+        chip.read_memory(fel, address, &mut buf[..chunk_len])?;
+        writer.write_all(&buf[..chunk_len])?;
+        if let Some(progress) = progress.as_deref_mut() {
+            progress.inc(chunk_len as u64);
+        }
+        address = address.wrapping_add(chunk_len as u32);
+        length -= chunk_len;
+        total += chunk_len;
+    }
+    Ok(ReadResult {
+        address: start,
+        length: total,
+    })
+}
+
+/// Read a 32-bit value through the access path selected by the detected chip.
+pub fn read32(chip: &dyn chips::Chip, fel: &Fel<'_>, address: u32) -> ChipOpResult<Read32Result> {
+    let mut bytes = [0u8; 4];
+    chip.read_memory(fel, address, &mut bytes)?;
+    Ok(Read32Result {
+        address,
+        value: u32::from_le_bytes(bytes),
+    })
+}
+
+/// Hexdump memory through the access path selected by the detected chip.
+pub fn hexdump<F>(
+    chip: &dyn chips::Chip,
+    fel: &Fel<'_>,
+    mut address: u32,
+    mut length: usize,
+    mut sink: F,
+) -> ChipOpResult<()>
+where
+    F: FnMut(HexdumpLine<'_>),
+{
+    let mut buf = vec![0u8; CHUNK_SIZE];
+    while length > 0 {
+        let chunk_len = length.min(buf.len());
+        chip.read_memory(fel, address, &mut buf[..chunk_len])?;
+        for line_offset in (0..chunk_len).step_by(16) {
+            let line_len = (chunk_len - line_offset).min(16);
+            sink(HexdumpLine {
+                base: address.wrapping_add(line_offset as u32),
+                data: &buf[line_offset..line_offset + line_len],
+            });
+        }
+        address = address.wrapping_add(chunk_len as u32);
+        length -= chunk_len;
+    }
+    Ok(())
+}
 
 pub fn reset(chip: &dyn chips::Chip, fel: &Fel<'_>) -> ChipOpResult<ResetResult> {
     chip.reset(fel)?;

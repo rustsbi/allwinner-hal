@@ -395,7 +395,8 @@ fn execute_device_command(
             Ok(())
         }
         Commands::Hexdump { address, length } => {
-            let address = match util::parse_value::<usize>(&address) {
+            // FIXME: valid address value should depend on target architecture width
+            let address = match util::parse_value::<u32>(&address) {
                 Ok(v) => v,
                 Err(err) => {
                     println!("error: invalid address: {}", err);
@@ -409,7 +410,7 @@ fn execute_device_command(
                     return Ok(());
                 }
             };
-            if let Err(err) = ops::op_hexdump(fel, address, length, |line| {
+            if let Err(err) = ops::op_chip_hexdump(chip, fel, address, length, |line| {
                 util::hexdump(line.data, line.base);
             }) {
                 println!("error: hexdump: {}", err);
@@ -433,7 +434,7 @@ fn execute_device_command(
             };
             let stdout = std::io::stdout();
             let mut handle = stdout.lock();
-            if let Err(err) = ops::op_read(fel, address, length, &mut handle, None) {
+            if let Err(err) = ops::op_chip_read(chip, fel, address, length, &mut handle, None) {
                 eprintln!("error: dump to stdout: {}", err);
             }
             Ok(())
@@ -446,7 +447,7 @@ fn execute_device_command(
                     return Ok(());
                 }
             };
-            match ops::op_read32(fel, address) {
+            match ops::op_chip_read32(chip, fel, address) {
                 Ok(result) => println!("0x{:08x}", result.value),
                 Err(err) => println!("error: read32: {}", err),
             }
@@ -500,7 +501,7 @@ fn execute_device_command(
             };
             let mut writer = BufWriter::new(file_handle);
             let mut progress = Progress::new("READ", length as u64);
-            match ops::op_read(fel, address, length, &mut writer, Some(&mut progress)) {
+            match ops::op_chip_read(chip, fel, address, length, &mut writer, Some(&mut progress)) {
                 Ok(result) => {
                     let _ = writer.flush();
                     progress.finish();

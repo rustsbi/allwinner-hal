@@ -1,8 +1,8 @@
 use log::debug;
 
-use crate::{Fel, write_all};
+use crate::{Fel, read_all, write_all};
 
-use super::util::{read32_via_payload, u32_params_le, write32_via_payload};
+use super::util::{exec_stub, read32_via_payload, u32_params_le, write32_via_payload};
 use super::{Chip, ChipError, ChipSpi, DdrProfile, SpiContext, payload};
 
 pub struct V821;
@@ -12,6 +12,29 @@ const DDR_PARAM_ADDR: u32 = 0x0200_8038;
 const SPI_PAYLOAD_BASE: u32 = 0x0200_0000;
 const SPI_COMMAND_BASE: u32 = 0x0200_1000;
 const SPI_SWAP_BASE: u32 = 0x0200_2000;
+/// Size of the valid V821 BootROM image in bytes.
+pub const BOOTROM_SIZE: u32 = 0x0000_c000;
+const BOOTROM_COPY_BASE: u32 = 0x0200_2000;
+const BOOTROM_COPY_CHUNK: usize = 4096;
+
+fn read_bootrom(fel: &Fel<'_>, mut address: u32, mut out: &mut [u8]) -> Result<(), ChipError> {
+    while !out.is_empty() {
+        let requested = out.len().min(BOOTROM_COPY_CHUNK);
+        let aligned_address = address & !3;
+        let leading = (address - aligned_address) as usize;
+        let copy_len = (leading + requested + 3) & !3;
+        let params = u32_params_le(&[aligned_address, BOOTROM_COPY_BASE, copy_len as u32]);
+
+        exec_stub(fel, payload::COPY_V821, &params, 0)?;
+        let mut copied = vec![0u8; copy_len];
+        read_all(fel, BOOTROM_COPY_BASE, &mut copied)?;
+        out[..requested].copy_from_slice(&copied[leading..leading + requested]);
+
+        address += requested as u32;
+        out = &mut out[requested..];
+    }
+    Ok(())
+}
 
 fn read32(fel: &Fel<'_>, addr: u32) -> Result<u32, ChipError> {
     read32_via_payload(fel, payload::READ32_V821, addr)
@@ -24,6 +47,26 @@ fn write32(fel: &Fel<'_>, addr: u32, value: u32) -> Result<(), ChipError> {
 impl Chip for V821 {
     fn name(&self) -> String {
         "V821".to_string()
+    }
+
+    fn read_memory(&self, fel: &Fel<'_>, address: u32, out: &mut [u8]) -> Result<(), ChipError> {
+        let bootrom_len = if address < BOOTROM_SIZE {
+            out.len().min((BOOTROM_SIZE - address) as usize)
+        } else {
+            0
+        };
+        let (bootrom, direct) = out.split_at_mut(bootrom_len);
+        if !bootrom.is_empty() {
+            debug!(
+                "reading V821 BootROM 0x{address:08x}..0x{:08x} through CPU copy helper",
+                address + bootrom.len() as u32
+            );
+            read_bootrom(fel, address, bootrom)?;
+        }
+        if !direct.is_empty() {
+            read_all(fel, address.wrapping_add(bootrom_len as u32), direct)?;
+        }
+        Ok(())
     }
 
     fn reset(&self, fel: &Fel<'_>) -> Result<(), ChipError> {
@@ -154,7 +197,15 @@ mod tests {
         assert_eq!(SPI_SWAP_BASE, SPI_PAYLOAD_BASE + 0x2000);
         assert_eq!(payload::READ32_V821.len(), 44);
         assert_eq!(payload::WRITE32_V821.len(), 44);
+        assert_eq!(payload::COPY_V821.len(), 68);
         assert_eq!(payload::DDR_INIT_V821.len(), 14_976);
         assert_eq!(payload::SPI_INIT_V821.len(), 1_206);
+    }
+
+    #[test]
+    fn test_bootrom_read_boundaries() {
+        assert_eq!(BOOTROM_SIZE, 48 * 1024);
+        assert_eq!(BOOTROM_COPY_CHUNK % 4, 0);
+        assert_eq!(BOOTROM_COPY_BASE % 4, 0);
     }
 }

@@ -70,6 +70,15 @@ impl From<FelError> for ChipError {
 
 pub trait Chip {
     fn name(&self) -> String;
+    /// Read memory using the access path required by this chip.
+    ///
+    /// Most chips can use the FEL read command directly. Chips with protected
+    /// or CPU-only address windows can override this method with a helper
+    /// payload while keeping ordinary memory reads on the default path.
+    fn read_memory(&self, fel: &Fel<'_>, address: u32, out: &mut [u8]) -> Result<(), ChipError> {
+        crate::transfer::read_all(fel, address, out)?;
+        Ok(())
+    }
     fn reset(&self, fel: &Fel<'_>) -> Result<(), ChipError>;
     fn sid(&self, fel: &Fel<'_>) -> Result<Vec<u8>, ChipError>;
     fn jtag(&self, fel: &Fel<'_>, enable: bool) -> Result<(), ChipError>;

@@ -13,6 +13,9 @@ pub enum FelError {
     /// The device rejected the FEL request.
     #[error("FEL request failed: subcommand 0x{subcommand:04x}, status 0x{status:02x}")]
     RequestFailed { subcommand: u16, status: u8 },
+    /// A USB read completed with a payload shorter or longer than requested.
+    #[error("unexpected FEL USB read length: expected {expected} bytes, received {actual}")]
+    UnexpectedReadLength { expected: usize, actual: usize },
 }
 
 pub(crate) fn check_fel_ack(bytes: [u8; 8]) -> FelResult<()> {
@@ -28,6 +31,26 @@ pub(crate) fn check_fel_ack(bytes: [u8; 8]) -> FelResult<()> {
     }
 
     Ok(())
+}
+
+pub(crate) fn check_usb_read_length(bytes: &[u8], expected: usize) -> FelResult<()> {
+    if bytes.len() == expected {
+        return Ok(());
+    }
+
+    // Some rejected FEL reads return the eight-byte command status where the
+    // requested data payload would normally appear. Preserve that useful error
+    // instead of reporting only a generic short read.
+    if let Ok(ack) = <[u8; 8]>::try_from(bytes)
+        && let Err(err @ FelError::RequestFailed { .. }) = check_fel_ack(ack)
+    {
+        return Err(err);
+    }
+
+    Err(FelError::UnexpectedReadLength {
+        expected,
+        actual: bytes.len(),
+    })
 }
 
 #[cfg(test)]
@@ -54,6 +77,28 @@ mod tests {
             Err(FelError::RequestFailed {
                 subcommand: 0x1234,
                 status: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn reports_failed_status_instead_of_short_read() {
+        assert_eq!(
+            check_usb_read_length(&[0xff, 0xff, 0x34, 0x12, 1, 0, 0, 0], 4096),
+            Err(FelError::RequestFailed {
+                subcommand: 0x1234,
+                status: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn reports_unrecognized_short_read() {
+        assert_eq!(
+            check_usb_read_length(&[1, 2, 3], 4096),
+            Err(FelError::UnexpectedReadLength {
+                expected: 4096,
+                actual: 3,
             })
         );
     }

@@ -5,7 +5,8 @@ pub mod spinor;
 
 pub use chip::{
     ChipOpError, ChipOpResult, DdrResult, JtagResult, ResetResult, SidResult, ddr as op_ddr,
-    jtag as op_jtag, reset as op_reset, sid as op_sid,
+    hexdump as op_chip_hexdump, jtag as op_jtag, read as op_chip_read, read32 as op_chip_read32,
+    reset as op_reset, sid as op_sid,
 };
 pub use flash::{FlashAccess, FlashDetectError, FlashIoError, FlashKind};
 

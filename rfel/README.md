@@ -7,6 +7,20 @@ Supported chips:
 - D1 / D1s / D1-H / F133
 - V821
 
+On V821, the BootROM window at `0x00000000..0x0000c000` cannot be read with
+the FEL read command directly. The memory-reading commands automatically use a
+CPU copy helper for that window and clean the data cache before fetching each
+chunk from SRAM. This applies to `read`, `dump`, `hexdump`, and `read32`.
+
+Dump the complete V821 BootROM with:
+
+```console
+rfel read 0x0 0xc000 v821-bootrom.bin
+```
+
+The following `0x0000c000..0x00010000` range is unmapped and is not part of the
+BootROM image; do not include it in a ROM dump.
+
 ## Reference
 
 XFEL project: https://github.com/xboot/xfel

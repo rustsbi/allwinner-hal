@@ -3,7 +3,7 @@ mod protocol;
 
 pub use protocol::{Chip, FelRequest, UsbRequest, Version};
 
-use error::{FelError, FelResult, check_fel_ack};
+use error::{FelError, FelResult, check_fel_ack, check_usb_read_length};
 use futures::executor::block_on;
 use log::{debug, error, trace};
 use nusb::transfer::EndpointType;
@@ -62,7 +62,7 @@ impl<'a> Fel<'a> {
 
         let mut buf = [0u8; 32];
         self.send_fel_request(FelRequest::get_version());
-        self.usb_read(&mut buf);
+        self.usb_read(&mut buf)?;
         self.read_fel_status()?;
         Ok(buf.into())
     }
@@ -74,7 +74,7 @@ impl<'a> Fel<'a> {
             "read_address expects a single chunk (<= {CHUNK_SIZE} bytes)"
         );
         self.send_fel_request(FelRequest::read_raw(address, buf.len() as u32));
-        self.usb_read(buf);
+        self.usb_read(buf)?;
         self.read_fel_status()
     }
 
@@ -106,11 +106,11 @@ impl<'a> Fel<'a> {
     fn read_fel_status(&self) -> FelResult<()> {
         trace!("read_fel_status");
         let mut buf = [0u8; 8];
-        self.usb_read(&mut buf);
+        self.usb_read(&mut buf)?;
         check_fel_ack(buf)
     }
 
-    fn usb_read(&self, buf: &mut [u8]) {
+    fn usb_read(&self, buf: &mut [u8]) -> FelResult<()> {
         trace!("usb_read");
         let buf_1: [u8; 32] = UsbRequest::usb_read(buf.len() as u32).into();
         block_on(self.iface.bulk_out(self.endpoint_out, buf_1.to_vec()))
@@ -127,7 +127,9 @@ impl<'a> Fel<'a> {
         if ans_1.data != *b"AWUS\0\0\0\0\0\0\0\0\0" {
             panic!("invalid data received from read_usb_response")
         }
+        check_usb_read_length(&ans.data, buf.len())?;
         buf.copy_from_slice(&ans.data);
+        Ok(())
     }
 
     fn usb_write(&self, buf: &[u8]) {
