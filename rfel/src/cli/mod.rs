@@ -4,6 +4,7 @@ pub mod patch;
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 use log::{LevelFilter, debug, error};
+use nusb::MaybeFuture;
 use std::env;
 use std::error::Error;
 use std::fmt;
@@ -307,6 +308,7 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
     }
 
     let devices: Vec<_> = nusb::list_devices()
+        .wait()
         .map_err(CliError::DeviceList)?
         .filter(|dev| dev.vendor_id() == VENDOR_ALLWINNER && dev.product_id() == PRODUCT_FEL)
         .inspect(|dev| debug!("Allwinner FEL device {:?}", dev))
@@ -323,9 +325,10 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
     }
 
     let device_info = devices.into_iter().next().unwrap();
-    let device = device_info.open().map_err(CliError::OpenDevice)?;
+    let device = device_info.open().wait().map_err(CliError::OpenDevice)?;
     let mut interface = device
         .claim_interface(0)
+        .wait()
         .map_err(CliError::ClaimInterface)?;
     let fel = Fel::open_interface(&mut interface).map_err(CliError::Fel)?;
     let chip = match chips::detect_from_fel(&fel).map_err(CliError::Fel)? {

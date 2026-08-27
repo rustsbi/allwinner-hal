@@ -3,18 +3,21 @@ mod protocol;
 
 pub use protocol::{Chip, FelRequest, UsbRequest, Version};
 
+use std::cell::RefCell;
+
 use error::{FelError, FelResult, check_fel_ack, check_usb_read_length};
 use futures::executor::block_on;
 use log::{debug, error, trace};
-use nusb::transfer::EndpointType;
+use nusb::descriptors::TransferType;
+use nusb::transfer::{Buffer, Bulk, In, Out};
 
 /// Maximum chunk size for a single FEL read or write operation.
 pub const CHUNK_SIZE: usize = 65_536;
 
 pub struct Fel<'a> {
-    iface: &'a mut nusb::Interface,
-    endpoint_in: u8,
-    endpoint_out: u8,
+    _iface: &'a mut nusb::Interface,
+    endpoint_in: RefCell<nusb::Endpoint<Bulk, In>>,
+    endpoint_out: RefCell<nusb::Endpoint<Bulk, Out>>,
     version: Option<Version>,
 }
 
@@ -25,7 +28,7 @@ impl<'a> Fel<'a> {
         let mut endpoint_out = None;
         for descriptor in iface.descriptors() {
             for endpoint in descriptor.endpoints() {
-                if endpoint.transfer_type() != EndpointType::Bulk {
+                if endpoint.transfer_type() != TransferType::Bulk {
                     continue;
                 }
                 match endpoint.direction() {
@@ -47,10 +50,21 @@ impl<'a> Fel<'a> {
             endpoint_in, endpoint_out
         );
 
+        let open_endpoint_error = |address: u8, error: nusb::Error| FelError::OpenBulkEndpoint {
+            address,
+            kind: error.kind(),
+        };
+        let endpoint_in = iface
+            .endpoint::<Bulk, In>(endpoint_in)
+            .map_err(|error| open_endpoint_error(endpoint_in, error))?;
+        let endpoint_out = iface
+            .endpoint::<Bulk, Out>(endpoint_out)
+            .map_err(|error| open_endpoint_error(endpoint_out, error))?;
+
         Ok(Self {
-            iface,
-            endpoint_in,
-            endpoint_out,
+            _iface: iface,
+            endpoint_in: RefCell::new(endpoint_in),
+            endpoint_out: RefCell::new(endpoint_out),
             version: None,
         })
     }
@@ -137,16 +151,21 @@ impl<'a> Fel<'a> {
     }
 
     fn bulk_in(&self, length: usize, stage: &'static str) -> FelResult<Vec<u8>> {
-        let buffer = nusb::transfer::RequestBuffer::new(length);
-        let completion = block_on(self.iface.bulk_in(self.endpoint_in, buffer));
+        let mut endpoint = self.endpoint_in.borrow_mut();
+        let packet_size = endpoint.max_packet_size();
+        let request_length = length.div_ceil(packet_size) * packet_size;
+        endpoint.submit(Buffer::new(request_length));
+        let completion = block_on(endpoint.next_complete());
         completion
             .status
             .map_err(|source| FelError::UsbTransfer { stage, source })?;
-        Ok(completion.data)
+        Ok(completion.buffer.into_vec())
     }
 
     fn bulk_out(&self, data: Vec<u8>, stage: &'static str) -> FelResult<()> {
-        block_on(self.iface.bulk_out(self.endpoint_out, data))
+        let mut endpoint = self.endpoint_out.borrow_mut();
+        endpoint.submit(data.into());
+        block_on(endpoint.next_complete())
             .status
             .map_err(|source| FelError::UsbTransfer { stage, source })
     }

@@ -7,6 +7,9 @@ pub enum FelError {
     /// The claimed USB interface does not expose both FEL bulk endpoints.
     #[error("FEL interface is missing a bulk IN or bulk OUT endpoint")]
     MissingBulkEndpoints,
+    /// A discovered FEL bulk endpoint could not be opened.
+    #[error("failed to open FEL bulk endpoint 0x{address:02x}: {kind:?}")]
+    OpenBulkEndpoint { address: u8, kind: nusb::ErrorKind },
     /// The response is not a valid FEL status acknowledgment.
     #[error("invalid FEL ACK marker: expected 0xffff, got 0x{marker:04x}")]
     InvalidAckMarker { marker: u16 },

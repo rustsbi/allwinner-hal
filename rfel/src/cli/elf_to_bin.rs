@@ -98,7 +98,7 @@ fn get_loadable_sections<'a>(elf_file: &'a object::File) -> Vec<object::Section<
         .sections()
         .filter(|s| {
             let alloc = match s.flags() {
-                SectionFlags::Elf { sh_flags } => (sh_flags & object::elf::SHF_ALLOC as u64) != 0,
+                SectionFlags::Elf { sh_flags, .. } => sh_flags.intersects(object::elf::SHF_ALLOC),
                 _ => false,
             };
             alloc && s.kind() != SectionKind::UninitializedData
