@@ -5,6 +5,7 @@ members = [
     "allwinner-rt",
     "allwinner-rt/macros",
     "examples/nezha-d1",
+    "examples/v821-avaota-f1",
     "rfel",
 ]
 

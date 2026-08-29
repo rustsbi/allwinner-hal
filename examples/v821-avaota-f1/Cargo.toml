@@ -1,0 +1,18 @@
+[package]
+name = "v821-avaota-f1"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+build = "build.rs"
+
+[lib]
+name = "v821_avaota_f1"
+test = true
+bench = false
+
+[[bin]]
+name = "usb-uart"
+test = false
+bench = false
