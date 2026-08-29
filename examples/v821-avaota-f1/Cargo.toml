@@ -2,10 +2,13 @@
 name = "v821-avaota-f1"
 version = "0.1.0"
 publish = false
+default-run = "usb-uart"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-build = "build.rs"
+
+[target.'cfg(target_os = "none")'.dependencies]
+allwinner-rt = { path = "../../allwinner-rt", default-features = false, features = ["v821-mcu", "panic-halt"] }
 
 [lib]
 name = "v821_avaota_f1"
@@ -14,5 +17,10 @@ bench = false
 
 [[bin]]
 name = "usb-uart"
+test = false
+bench = false
+
+[[bin]]
+name = "uart-demo"
 test = false
 bench = false

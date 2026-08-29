@@ -1,4 +1,4 @@
-//! Allwinner D1 ROM runtime.
+//! Allwinner ROM runtime.
 //!
 //! # Usage
 //!
@@ -13,6 +13,13 @@
 //! }
 //! ```
 #![no_std]
+
+#[cfg(all(
+    feature = "v821-mcu",
+    target_os = "none",
+    not(any(target_arch = "riscv32", doc))
+))]
+compile_error!("the V821 MCU runtime requires a 32-bit RISC-V target");
 
 #[macro_use]
 mod macros;
@@ -30,10 +37,19 @@ pub use mctl::init as dram_init;
 pub use allwinner_rt_macros::entry;
 
 pub mod arch {
+    #[cfg(any(all(feature = "andes-a27l2", target_arch = "riscv64"), doc))]
     pub mod andes_a27l2;
+    #[cfg(any(
+        all(feature = "thead-c906", target_arch = "riscv64"),
+        all(feature = "thead-e907", target_arch = "riscv32"),
+        doc
+    ))]
     pub mod riscv_fpu;
+    #[cfg(any(all(feature = "thead-c906", target_arch = "riscv64"), doc))]
     pub mod thead_c906;
+    #[cfg(any(all(feature = "thead-c907", target_arch = "riscv64"), doc))]
     pub mod thead_c907;
+    #[cfg(any(all(feature = "thead-e907", target_arch = "riscv32"), doc))]
     pub mod thead_e907;
 }
 
@@ -55,6 +71,11 @@ cfg_if::cfg_if! {
         pub use {
             self::arch::thead_c906::{thead_c906_start as start, thead_c906_halt as halt},
             self::soc::d1::{__rom_init_params, Peripherals, Clocks},
+        };
+    } else if #[cfg(feature = "v821-mcu")] {
+        pub use {
+            self::arch::thead_e907::{thead_e907_start as start, thead_e907_halt as halt},
+            self::soc::v821::{__rom_init_params, Peripherals, Clocks},
         };
     } else if #[cfg(feature = "v821-cpu")] {
         pub use {

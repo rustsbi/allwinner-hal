@@ -1,4 +1,4 @@
-//! D1 ROM runtime procedural macros.
+//! Allwinner ROM runtime procedural macros.
 
 use proc_macro2::Span;
 use quote::quote;
@@ -16,7 +16,7 @@ pub fn entry(args: TokenStream, input: TokenStream) -> TokenStream {
     // check the function arguments
     if f.sig.inputs.len() != 2 {
         return parse::Error::new(
-            f.sig.inputs.last().unwrap().span(),
+            f.sig.span(),
             "`#[entry]` function should include exactly two parameters",
         )
         .to_compile_error()
@@ -77,7 +77,7 @@ pub fn entry(args: TokenStream, input: TokenStream) -> TokenStream {
     let ret = f.sig.output;
 
     quote!(
-        #[export_name = "main"]
+        #[unsafe(export_name = "main")]
         pub fn main() {
             let (p, c) = ::allwinner_rt::__rom_init_params();
             unsafe { __allwinner_rt_macros__main(p, c) }

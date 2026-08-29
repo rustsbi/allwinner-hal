@@ -1,6 +1,6 @@
 [package]
 name = "allwinner-rt-macros"
-description = "Procedural macro for ROM runtime on Allwinner D1 chip"
+description = "Procedural macro for Allwinner ROM runtimes"
 version = "0.0.0"
 edition = "2021"
 authors = [

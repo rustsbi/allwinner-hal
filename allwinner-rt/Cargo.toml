@@ -1,6 +1,6 @@
 [package]
 name = "allwinner-rt"
-description = "ROM runtime for Allwinner D1 chip"
+description = "ROM runtime for Allwinner SoCs"
 version = "0.0.0"
 authors = [
     "Luo Jia <luojia@hust.edu.cn>",
@@ -37,12 +37,13 @@ panic-halt = []
 d1 = ["thead-c906"]
 # V821 chip. There are both CPU cluster and MCU cluster.
 v821-cpu = ["andes-a27l2"]
-v821-mcu = [] # TODO thead-e907
+v821-mcu = ["thead-e907"]
 
 # Microarchitecture specific features.
 andes-a27l2 = []
 thead-c906 = []
 thead-c907 = []
+thead-e907 = []
 
 nezha = []
 lichee = []
