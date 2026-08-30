@@ -4,7 +4,7 @@ members = [
     "allwinner-hal",
     "allwinner-rt",
     "allwinner-rt/macros",
-    "examples/nezha-d1",
+    "examples/d1-allwinner-nezha",
     "examples/v821-avaota-f1",
     "rfel",
 ]

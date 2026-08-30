@@ -1,6 +1,6 @@
 [package]
-name = "nezha-d1-example"
-version = "0.1.0"
+name = "d1-allwinner-nezha"
+version = "0.0.0"
 publish = false
 edition.workspace = true
 license.workspace = true
