@@ -81,15 +81,54 @@ impl CommandBlockWrapper {
     }
 }
 
+pub(crate) trait MassStorageTransport {
+    fn initialize(&mut self);
+    fn take_class_reset(&mut self) -> bool;
+    fn is_configured(&self) -> bool;
+    fn poll(&mut self, output: &mut [u8; 64]) -> usize;
+    fn stall_bulk_in(&mut self, until_class_reset: bool);
+    fn write(&mut self, bytes: &[u8]);
+    fn write_zero_length_packet(&mut self);
+    fn flush(&mut self) -> bool;
+}
+
+impl MassStorageTransport for UsbMassStorageTransport {
+    fn initialize(&mut self) {
+        UsbMassStorageTransport::initialize(self);
+    }
+
+    fn take_class_reset(&mut self) -> bool {
+        UsbMassStorageTransport::take_class_reset(self)
+    }
+
+    fn is_configured(&self) -> bool {
+        UsbMassStorageTransport::is_configured(self)
+    }
+
+    fn poll(&mut self, output: &mut [u8; 64]) -> usize {
+        UsbMassStorageTransport::poll(self, output)
+    }
+
+    fn stall_bulk_in(&mut self, until_class_reset: bool) {
+        UsbMassStorageTransport::stall_bulk_in(self, until_class_reset);
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        UsbMassStorageTransport::write(self, bytes);
+    }
+
+    fn write_zero_length_packet(&mut self) {
+        UsbMassStorageTransport::write_zero_length_packet(self);
+    }
+
+    fn flush(&mut self) -> bool {
+        UsbMassStorageTransport::flush(self)
+    }
+}
+
 /// Polling USB mass-storage device backed by a 512-byte sector reader.
 pub struct UsbMassStorage {
-    transport: UsbMassStorageTransport,
-    state: BotState,
-    sense: Sense,
-    exit_requested: bool,
-    block_count: u32,
-    read_sector: ReadSector,
-    sector: [u8; BLOCK_SIZE],
+    driver: UsbMassStorageDriver<UsbMassStorageTransport>,
 }
 
 impl UsbMassStorage {
@@ -100,10 +139,41 @@ impl UsbMassStorage {
     /// USB0, APP-CCU, and AON-CCU must be exclusively owned by this E907
     /// payload with interrupts disabled.
     pub unsafe fn from_v821_mmio(block_count: u32, read_sector: ReadSector) -> Self {
+        Self {
+            driver: UsbMassStorageDriver::new(
+                // SAFETY: forwarded from this function's ownership contract.
+                unsafe { UsbMassStorageTransport::from_v821_mmio() },
+                block_count,
+                read_sector,
+            ),
+        }
+    }
+
+    pub fn initialize(&mut self) {
+        self.driver.initialize();
+    }
+
+    /// Services one USB packet and reports a host-requested safe eject.
+    pub fn poll(&mut self) -> bool {
+        self.driver.poll()
+    }
+}
+
+pub(crate) struct UsbMassStorageDriver<T: MassStorageTransport> {
+    transport: T,
+    state: BotState,
+    sense: Sense,
+    exit_requested: bool,
+    block_count: u32,
+    read_sector: ReadSector,
+    sector: [u8; BLOCK_SIZE],
+}
+
+impl<T: MassStorageTransport> UsbMassStorageDriver<T> {
+    pub(crate) fn new(transport: T, block_count: u32, read_sector: ReadSector) -> Self {
         assert!(block_count != 0);
         Self {
-            // SAFETY: forwarded from this function's ownership contract.
-            transport: unsafe { UsbMassStorageTransport::from_v821_mmio() },
+            transport,
             state: BotState::Command,
             sense: SENSE_NONE,
             exit_requested: false,
@@ -113,7 +183,15 @@ impl UsbMassStorage {
         }
     }
 
-    pub fn initialize(&mut self) {
+    pub(crate) fn transport_mut(&mut self) -> &mut T {
+        &mut self.transport
+    }
+
+    pub(crate) fn transport(&self) -> &T {
+        &self.transport
+    }
+
+    pub(crate) fn initialize(&mut self) {
         self.state = BotState::Command;
         self.sense = SENSE_NONE;
         self.exit_requested = false;
@@ -121,7 +199,7 @@ impl UsbMassStorage {
     }
 
     /// Services one USB packet and reports a host-requested safe eject.
-    pub fn poll(&mut self) -> bool {
+    pub(crate) fn poll(&mut self) -> bool {
         if self.transport.take_class_reset() {
             self.state = BotState::Command;
             self.sense = SENSE_NONE;
@@ -173,9 +251,11 @@ impl UsbMassStorage {
         }
 
         if self.exit_requested {
-            self.exit_requested = self.transport.flush();
+            let flushed = self.transport.flush();
+            self.exit_requested = false;
+            return flushed;
         }
-        self.exit_requested
+        false
     }
 
     fn handle_command(&mut self, cbw: CommandBlockWrapper) {

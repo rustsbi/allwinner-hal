@@ -29,3 +29,13 @@ bench = false
 name = "usb-storage"
 test = false
 bench = false
+
+[[bin]]
+name = "usb-network"
+test = false
+bench = false
+
+[[bin]]
+name = "usb-composite"
+test = false
+bench = false
