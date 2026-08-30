@@ -7,6 +7,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[dependencies]
+allwinner-hal = { path = "../../allwinner-hal" }
+
 [target.'cfg(target_os = "none")'.dependencies]
 allwinner-rt = { path = "../../allwinner-rt", default-features = false, features = ["v821-mcu", "panic-halt"] }
 

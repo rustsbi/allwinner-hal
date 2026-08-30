@@ -1,4 +1,4 @@
-//! Allocation-free command-line editing for the USB serial example.
+//! Allocation-free command-line editing for the serial console examples.
 
 /// A completed console command.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -6,6 +6,7 @@ pub enum Command {
     Empty,
     Help,
     Hello,
+    Exit,
     Unknown,
 }
 
@@ -83,6 +84,7 @@ fn classify(mut line: &[u8]) -> Command {
         b"" => Command::Empty,
         b"help" => Command::Help,
         b"hello" => Command::Hello,
+        b"exit" => Command::Exit,
         _ => Command::Unknown,
     }
 }
@@ -92,9 +94,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn recognizes_the_two_commands_and_trims_spaces() {
+    fn recognizes_commands_and_trims_spaces() {
         assert_eq!(classify(b"help"), Command::Help);
         assert_eq!(classify(b"  hello  "), Command::Hello);
+        assert_eq!(classify(b"exit"), Command::Exit);
         assert_eq!(classify(b"HELLO"), Command::Unknown);
     }
 

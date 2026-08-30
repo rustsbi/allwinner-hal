@@ -6,19 +6,15 @@
 //! disabled, FIFO/status registers are not exposed as ordinary read/write
 //! cells, and W1C registers are acknowledged with exact masks.
 
-use core::{cell::UnsafeCell, mem::offset_of};
+use allwinner_hal::{
+    ccu::v821::{AonRegisterBlock, AppRegisterBlock},
+    usb::RegisterBlock as UsbRegisterBlock,
+};
 
 const USB0_BASE: usize = 0x4410_0000;
-const USB0_PHY_BASE: usize = USB0_BASE + 0x400;
 const APP_CCU_BASE: usize = 0x4200_1000;
-const HOSC_CONTROL_BASE: usize = 0x4a01_0400;
+const AON_CCU_BASE: usize = 0x4a01_0000;
 const COUNTER_LOW: usize = 0x3000_bff8;
-
-const USB_24M_GATE: u32 = 1 << 3;
-const USB_HCLK_GATE_RESET: u32 = 1 << 19;
-const USB_OTG_GATE_RESET: u32 = 1 << 20;
-const USB_PHY_RESET: u32 = 1 << 23;
-const HOSC_IS_24_MHZ: u32 = 1 << 31;
 
 const USB_POWER_HS_ENABLE: u8 = 0x20;
 const USB_POWER_SOFT_CONNECT: u8 = 0x40;
@@ -87,152 +83,6 @@ const STRING_SERIAL: [u8; 18] = [
 
 const _: () = assert!(CONFIGURATION_DESCRIPTOR[2] as usize == CONFIGURATION_DESCRIPTOR.len());
 
-#[repr(transparent)]
-struct ReadOnly<T: Copy>(UnsafeCell<T>);
-
-impl<T: Copy> ReadOnly<T> {
-    #[inline(always)]
-    fn read(&self) -> T {
-        // SAFETY: `self` points at a source-verified, aligned MMIO register.
-        unsafe { core::ptr::read_volatile(self.0.get()) }
-    }
-}
-
-#[repr(transparent)]
-struct ReadWrite<T: Copy>(UnsafeCell<T>);
-
-impl<T: Copy> ReadWrite<T> {
-    #[inline(always)]
-    fn read(&self) -> T {
-        // SAFETY: `self` points at a source-verified, aligned MMIO register.
-        unsafe { core::ptr::read_volatile(self.0.get()) }
-    }
-
-    #[inline(always)]
-    fn write(&self, value: T) {
-        // SAFETY: `self` points at a source-verified, aligned MMIO register.
-        unsafe { core::ptr::write_volatile(self.0.get(), value) }
-    }
-}
-
-#[repr(transparent)]
-struct WriteOneToClear<T: Copy>(UnsafeCell<T>);
-
-impl<T: Copy> WriteOneToClear<T> {
-    #[inline(always)]
-    fn status(&self) -> T {
-        // SAFETY: status reads are non-destructive for these controller IRQ
-        // registers according to the Tina UDC register definitions.
-        unsafe { core::ptr::read_volatile(self.0.get()) }
-    }
-
-    #[inline(always)]
-    fn acknowledge(&self, exact_mask: T) {
-        // SAFETY: W1C registers must receive the exact observed mask; callers
-        // never use read-modify-write through this type.
-        unsafe { core::ptr::write_volatile(self.0.get(), exact_mask) }
-    }
-}
-
-#[repr(transparent)]
-struct Fifo(UnsafeCell<u32>);
-
-impl Fifo {
-    #[inline(always)]
-    fn read_byte(&self) -> u8 {
-        // SAFETY: the controller FIFO accepts byte-wide PIO accesses.
-        unsafe { core::ptr::read_volatile(self.0.get().cast::<u8>()) }
-    }
-
-    #[inline(always)]
-    fn write_byte(&self, value: u8) {
-        // SAFETY: the controller FIFO accepts byte-wide PIO accesses.
-        unsafe { core::ptr::write_volatile(self.0.get().cast::<u8>(), value) }
-    }
-}
-
-/// V821 USB0 device-controller register layout used by Boot0 and FEL.
-#[repr(C)]
-struct UsbRegisters {
-    fifo: [Fifo; 4],
-    _reserved_010: [u8; 0x30],
-    power: ReadWrite<u8>,
-    devctl: ReadWrite<u8>,
-    index: ReadWrite<u8>,
-    vend0: ReadWrite<u8>,
-    interrupt_tx: WriteOneToClear<u16>,
-    interrupt_rx: WriteOneToClear<u16>,
-    interrupt_tx_enable: ReadWrite<u16>,
-    interrupt_rx_enable: ReadWrite<u16>,
-    interrupt_usb: WriteOneToClear<u8>,
-    _reserved_04d: [u8; 3],
-    interrupt_usb_enable: ReadWrite<u8>,
-    _reserved_051: [u8; 3],
-    frame: ReadOnly<u32>,
-    _reserved_058: [u8; 0x24],
-    test_mode: ReadWrite<u32>,
-    tx_max_packet: ReadWrite<u16>,
-    tx_csr: ReadWrite<u16>,
-    rx_max_packet: ReadWrite<u16>,
-    rx_csr: ReadWrite<u16>,
-    rx_count: ReadOnly<u16>,
-    _reserved_08a: u16,
-    tx_type: ReadWrite<u8>,
-    tx_interval: ReadWrite<u8>,
-    rx_type: ReadWrite<u8>,
-    rx_interval: ReadWrite<u8>,
-    tx_fifo_size: ReadWrite<u8>,
-    _reserved_091: u8,
-    tx_fifo_address: ReadWrite<u16>,
-    rx_fifo_size: ReadWrite<u8>,
-    _reserved_095: u8,
-    rx_fifo_address: ReadWrite<u16>,
-    function_address: ReadWrite<u8>,
-}
-
-#[repr(C)]
-struct AppCcuRegisters {
-    _reserved_000: [u8; 0x7c],
-    usb_24m: ReadWrite<u32>,
-    gate0: ReadWrite<u32>,
-    _reserved_084: [u8; 0x0c],
-    reset0: ReadWrite<u32>,
-}
-
-#[repr(C)]
-struct HoscControlRegisters {
-    _reserved_000: [u8; 4],
-    selected_frequency: ReadOnly<u32>,
-}
-
-#[repr(C)]
-struct UsbPhyRegisters {
-    iscr: ReadWrite<u32>,
-    _reserved_004: [u8; 0x0c],
-    clock_serial: ReadWrite<u32>,
-    _reserved_014: [u8; 0x0c],
-    control: ReadWrite<u32>,
-}
-
-const _: () = {
-    assert!(offset_of!(UsbRegisters, power) == 0x40);
-    assert!(offset_of!(UsbRegisters, interrupt_tx) == 0x44);
-    assert!(offset_of!(UsbRegisters, interrupt_usb) == 0x4c);
-    assert!(offset_of!(UsbRegisters, interrupt_usb_enable) == 0x50);
-    assert!(offset_of!(UsbRegisters, frame) == 0x54);
-    assert!(offset_of!(UsbRegisters, tx_max_packet) == 0x80);
-    assert!(offset_of!(UsbRegisters, rx_count) == 0x88);
-    assert!(offset_of!(UsbRegisters, tx_fifo_size) == 0x90);
-    assert!(offset_of!(UsbRegisters, rx_fifo_size) == 0x94);
-    assert!(offset_of!(UsbRegisters, function_address) == 0x98);
-    assert!(offset_of!(AppCcuRegisters, usb_24m) == 0x7c);
-    assert!(offset_of!(AppCcuRegisters, gate0) == 0x80);
-    assert!(offset_of!(AppCcuRegisters, reset0) == 0x90);
-    assert!(offset_of!(HoscControlRegisters, selected_frequency) == 0x04);
-    assert!(offset_of!(UsbPhyRegisters, clock_serial) == 0x10);
-    assert!(offset_of!(UsbPhyRegisters, control) == 0x20);
-};
-
 #[derive(Clone, Copy)]
 enum TxSource {
     Device,
@@ -282,10 +132,9 @@ impl SetupPacket {
 
 /// Exclusive owner of USB0 while the Boot0 payload is running on the E907.
 pub struct UsbCdcAcm {
-    registers: &'static UsbRegisters,
-    app_ccu: &'static AppCcuRegisters,
-    hosc: &'static HoscControlRegisters,
-    phy: &'static UsbPhyRegisters,
+    registers: &'static UsbRegisterBlock,
+    app_ccu: &'static AppRegisterBlock,
+    aon_ccu: &'static AonRegisterBlock,
     ep0_state: Ep0State,
     ep0_reply: [u8; 8],
     line_coding: [u8; 7],
@@ -302,18 +151,16 @@ impl UsbCdcAcm {
     /// core or ISR accessing USB0 or its APP-CCU fields. The address and layout
     /// must match sun300iw1p1/V821 revision P1.
     pub unsafe fn from_v821_mmio() -> Self {
-        // SAFETY: all four source-verified blocks are aligned and exclusively
+        // SAFETY: all three source-verified blocks are aligned and exclusively
         // owned under the caller's E907/interrupt preconditions.
-        let registers = unsafe { &*(USB0_BASE as *const UsbRegisters) };
-        let app_ccu = unsafe { &*(APP_CCU_BASE as *const AppCcuRegisters) };
-        let hosc = unsafe { &*(HOSC_CONTROL_BASE as *const HoscControlRegisters) };
-        let phy = unsafe { &*(USB0_PHY_BASE as *const UsbPhyRegisters) };
+        let registers = unsafe { &*(USB0_BASE as *const UsbRegisterBlock) };
+        let app_ccu = unsafe { &*(APP_CCU_BASE as *const AppRegisterBlock) };
+        let aon_ccu = unsafe { &*(AON_CCU_BASE as *const AonRegisterBlock) };
 
         Self {
             registers,
             app_ccu,
-            hosc,
-            phy,
+            aon_ccu,
             ep0_state: Ep0State::Idle,
             ep0_reply: [0; 8],
             // 115200 baud, one stop bit, no parity, eight data bits.
@@ -332,7 +179,9 @@ impl UsbCdcAcm {
         delay_microseconds(250_000);
 
         // Select the same PIO bus mode used by BootROM FEL.
-        self.registers.vend0.write(self.registers.vend0.read() & !1);
+        self.registers
+            .vendor_control
+            .write(self.registers.vendor_control.read() & !1);
         self.registers.interrupt_usb_enable.write(0);
         self.registers.interrupt_tx_enable.write(0);
         self.registers.interrupt_rx_enable.write(0);
@@ -358,80 +207,122 @@ impl UsbCdcAcm {
         // This is BootROM 0x87be's reset/clock sequence. The E907 owns these
         // shared APP-CCU words exclusively here, so each volatile RMW cannot
         // race an ISR, another core, or another driver.
-        self.app_ccu
-            .reset0
-            .write(self.app_ccu.reset0.read() & !USB_PHY_RESET);
-        self.app_ccu
-            .gate0
-            .write(self.app_ccu.gate0.read() & !USB_OTG_GATE_RESET);
-        self.app_ccu
-            .reset0
-            .write(self.app_ccu.reset0.read() & !USB_OTG_GATE_RESET);
-
-        self.app_ccu
-            .reset0
-            .write(self.app_ccu.reset0.read() & !USB_HCLK_GATE_RESET);
+        // SAFETY: `from_v821_mmio` requires this E907 payload to be the sole
+        // APP-CCU writer with interrupts disabled.
+        unsafe {
+            self.app_ccu
+                .bus_reset0
+                .modify(|value| value.assert_usb_phy());
+            self.app_ccu
+                .bus_clock_gating0
+                .modify(|value| value.mask_usb_otg());
+            self.app_ccu
+                .bus_reset0
+                .modify(|value| value.assert_usb_otg());
+            self.app_ccu
+                .bus_reset0
+                .modify(|value| value.assert_usb_hclk());
+        }
         delay_microseconds(20);
-        self.app_ccu
-            .gate0
-            .write(self.app_ccu.gate0.read() & !USB_HCLK_GATE_RESET);
+        // SAFETY: same exclusive APP-CCU ownership as above.
+        unsafe {
+            self.app_ccu
+                .bus_clock_gating0
+                .modify(|value| value.mask_usb_hclk());
+        }
         delay_microseconds(20);
 
-        self.app_ccu
-            .reset0
-            .write(self.app_ccu.reset0.read() | USB_PHY_RESET);
+        // SAFETY: same exclusive APP-CCU ownership as above.
+        unsafe {
+            self.app_ccu
+                .bus_reset0
+                .modify(|value| value.deassert_usb_phy());
+        }
         delay_microseconds(50);
-        self.app_ccu
-            .reset0
-            .write(self.app_ccu.reset0.read() | USB_OTG_GATE_RESET);
+        // SAFETY: same exclusive APP-CCU ownership as above.
+        unsafe {
+            self.app_ccu
+                .bus_reset0
+                .modify(|value| value.deassert_usb_otg());
+        }
         delay_microseconds(100);
-        self.app_ccu
-            .gate0
-            .write(self.app_ccu.gate0.read() | USB_OTG_GATE_RESET);
+        // SAFETY: same exclusive APP-CCU ownership as above.
+        unsafe {
+            self.app_ccu
+                .bus_clock_gating0
+                .modify(|value| value.pass_usb_otg());
+        }
         delay_microseconds(50);
 
-        self.app_ccu
-            .reset0
-            .write(self.app_ccu.reset0.read() | USB_HCLK_GATE_RESET);
+        // SAFETY: same exclusive APP-CCU ownership as above.
+        unsafe {
+            self.app_ccu
+                .bus_reset0
+                .modify(|value| value.deassert_usb_hclk());
+        }
         delay_microseconds(20);
-        self.app_ccu
-            .gate0
-            .write(self.app_ccu.gate0.read() | USB_HCLK_GATE_RESET);
+        // SAFETY: same exclusive APP-CCU ownership as above.
+        unsafe {
+            self.app_ccu
+                .bus_clock_gating0
+                .modify(|value| value.pass_usb_hclk());
+        }
         delay_microseconds(20);
-        self.app_ccu
-            .usb_24m
-            .write(self.app_ccu.usb_24m.read() | USB_24M_GATE);
+        // SAFETY: same exclusive APP-CCU ownership as above.
+        unsafe {
+            self.app_ccu.usb_clock.modify(|value| value.enable());
+        }
 
         // BootROM records its normalized oscillator choice in bit 31:
         // set means 24 MHz; clear means 40 MHz.
-        let serial_byte = if self.hosc.selected_frequency.read() & HOSC_IS_24_MHZ != 0 {
+        let serial_byte = if self.aon_ccu.dcxo_status.read().is_24_mhz() {
             0x14_u32
         } else {
             0x0c_u32
         };
         for selector in 11_u32..19 {
             let data_bit = (serial_byte >> (selector - 11)) & 1;
-            let value = (self.phy.clock_serial.read() & 0xffff_007e)
-                | (selector << 8)
-                | (data_bit << 7)
-                | 3;
-            self.phy.clock_serial.write(value);
+            let control = &self.registers.phy.phy_control_28nm;
+
+            // Preserve every volatile transaction from BootROM 0x52e2..0x531e.
+            // The four writes enable the VC bus, drive its clock low, present
+            // the selector/data bit, then create the rising edge that latches it.
+            control.write(control.read() | (1 << 1));
+            control.write(control.read() & 0xffff_007e);
+            control.write(control.read() | (selector << 8) | (data_bit << 7));
+            control.write(control.read() | 1);
             delay_microseconds(50);
         }
 
-        // BootROM 0x8768 selects USB0's PIO path before PHY setup.
-        self.phy.control.write(self.phy.control.read() | 1);
-        self.phy
-            .clock_serial
-            .write(self.phy.clock_serial.read() & !(1 << 3));
+        // BootROM 0x8768 selects USB0's OTG controller path before setup.
+        self.registers
+            .phy
+            .phy_select
+            .write(self.registers.phy.phy_select.read() | 1);
+        self.registers
+            .phy
+            .phy_control_28nm
+            .write(self.registers.phy.phy_control_28nm.read() & !(1 << 3));
         delay_microseconds(20);
 
-        self.phy.iscr.write(self.phy.iscr.read() | 0x0000_c000);
-        self.phy.iscr.write(self.phy.iscr.read() | 0x0001_0c00);
-        if self.registers.devctl.read() & 0x18 != 0x18 {
-            self.phy.iscr.write(self.phy.iscr.read() | 0x3000);
+        self.registers
+            .phy
+            .interface_status_control
+            .modify(|value| value | 0x0000_c000);
+        self.registers
+            .phy
+            .interface_status_control
+            .modify(|value| value | 0x0001_0c00);
+        if self.registers.device_control.read() & 0x18 != 0x18 {
+            self.registers
+                .phy
+                .interface_status_control
+                .modify(|value| value | 0x3000);
         }
-        self.phy.iscr.write(self.phy.iscr.read() & !0x0001_0000);
+        self.registers
+            .phy
+            .interface_status_control
+            .modify(|value| value & !0x0001_0000);
     }
 
     pub fn is_configured(&self) -> bool {
@@ -488,6 +379,18 @@ impl UsbCdcAcm {
                 .tx_csr
                 .write(USB_TXCSR_MODE | USB_TXCSR_TX_PACKET_READY);
             bytes = &bytes[count..];
+        }
+    }
+
+    /// Waits until the host acknowledges the final bulk-IN packet.
+    pub fn flush(&mut self) {
+        while self.configured {
+            self.select_endpoint(DATA_IN_ENDPOINT);
+            let pending = self.registers.tx_csr.read() & USB_TXCSR_TX_PACKET_READY != 0;
+            self.service_bus_and_control();
+            if !pending {
+                return;
+            }
         }
     }
 
@@ -795,13 +698,25 @@ impl UsbCdcAcm {
         };
         self.select_endpoint(endpoint);
         if endpoint_address & 0x80 != 0 {
-            self.registers
-                .tx_csr
-                .write(USB_TXCSR_MODE | USB_TXCSR_CLEAR_DATA_TOGGLE | USB_TXCSR_FLUSH_FIFO);
+            self.flush_tx_fifo(endpoint == DATA_IN_ENDPOINT);
         } else {
-            self.registers
-                .rx_csr
-                .write(USB_RXCSR_CLEAR_DATA_TOGGLE | USB_RXCSR_FLUSH_FIFO);
+            self.flush_rx_fifo(true);
+        }
+    }
+
+    fn flush_tx_fifo(&self, double_buffered: bool) {
+        let command = USB_TXCSR_MODE | USB_TXCSR_CLEAR_DATA_TOGGLE | USB_TXCSR_FLUSH_FIFO;
+        self.registers.tx_csr.write(command);
+        if double_buffered {
+            self.registers.tx_csr.write(command);
+        }
+    }
+
+    fn flush_rx_fifo(&self, double_buffered: bool) {
+        let command = USB_RXCSR_CLEAR_DATA_TOGGLE | USB_RXCSR_FLUSH_FIFO;
+        self.registers.rx_csr.write(command);
+        if double_buffered {
+            self.registers.rx_csr.write(command);
         }
     }
 
@@ -812,9 +727,7 @@ impl UsbCdcAcm {
         self.select_endpoint(NOTIFY_IN_ENDPOINT);
         self.registers.tx_csr.write(0);
         self.registers.tx_max_packet.write(16);
-        self.registers
-            .tx_csr
-            .write(USB_TXCSR_MODE | USB_TXCSR_CLEAR_DATA_TOGGLE | USB_TXCSR_FLUSH_FIFO);
+        self.flush_tx_fifo(false);
         self.registers.tx_fifo_size.write(0x06);
         self.registers.tx_fifo_address.write(0x0040);
 
@@ -822,18 +735,14 @@ impl UsbCdcAcm {
         self.select_endpoint(DATA_IN_ENDPOINT);
         self.registers.tx_csr.write(0);
         self.registers.tx_max_packet.write(64);
-        self.registers
-            .tx_csr
-            .write(USB_TXCSR_MODE | USB_TXCSR_CLEAR_DATA_TOGGLE | USB_TXCSR_FLUSH_FIFO);
+        self.flush_tx_fifo(true);
         self.registers.tx_fifo_size.write(0x16);
         self.registers.tx_fifo_address.write(0x00c0);
 
         // EP2 OUT bulk: two 512-byte banks (1024 bytes total) at byte 0xa00.
         self.registers.rx_csr.write(0);
         self.registers.rx_max_packet.write(64);
-        self.registers
-            .rx_csr
-            .write(USB_RXCSR_CLEAR_DATA_TOGGLE | USB_RXCSR_FLUSH_FIFO);
+        self.flush_rx_fifo(true);
         self.registers.rx_fifo_size.write(0x16);
         self.registers.rx_fifo_address.write(0x0140);
 
@@ -886,25 +795,6 @@ fn delay_microseconds(microseconds: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn register_offsets_match_the_v821_udc_layout() {
-        assert_eq!(offset_of!(UsbRegisters, power), 0x40);
-        assert_eq!(offset_of!(UsbRegisters, interrupt_usb), 0x4c);
-        assert_eq!(offset_of!(UsbRegisters, interrupt_usb_enable), 0x50);
-        assert_eq!(offset_of!(UsbRegisters, frame), 0x54);
-        assert_eq!(offset_of!(UsbRegisters, tx_csr), 0x82);
-        assert_eq!(offset_of!(UsbRegisters, rx_count), 0x88);
-        assert_eq!(offset_of!(UsbRegisters, tx_fifo_size), 0x90);
-        assert_eq!(offset_of!(UsbRegisters, rx_fifo_size), 0x94);
-        assert_eq!(offset_of!(UsbRegisters, function_address), 0x98);
-        assert_eq!(offset_of!(AppCcuRegisters, usb_24m), 0x7c);
-        assert_eq!(offset_of!(AppCcuRegisters, gate0), 0x80);
-        assert_eq!(offset_of!(AppCcuRegisters, reset0), 0x90);
-        assert_eq!(offset_of!(HoscControlRegisters, selected_frequency), 0x04);
-        assert_eq!(offset_of!(UsbPhyRegisters, clock_serial), 0x10);
-        assert_eq!(offset_of!(UsbPhyRegisters, control), 0x20);
-    }
 
     #[test]
     fn configuration_descriptor_is_well_formed() {

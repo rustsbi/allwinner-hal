@@ -1,11 +1,20 @@
 //! V821 chip platforms.
 
+use allwinner_hal::{
+    ccu::v821::{AonRegisterBlock, ApbSpecialClockSource, AppRegisterBlock},
+    gpio::PadExt,
+    uart::UartExt,
+};
 use embedded_time::rate::{Extensions, Hertz};
 
 /// ROM runtime peripheral ownership and configurations.
 pub struct Peripherals {
     /// General Purpose Input/Output peripheral.
     pub gpio: Pads,
+    /// Application-domain Clock Control Unit peripheral.
+    pub ccu: CCU,
+    /// Always-on Clock Control Unit peripheral.
+    pub aon_ccu: AON_CCU,
     /// Universal Asynchronous Receiver/Transmitter 0.
     pub uart0: UART0,
     /// Universal Asynchronous Receiver/Transmitter 1.
@@ -19,7 +28,8 @@ pub struct Peripherals {
 soc! {
     /// General Purpose Input/Output peripheral for PA, PC, PD and PL pads.
     pub struct GPIO => 0x42000000, allwinner_hal::gpio::RegisterBlock;
-    // TODO pub struct CCU => 0x42001000
+    /// Application-domain Clock Control Unit peripheral.
+    pub struct CCU => 0x42001000, AppRegisterBlock;
     // TODO pub struct GPADC => 0x42009000
     // TODO pub struct TMR => 0x42050000
     /// Universal Asynchronous Receiver/Transmitter 0.
@@ -38,7 +48,12 @@ soc! {
     // TODO pub struct RTC => 0x4A000C00
     // TODO pub struct WUPTIMER => 0x4A000400
     // TODO pub struct RTC_WDG => 0x4A001000
-    // TODO pub struct AON_CCU => 0x4A010000
+    /// Always-on Clock Control Unit peripheral.
+    pub struct AON_CCU => 0x4A010000, AonRegisterBlock;
+}
+
+impl_uart! {
+    0 => UART0,
 }
 
 // TODO GPIO_R logic in allwinner-hal
@@ -57,6 +72,50 @@ impl<const P: char, const N: u8> Pad<P, N> {
     }
 }
 
+impl<'a, const P: char, const N: u8> allwinner_hal::gpio::PadExt<'a, P, N> for &'a mut Pad<P, N> {
+    #[inline]
+    fn into_input(self) -> allwinner_hal::gpio::Input<'a> {
+        unsafe { allwinner_hal::gpio::Input::__new(P, N, &GPIO { _private: () }) }
+    }
+
+    #[inline]
+    fn into_output(self) -> allwinner_hal::gpio::Output<'a> {
+        unsafe { allwinner_hal::gpio::Output::__new(P, N, &GPIO { _private: () }) }
+    }
+
+    #[inline]
+    fn into_function<const F: u8>(self) -> allwinner_hal::gpio::Function<'a, P, N, F> {
+        unsafe { allwinner_hal::gpio::Function::__new(&GPIO { _private: () }) }
+    }
+
+    #[inline]
+    fn into_eint(self) -> allwinner_hal::gpio::EintPad<'a> {
+        unsafe { allwinner_hal::gpio::EintPad::__new(P, N, &GPIO { _private: () }) }
+    }
+}
+
+impl<const P: char, const N: u8> allwinner_hal::gpio::PadExt<'static, P, N> for Pad<P, N> {
+    #[inline]
+    fn into_input(self) -> allwinner_hal::gpio::Input<'static> {
+        unsafe { allwinner_hal::gpio::Input::__new(P, N, &GPIO { _private: () }) }
+    }
+
+    #[inline]
+    fn into_output(self) -> allwinner_hal::gpio::Output<'static> {
+        unsafe { allwinner_hal::gpio::Output::__new(P, N, &GPIO { _private: () }) }
+    }
+
+    #[inline]
+    fn into_function<const F: u8>(self) -> allwinner_hal::gpio::Function<'static, P, N, F> {
+        unsafe { allwinner_hal::gpio::Function::__new(&GPIO { _private: () }) }
+    }
+
+    #[inline]
+    fn into_eint(self) -> allwinner_hal::gpio::EintPad<'static> {
+        unsafe { allwinner_hal::gpio::EintPad::__new(P, N, &GPIO { _private: () }) }
+    }
+}
+
 /// Clock configuration on current SoC.
 #[derive(Debug)]
 pub struct Clocks {
@@ -66,11 +125,67 @@ pub struct Clocks {
     pub apb1: Hertz,
 }
 
+impl Clocks {
+    /// Select the board HOSC and enable the peripheral clock for UART `I`.
+    #[inline]
+    pub fn enable_uart<const I: usize>(&self, ccu: &CCU, aon_ccu: &AON_CCU) -> UartClock<I> {
+        let hosc_hz = if aon_ccu.dcxo_status.read().is_24_mhz() {
+            24_000_000
+        } else {
+            40_000_000
+        };
+
+        // SAFETY: this Boot0 payload is the only active E907 context, the
+        // runtime keeps interrupts disabled, and both CCU domains are mapped
+        // and powered while their UART clock fields are modified.
+        unsafe {
+            aon_ccu.apb_special_clock.modify(|value| {
+                value
+                    .set_clock_source(ApbSpecialClockSource::Hosc)
+                    .set_divisor(1)
+            });
+            ccu.bus_reset0.modify(|value| value.deassert_reset::<I>());
+            ccu.bus_clock_gating0.modify(|value| value.gate_mask::<I>());
+        }
+        short_delay();
+        // SAFETY: same exclusive CCU ownership as above. This is the gate
+        // pulse used by the V821 SPL after releasing the UART reset.
+        unsafe {
+            ccu.bus_clock_gating0.modify(|value| value.gate_pass::<I>());
+        }
+
+        UartClock {
+            frequency: hosc_hz.Hz(),
+        }
+    }
+}
+
+/// Enabled clock input for V821 UART `I`.
+pub struct UartClock<const I: usize> {
+    frequency: Hertz,
+}
+
+impl<const I: usize> allwinner_hal::uart::Clock<I> for UartClock<I> {
+    #[inline]
+    fn uart_clock(&self) -> Hertz {
+        self.frequency
+    }
+}
+
+impl<const I: usize> allwinner_hal::uart::Clock<I> for &UartClock<I> {
+    #[inline]
+    fn uart_clock(&self) -> Hertz {
+        self.frequency
+    }
+}
+
 #[doc(hidden)]
 #[inline]
 pub fn __rom_init_params() -> (Peripherals, Clocks) {
     let peripherals = Peripherals {
         gpio: Pads::__new(),
+        ccu: CCU { _private: () },
+        aon_ccu: AON_CCU { _private: () },
         uart0: UART0 { _private: () },
         uart1: UART1 { _private: () },
         uart2: UART2 { _private: () },
@@ -147,4 +262,18 @@ impl_gpio_pins! {
     pl5: ('L', 5);
     pl6: ('L', 6);
     pl7: ('L', 7);
+}
+
+impl_uart_pads! {
+    ('L', 4, 3): IntoTransmit, into_uart_transmit, 0;
+    ('L', 5, 3): IntoReceive, into_uart_receive, 0;
+}
+
+#[inline]
+fn short_delay() {
+    let mut cycles = core::hint::black_box(100u32);
+    while cycles != 0 {
+        core::hint::spin_loop();
+        cycles -= 1;
+    }
 }

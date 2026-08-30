@@ -103,8 +103,7 @@ fn uart_write_blocking(
     buffer: &[u8],
 ) -> Result<usize, core::convert::Infallible> {
     for c in buffer {
-        // FIXME: should be transmit_fifo_not_full
-        while uart.usr.read().busy() {
+        while !uart.usr.read().transmit_fifo_not_full() {
             core::hint::spin_loop()
         }
         uart.rbr_thr().tx_data(*c);
@@ -114,7 +113,7 @@ fn uart_write_blocking(
 
 #[inline]
 fn uart_flush_blocking(uart: &RegisterBlock) -> Result<(), core::convert::Infallible> {
-    while !uart.usr.read().transmit_fifo_empty() {
+    while !uart.lsr().read().is_transmitter_empty() {
         core::hint::spin_loop()
     }
     Ok(())

@@ -21,6 +21,7 @@ pub mod spi;
 pub mod sysctl;
 pub mod twi;
 pub mod uart;
+pub mod usb;
 
 #[doc(hidden)]
 pub mod prelude {

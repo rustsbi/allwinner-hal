@@ -16,7 +16,7 @@ impl Clocks {
     pub fn enable_uart<const I: usize>(&self, ccu: &CCU) -> UartClock<I> {
         unsafe {
             ccu.uart_bgr
-                .modify(|v| v.gate_pass::<0>().deassert_reset::<0>())
+                .modify(|v| v.gate_pass::<I>().deassert_reset::<I>())
         };
         UartClock { apb1: self.apb1 }
     }

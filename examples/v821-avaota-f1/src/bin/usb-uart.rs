@@ -44,8 +44,13 @@ fn main(_peripherals: Peripherals, _clocks: Clocks) {
                         Command::Empty => {}
                         Command::Hello => usb.write(b"hello world\r\n"),
                         Command::Help => usb.write(
-                            b"Commands:\r\n  help   show this help\r\n  hello  print hello world\r\n",
+                            b"Commands:\r\n  help   show this help\r\n  hello  print hello world\r\n  exit   return to FEL\r\n",
                         ),
+                        Command::Exit => {
+                            usb.write(b"Bye!\r\n");
+                            usb.flush();
+                            return;
+                        }
                         Command::Unknown => usb.write(b"unknown command; try help\r\n"),
                     }
                     usb.write(b"> ");
