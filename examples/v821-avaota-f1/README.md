@@ -6,8 +6,8 @@ This package contains five allocation-free examples for the V821 E907:
 - `uart-demo`: UART0 through the Avaota Hypercard at `115200 8N1`.
 - `usb-storage`: a read-only USB drive named `Avaota F1`, containing one
   `README.txt`; safely ejecting the drive returns to FEL.
-- `usb-network`: a CDC-NCM Ethernet device with SLAAC at `2001:db8::1`;
-  leaving its data interface disabled during safe removal returns to FEL.
+- `usb-network`: a CDC-NCM Ethernet device with SLAAC and mDNS
+  (`avaota-f1.local` resolves to `2001:db8::1`); safe removal returns to FEL.
 - `usb-composite`: one USB device exposing both the CDC-ACM console and a
   read-only mass-storage volume.
 
@@ -56,8 +56,8 @@ to the attached SPI flash at offset `0`. Reset the board after flashing. Use
 
 - `usb-uart` enumerates as `V821 USB UART` using the operating system's
   CDC-ACM driver.
-- `usb-network` uses CDC-NCM and advertises `2001:db8::/64` through SLAAC.
-  After the host configures its address, run `ping.exe -6 2001:db8::1`.
+- `usb-network` uses CDC-NCM, advertises `2001:db8::/64` through SLAAC, and
+  publishes `avaota-f1.local` through mDNS. Run `ping.exe -6 avaota-f1.local`.
 - `usb-composite` enumerates one CDC-ACM serial port and one read-only FAT12
   drive named `V821 CDCMSC` at the same time. Safely ejecting the drive does
   not exit the payload; enter `exit` in the serial console to return to FEL.
