@@ -1,12 +1,14 @@
-# Avaota F1 (V821) Consoles
+# Avaota F1 (V821) Examples
 
-This package contains two allocation-free consoles for the V821 E907:
+This package contains three allocation-free examples for the V821 E907:
 
 - `usb-uart`: USB CDC-ACM over USB0 D+/D- (default).
 - `uart-demo`: UART0 through the Avaota Hypercard at `115200 8N1`.
+- `usb-storage`: a read-only USB drive named `Avaota F1`, containing one
+  `README.txt`; safely ejecting the drive returns to FEL.
 
-Both support `help`, `hello`, and `exit`. `hello` prints `hello world`, while
-`exit` returns to FEL.
+The two consoles support `help`, `hello`, and `exit`. `hello` prints
+`hello world`, while `exit` returns to FEL.
 
 ## Flash
 
@@ -22,6 +24,12 @@ UART0:
 
 ```powershell
 cargo run --release -p v821-avaota-f1 --bin uart-demo --target riscv32imafc-unknown-none-elf
+```
+
+USB mass storage:
+
+```powershell
+cargo run --release -p v821-avaota-f1 --bin usb-storage --target riscv32imafc-unknown-none-elf
 ```
 
 The workspace runner converts the ELF into an `eGON.BT0` image and writes it

@@ -48,7 +48,7 @@ fn main(_peripherals: Peripherals, _clocks: Clocks) {
                         ),
                         Command::Exit => {
                             usb.write(b"Bye!\r\n");
-                            usb.flush();
+                            let _ = usb.flush();
                             return;
                         }
                         Command::Unknown => usb.write(b"unknown command; try help\r\n"),

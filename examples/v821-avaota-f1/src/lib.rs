@@ -2,3 +2,4 @@
 
 pub mod console;
 pub mod usb;
+pub mod usb_msc;

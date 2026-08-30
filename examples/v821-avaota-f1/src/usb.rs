@@ -1,4 +1,4 @@
-//! Polled USB CDC-ACM device for the V821 USB0 controller.
+//! Polled USB devices for the V821 USB0 controller.
 //!
 //! The controller layout and initialization sequence are taken from the
 //! sun300iw1p1 BootROM and Tina RTOS UDC driver.  This module intentionally
@@ -32,6 +32,8 @@ const USB_CSR0_SERVICE_SETUP_END: u16 = 0x0080;
 
 const USB_TXCSR_TX_PACKET_READY: u16 = 0x0001;
 const USB_TXCSR_FLUSH_FIFO: u16 = 0x0008;
+const USB_TXCSR_SEND_STALL: u16 = 0x0010;
+const USB_TXCSR_SENT_STALL: u16 = 0x0020;
 const USB_TXCSR_CLEAR_DATA_TOGGLE: u16 = 0x0040;
 const USB_TXCSR_MODE: u16 = 0x2000;
 const USB_RXCSR_RX_PACKET_READY: u16 = 0x0001;
@@ -39,6 +41,8 @@ const USB_RXCSR_FLUSH_FIFO: u16 = 0x0010;
 const USB_RXCSR_CLEAR_DATA_TOGGLE: u16 = 0x0080;
 
 const EP0_MAX_PACKET: usize = 64;
+const PROFILE_CDC_ACM: u8 = 0;
+const PROFILE_MASS_STORAGE: u8 = 1;
 const NOTIFY_IN_ENDPOINT: u8 = 1;
 const DATA_OUT_ENDPOINT: u8 = 2;
 const DATA_IN_ENDPOINT: u8 = 2;
@@ -47,15 +51,21 @@ const CDC_SET_LINE_CODING: u8 = 0x20;
 const CDC_GET_LINE_CODING: u8 = 0x21;
 const CDC_SET_CONTROL_LINE_STATE: u8 = 0x22;
 const CDC_SEND_BREAK: u8 = 0x23;
+const MSC_BULK_ONLY_RESET: u8 = 0xff;
+const MSC_GET_MAX_LUN: u8 = 0xfe;
 
-const DEVICE_DESCRIPTOR: [u8; 18] = [
+const CDC_DEVICE_DESCRIPTOR: [u8; 18] = [
     18, 0x01, 0x00, 0x02, 0xef, 0x02, 0x01, 64, 0x3a, 0x1f, 0x10, 0x82, 0x00, 0x01, 1, 2, 3, 1,
+];
+
+const MSC_DEVICE_DESCRIPTOR: [u8; 18] = [
+    18, 0x01, 0x00, 0x02, 0, 0, 0, 64, 0x3a, 0x1f, 0x11, 0x82, 0x00, 0x01, 1, 2, 3, 1,
 ];
 
 // Full-speed CDC-ACM configuration: IAD, control interface, three CDC
 // functional descriptors, notification endpoint, and a two-endpoint data
 // interface.
-const CONFIGURATION_DESCRIPTOR: [u8; 75] = [
+const CDC_CONFIGURATION_DESCRIPTOR: [u8; 75] = [
     9, 0x02, 75, 0, 2, 1, 0, 0x80, 50, // configuration
     8, 0x0b, 0, 2, 0x02, 0x02, 0x01, 0, // interface association
     9, 0x04, 0, 0, 1, 0x02, 0x02, 0x01, 0, // communications interface
@@ -69,19 +79,38 @@ const CONFIGURATION_DESCRIPTOR: [u8; 75] = [
     7, 0x05, 0x82, 0x02, 64, 0, 0, // bulk IN
 ];
 
+// Full-speed USB mass storage, SCSI transparent command set and Bulk-Only
+// Transport, using EP2 in both directions.
+const MSC_CONFIGURATION_DESCRIPTOR: [u8; 32] = [
+    9, 0x02, 32, 0, 1, 1, 0, 0x80, 50, // configuration
+    9, 0x04, 0, 0, 2, 0x08, 0x06, 0x50, 0, // mass-storage interface
+    7, 0x05, 0x02, 0x02, 64, 0, 0, // bulk OUT
+    7, 0x05, 0x82, 0x02, 64, 0, 0, // bulk IN
+];
+
 const STRING_LANGUAGE: [u8; 4] = [4, 0x03, 0x09, 0x04];
 const STRING_MANUFACTURER: [u8; 16] = [
     16, 0x03, b'R', 0, b'u', 0, b's', 0, b't', 0, b'S', 0, b'B', 0, b'I', 0,
 ];
-const STRING_PRODUCT: [u8; 28] = [
+const STRING_PRODUCT_CDC: [u8; 28] = [
     28, 0x03, b'V', 0, b'8', 0, b'2', 0, b'1', 0, b' ', 0, b'U', 0, b'S', 0, b'B', 0, b' ', 0,
     b'U', 0, b'A', 0, b'R', 0, b'T', 0,
 ];
-const STRING_SERIAL: [u8; 18] = [
+const STRING_PRODUCT_MSC: [u8; 20] = [
+    20, 0x03, b'A', 0, b'v', 0, b'a', 0, b'o', 0, b't', 0, b'a', 0, b' ', 0, b'F', 0, b'1', 0,
+];
+const STRING_SERIAL_CDC: [u8; 18] = [
     18, 0x03, b'V', 0, b'8', 0, b'2', 0, b'1', 0, b'0', 0, b'0', 0, b'0', 0, b'1', 0,
 ];
+const STRING_SERIAL_MSC: [u8; 26] = [
+    26, 0x03, b'0', 0, b'8', 0, b'2', 0, b'1', 0, b'F', 0, b'1', 0, b'0', 0, b'0', 0, b'0', 0,
+    b'0', 0, b'0', 0, b'1', 0,
+];
 
-const _: () = assert!(CONFIGURATION_DESCRIPTOR[2] as usize == CONFIGURATION_DESCRIPTOR.len());
+const _: () =
+    assert!(CDC_CONFIGURATION_DESCRIPTOR[2] as usize == CDC_CONFIGURATION_DESCRIPTOR.len());
+const _: () =
+    assert!(MSC_CONFIGURATION_DESCRIPTOR[2] as usize == MSC_CONFIGURATION_DESCRIPTOR.len());
 
 #[derive(Clone, Copy)]
 enum TxSource {
@@ -130,8 +159,14 @@ impl SetupPacket {
     }
 }
 
+/// CDC-ACM USB0 device used by the serial-console example.
+pub type UsbCdcAcm = UsbDevice<PROFILE_CDC_ACM>;
+
+/// Bulk-only USB0 transport used by the mass-storage example.
+pub(crate) type UsbMassStorageTransport = UsbDevice<PROFILE_MASS_STORAGE>;
+
 /// Exclusive owner of USB0 while the Boot0 payload is running on the E907.
-pub struct UsbCdcAcm {
+pub struct UsbDevice<const PROFILE: u8> {
     registers: &'static UsbRegisterBlock,
     app_ccu: &'static AppRegisterBlock,
     aon_ccu: &'static AonRegisterBlock,
@@ -139,9 +174,11 @@ pub struct UsbCdcAcm {
     ep0_reply: [u8; 8],
     line_coding: [u8; 7],
     configured: bool,
+    class_reset: bool,
+    bulk_in_wedged: bool,
 }
 
-impl UsbCdcAcm {
+impl<const PROFILE: u8> UsbDevice<PROFILE> {
     /// Maps V821 USB0 and takes exclusive ownership after the BootROM handoff.
     ///
     /// # Safety
@@ -166,10 +203,12 @@ impl UsbCdcAcm {
             // 115200 baud, one stop bit, no parity, eight data bits.
             line_coding: [0x00, 0xc2, 0x01, 0x00, 0, 0, 8],
             configured: false,
+            class_reset: false,
+            bulk_in_wedged: false,
         }
     }
 
-    /// Cold-initializes USB0, then reconnects it as a full-speed CDC device.
+    /// Cold-initializes USB0, then reconnects it as a full-speed USB device.
     pub fn initialize(&mut self) {
         self.initialize_v821_usb0_hardware();
 
@@ -190,10 +229,12 @@ impl UsbCdcAcm {
         self.registers.function_address.write(0);
         self.ep0_state = Ep0State::Idle;
         self.configured = false;
+        self.class_reset = false;
+        self.bulk_in_wedged = false;
         self.configure_data_endpoints();
 
-        // Full speed keeps the CDC bulk descriptors at the required 64-byte
-        // max-packet size and avoids unverified high-speed PHY behavior.
+        // Full speed keeps bulk endpoints at the declared 64-byte max-packet
+        // size and avoids unverified high-speed PHY behavior.
         let power = self.registers.power.read()
             & !(USB_POWER_HS_ENABLE | USB_POWER_ISO_UPDATE | USB_POWER_SOFT_CONNECT);
         self.registers.power.write(power);
@@ -329,12 +370,33 @@ impl UsbCdcAcm {
         self.configured
     }
 
+    pub(crate) fn take_class_reset(&mut self) -> bool {
+        core::mem::take(&mut self.class_reset)
+    }
+
+    #[inline]
+    fn transfers_active(&self) -> bool {
+        self.configured && (PROFILE != PROFILE_MASS_STORAGE || !self.class_reset)
+    }
+
+    pub(crate) fn stall_bulk_in(&mut self, until_class_reset: bool) {
+        if !self.transfers_active() {
+            return;
+        }
+        self.bulk_in_wedged = until_class_reset;
+        self.select_endpoint(DATA_IN_ENDPOINT);
+        self.registers
+            .tx_csr
+            .write(USB_TXCSR_MODE | USB_TXCSR_SEND_STALL);
+        self.select_endpoint(0);
+    }
+
     /// Services bus/EP0 state and returns at most one received bulk packet.
     pub fn poll(&mut self, output: &mut [u8; 64]) -> usize {
         if self.service_bus_and_control() {
             return 0;
         }
-        if !self.configured {
+        if !self.transfers_active() {
             return 0;
         }
 
@@ -356,17 +418,20 @@ impl UsbCdcAcm {
         count
     }
 
-    /// Writes a byte stream through the CDC bulk-IN endpoint.
+    /// Writes a byte stream through the bulk-IN endpoint.
     pub fn write(&mut self, mut bytes: &[u8]) {
-        while self.configured && !bytes.is_empty() {
-            while self.configured {
+        while self.transfers_active() && !bytes.is_empty() {
+            while self.transfers_active() {
                 self.select_endpoint(DATA_IN_ENDPOINT);
-                if self.registers.tx_csr.read() & USB_TXCSR_TX_PACKET_READY == 0 {
+                if self.registers.tx_csr.read()
+                    & (USB_TXCSR_TX_PACKET_READY | USB_TXCSR_SEND_STALL | USB_TXCSR_SENT_STALL)
+                    == 0
+                {
                     break;
                 }
                 self.service_bus_and_control();
             }
-            if !self.configured {
+            if !self.transfers_active() {
                 return;
             }
 
@@ -382,16 +447,33 @@ impl UsbCdcAcm {
         }
     }
 
-    /// Waits until the host acknowledges the final bulk-IN packet.
-    pub fn flush(&mut self) {
-        while self.configured {
+    pub(crate) fn write_zero_length_packet(&mut self) {
+        while self.transfers_active() {
+            self.select_endpoint(DATA_IN_ENDPOINT);
+            if self.registers.tx_csr.read()
+                & (USB_TXCSR_TX_PACKET_READY | USB_TXCSR_SEND_STALL | USB_TXCSR_SENT_STALL)
+                == 0
+            {
+                self.registers
+                    .tx_csr
+                    .write(USB_TXCSR_MODE | USB_TXCSR_TX_PACKET_READY);
+                return;
+            }
+            self.service_bus_and_control();
+        }
+    }
+
+    /// Waits for the final bulk-IN acknowledgement, or reports a reset.
+    pub fn flush(&mut self) -> bool {
+        while self.transfers_active() {
             self.select_endpoint(DATA_IN_ENDPOINT);
             let pending = self.registers.tx_csr.read() & USB_TXCSR_TX_PACKET_READY != 0;
             self.service_bus_and_control();
             if !pending {
-                return;
+                return true;
             }
         }
+        false
     }
 
     /// Returns true when a bus reset was handled and the caller should stop
@@ -422,6 +504,8 @@ impl UsbCdcAcm {
         self.registers.function_address.write(0);
         self.ep0_state = Ep0State::Idle;
         self.configured = false;
+        self.class_reset = true;
+        self.bulk_in_wedged = false;
         self.configure_data_endpoints();
         self.select_endpoint(0);
     }
@@ -550,14 +634,40 @@ impl UsbCdcAcm {
                 self.start_control_in(TxSource::Reply, setup.length.min(2) as usize);
             }
             (0x02, 0x01) if setup.value == 0 && setup.length == 0 => {
-                self.clear_endpoint_halt(setup.index as u8);
-                self.acknowledge_control_out();
+                if self.clear_endpoint_halt(setup.index as u8) {
+                    self.acknowledge_control_out();
+                } else {
+                    self.stall_endpoint_zero();
+                }
             }
             _ => self.stall_endpoint_zero(),
         }
     }
 
     fn handle_class_request(&mut self, setup: SetupPacket) {
+        if PROFILE == PROFILE_MASS_STORAGE {
+            match (setup.request_type, setup.request) {
+                (0xa1, MSC_GET_MAX_LUN)
+                    if setup.value == 0 && setup.index == 0 && setup.length == 1 =>
+                {
+                    self.ep0_reply[0] = 0;
+                    self.start_control_in(TxSource::Reply, 1);
+                }
+                (0x21, MSC_BULK_ONLY_RESET)
+                    if setup.value == 0 && setup.index == 0 && setup.length == 0 =>
+                {
+                    self.class_reset = true;
+                    // BOT reset preserves bulk stalls and data toggles.  It
+                    // only releases a wedged IN endpoint so the host's
+                    // following CLEAR_FEATURE requests can recover both ends.
+                    self.bulk_in_wedged = false;
+                    self.acknowledge_control_out();
+                }
+                _ => self.stall_endpoint_zero(),
+            }
+            return;
+        }
+
         match (setup.request_type, setup.request) {
             (0xa1, CDC_GET_LINE_CODING) if setup.length != 0 => {
                 self.ep0_reply[..7].copy_from_slice(&self.line_coding);
@@ -651,26 +761,28 @@ impl UsbCdcAcm {
     }
 
     fn source_len(&self, source: TxSource) -> usize {
-        match source {
-            TxSource::Device => DEVICE_DESCRIPTOR.len(),
-            TxSource::Configuration => CONFIGURATION_DESCRIPTOR.len(),
-            TxSource::Language => STRING_LANGUAGE.len(),
-            TxSource::Manufacturer => STRING_MANUFACTURER.len(),
-            TxSource::Product => STRING_PRODUCT.len(),
-            TxSource::Serial => STRING_SERIAL.len(),
-            TxSource::Reply => self.ep0_reply.len(),
-        }
+        self.source(source).len()
     }
 
     fn source_byte(&self, source: TxSource, index: usize) -> u8 {
+        self.source(source)[index]
+    }
+
+    fn source(&self, source: TxSource) -> &[u8] {
         match source {
-            TxSource::Device => DEVICE_DESCRIPTOR[index],
-            TxSource::Configuration => CONFIGURATION_DESCRIPTOR[index],
-            TxSource::Language => STRING_LANGUAGE[index],
-            TxSource::Manufacturer => STRING_MANUFACTURER[index],
-            TxSource::Product => STRING_PRODUCT[index],
-            TxSource::Serial => STRING_SERIAL[index],
-            TxSource::Reply => self.ep0_reply[index],
+            TxSource::Device if PROFILE == PROFILE_MASS_STORAGE => &MSC_DEVICE_DESCRIPTOR,
+            TxSource::Device => &CDC_DEVICE_DESCRIPTOR,
+            TxSource::Configuration if PROFILE == PROFILE_MASS_STORAGE => {
+                &MSC_CONFIGURATION_DESCRIPTOR
+            }
+            TxSource::Configuration => &CDC_CONFIGURATION_DESCRIPTOR,
+            TxSource::Language => &STRING_LANGUAGE,
+            TxSource::Manufacturer => &STRING_MANUFACTURER,
+            TxSource::Product if PROFILE == PROFILE_MASS_STORAGE => &STRING_PRODUCT_MSC,
+            TxSource::Product => &STRING_PRODUCT_CDC,
+            TxSource::Serial if PROFILE == PROFILE_MASS_STORAGE => &STRING_SERIAL_MSC,
+            TxSource::Serial => &STRING_SERIAL_CDC,
+            TxSource::Reply => &self.ep0_reply,
         }
     }
 
@@ -690,18 +802,22 @@ impl UsbCdcAcm {
         self.ep0_state = Ep0State::Idle;
     }
 
-    fn clear_endpoint_halt(&mut self, endpoint_address: u8) {
+    fn clear_endpoint_halt(&mut self, endpoint_address: u8) -> bool {
         let endpoint = match endpoint_address {
-            0x81 => NOTIFY_IN_ENDPOINT,
+            0x81 if PROFILE == PROFILE_CDC_ACM => NOTIFY_IN_ENDPOINT,
             0x82 | 0x02 => DATA_IN_ENDPOINT,
-            _ => return,
+            _ => return false,
         };
+        if endpoint_address == 0x82 && self.bulk_in_wedged {
+            return true;
+        }
         self.select_endpoint(endpoint);
         if endpoint_address & 0x80 != 0 {
             self.flush_tx_fifo(endpoint == DATA_IN_ENDPOINT);
         } else {
             self.flush_rx_fifo(true);
         }
+        true
     }
 
     fn flush_tx_fifo(&self, double_buffered: bool) {
@@ -721,15 +837,18 @@ impl UsbCdcAcm {
     }
 
     fn configure_data_endpoints(&mut self) {
-        // EP1 IN notification: 16-byte packets backed by a 512-byte FIFO at
-        // byte 0x200.  The endpoint normally NAKs because this tiny console
-        // has no asynchronous serial-state notifications to report.
-        self.select_endpoint(NOTIFY_IN_ENDPOINT);
-        self.registers.tx_csr.write(0);
-        self.registers.tx_max_packet.write(16);
-        self.flush_tx_fifo(false);
-        self.registers.tx_fifo_size.write(0x06);
-        self.registers.tx_fifo_address.write(0x0040);
+        self.bulk_in_wedged = false;
+        if PROFILE == PROFILE_CDC_ACM {
+            // EP1 IN notification: 16-byte packets backed by a 512-byte FIFO
+            // at byte 0x200. It normally NAKs because the tiny console has no
+            // asynchronous serial-state notifications to report.
+            self.select_endpoint(NOTIFY_IN_ENDPOINT);
+            self.registers.tx_csr.write(0);
+            self.registers.tx_max_packet.write(16);
+            self.flush_tx_fifo(false);
+            self.registers.tx_fifo_size.write(0x06);
+            self.registers.tx_fifo_address.write(0x0040);
+        }
 
         // EP2 IN bulk: two 512-byte banks (1024 bytes total) at byte 0x600.
         self.select_endpoint(DATA_IN_ENDPOINT);
@@ -746,9 +865,14 @@ impl UsbCdcAcm {
         self.registers.rx_fifo_size.write(0x16);
         self.registers.rx_fifo_address.write(0x0140);
 
+        let notify_interrupt = if PROFILE == PROFILE_CDC_ACM {
+            1 << NOTIFY_IN_ENDPOINT
+        } else {
+            0
+        };
         self.registers
             .interrupt_tx_enable
-            .write((1 << 0) | (1 << DATA_IN_ENDPOINT) | (1 << NOTIFY_IN_ENDPOINT));
+            .write((1 << 0) | (1 << DATA_IN_ENDPOINT) | notify_interrupt);
         self.registers
             .interrupt_rx_enable
             .write(1 << DATA_OUT_ENDPOINT);
@@ -797,30 +921,43 @@ mod tests {
     use super::*;
 
     #[test]
-    fn configuration_descriptor_is_well_formed() {
-        assert_eq!(CONFIGURATION_DESCRIPTOR[0], 9);
-        assert_eq!(CONFIGURATION_DESCRIPTOR[1], 2);
+    fn cdc_configuration_descriptor_is_well_formed() {
+        assert_configuration_descriptor(&CDC_CONFIGURATION_DESCRIPTOR, 2, &[0x81, 0x02, 0x82]);
+    }
+
+    #[test]
+    fn mass_storage_configuration_descriptor_is_well_formed() {
+        assert_configuration_descriptor(&MSC_CONFIGURATION_DESCRIPTOR, 1, &[0x02, 0x82]);
+    }
+
+    fn assert_configuration_descriptor(
+        descriptor: &[u8],
+        interfaces: u8,
+        expected_endpoints: &[u8],
+    ) {
+        assert_eq!(descriptor[0], 9);
+        assert_eq!(descriptor[1], 2);
         assert_eq!(
-            u16::from_le_bytes([CONFIGURATION_DESCRIPTOR[2], CONFIGURATION_DESCRIPTOR[3]]) as usize,
-            CONFIGURATION_DESCRIPTOR.len()
+            u16::from_le_bytes([descriptor[2], descriptor[3]]) as usize,
+            descriptor.len()
         );
-        assert_eq!(CONFIGURATION_DESCRIPTOR[4], 2);
+        assert_eq!(descriptor[4], interfaces);
 
         let mut offset = 0;
         let mut endpoints = [0u8; 3];
         let mut endpoint_count = 0;
-        while offset < CONFIGURATION_DESCRIPTOR.len() {
-            let length = CONFIGURATION_DESCRIPTOR[offset] as usize;
+        while offset < descriptor.len() {
+            let length = descriptor[offset] as usize;
             assert!(length >= 2);
-            assert!(offset + length <= CONFIGURATION_DESCRIPTOR.len());
-            if CONFIGURATION_DESCRIPTOR[offset + 1] == 5 {
-                endpoints[endpoint_count] = CONFIGURATION_DESCRIPTOR[offset + 2];
+            assert!(offset + length <= descriptor.len());
+            if descriptor[offset + 1] == 5 {
+                endpoints[endpoint_count] = descriptor[offset + 2];
                 endpoint_count += 1;
             }
             offset += length;
         }
-        assert_eq!(offset, CONFIGURATION_DESCRIPTOR.len());
-        assert_eq!(endpoints, [0x81, 0x02, 0x82]);
+        assert_eq!(offset, descriptor.len());
+        assert_eq!(&endpoints[..endpoint_count], expected_endpoints);
     }
 
     #[test]

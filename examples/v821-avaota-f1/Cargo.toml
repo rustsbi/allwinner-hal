@@ -24,3 +24,8 @@ bench = false
 name = "uart-demo"
 test = false
 bench = false
+
+[[bin]]
+name = "usb-storage"
+test = false
+bench = false
