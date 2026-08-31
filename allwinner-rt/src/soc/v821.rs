@@ -1,10 +1,15 @@
 //! V821 chip platforms.
 
 use allwinner_hal::{
-    ccu::v821::{AonRegisterBlock, ApbSpecialClockSource, AppRegisterBlock},
+    ccu::v821::{AonRegisterBlock, ApbSpecialClockSource, AppRegisterBlock, E907ClockSource},
     gpio::PadExt,
     uart::UartExt,
+    usb::{
+        Instance as UsbInstance,
+        phy::v821::{Instance as UsbPhyInstance, Oscillator},
+    },
 };
+use embedded_hal::delay::DelayNs;
 use embedded_time::rate::{Extensions, Hertz};
 
 /// ROM runtime peripheral ownership and configurations.
@@ -23,6 +28,10 @@ pub struct Peripherals {
     pub uart2: UART2,
     /// Universal Asynchronous Receiver/Transmitter 3.
     pub uart3: UART3,
+    /// USB On-The-Go device controller 0.
+    pub usb0: USB0,
+    /// USB physical layer peripheral 0.
+    pub usb_phy0: USB_PHY0,
 }
 
 soc! {
@@ -40,6 +49,10 @@ soc! {
     pub struct UART2 => 0x42500800, allwinner_hal::uart::RegisterBlock;
     /// Universal Asynchronous Receiver/Transmitter 3.
     pub struct UART3 => 0x42500C00, allwinner_hal::uart::RegisterBlock;
+    /// USB On-The-Go device controller 0.
+    pub struct USB0 => 0x44100000, allwinner_hal::usb::RegisterBlock;
+    /// USB physical layer peripheral 0.
+    pub struct USB_PHY0 => 0x44100400, allwinner_hal::usb::PhyRegisterBlock;
     // TODO pub struct TWI0 => 0x42502000
     // TODO pub struct TWI1 => 0x42502400
     // TODO pub struct TWI2 => 0x42502800
@@ -54,6 +67,48 @@ soc! {
 
 impl_uart! {
     0 => UART0,
+}
+
+// SAFETY: the runtime constructs exactly one `USB0` token in
+// `__rom_init_params`; its fixed address is aligned for and mapped as the V821
+// USB controller register block for the lifetime of the firmware.
+unsafe impl UsbInstance<'static> for USB0 {
+    #[inline]
+    fn register_block(self) -> &'static allwinner_hal::usb::RegisterBlock {
+        // SAFETY: consuming the sole runtime token grants exclusive access.
+        unsafe { &*Self::ptr() }
+    }
+}
+
+// SAFETY: the mutable token borrow remains active for the full returned MMIO
+// capability lifetime, preventing another safe controller construction.
+unsafe impl<'a> UsbInstance<'a> for &'a mut USB0 {
+    #[inline]
+    fn register_block(self) -> &'a allwinner_hal::usb::RegisterBlock {
+        // SAFETY: `self` is the unique mutable borrow of the singleton token.
+        unsafe { &*USB0::ptr() }
+    }
+}
+
+// SAFETY: the runtime constructs exactly one `USB_PHY0` token in
+// `__rom_init_params`; it owns the independent V821 USB PHY mapping paired with
+// USB0 and uses the verified `PhyRegisterBlock` layout.
+unsafe impl UsbPhyInstance<'static> for USB_PHY0 {
+    #[inline]
+    fn register_block(self) -> &'static allwinner_hal::usb::PhyRegisterBlock {
+        // SAFETY: consuming the sole runtime token grants exclusive access.
+        unsafe { &*Self::ptr() }
+    }
+}
+
+// SAFETY: the mutable token borrow remains active for the full returned MMIO
+// capability lifetime, preventing another safe PHY construction.
+unsafe impl<'a> UsbPhyInstance<'a> for &'a mut USB_PHY0 {
+    #[inline]
+    fn register_block(self) -> &'a allwinner_hal::usb::PhyRegisterBlock {
+        // SAFETY: `self` is the unique mutable borrow of the singleton token.
+        unsafe { &*USB_PHY0::ptr() }
+    }
 }
 
 // TODO GPIO_R logic in allwinner-hal
@@ -126,6 +181,29 @@ pub struct Clocks {
 }
 
 impl Clocks {
+    /// Return the current E907 `mcycle` frequency in ticks per second.
+    ///
+    /// The BootROM can leave the core on HOSC or switch it to a divided
+    /// peripheral PLL, depending on the boot path and chip configuration.
+    /// Dynamic video-PLL and CPU-PLL sources are not decoded yet.
+    pub fn mcycle_ticks_second(&self, aon_ccu: &AON_CCU) -> Option<u32> {
+        let clock = aon_ccu.e907_clock.read();
+        let source_frequency = match clock.clock_source() {
+            E907ClockSource::Hosc => {
+                if aon_ccu.dcxo_status.read().is_24_mhz() {
+                    24_000_000
+                } else {
+                    40_000_000
+                }
+            }
+            E907ClockSource::Rc1M | E907ClockSource::Rc1M0 => 1_000_000,
+            E907ClockSource::PeriPll1024M => 1_024_000_000,
+            E907ClockSource::PeriPll614M | E907ClockSource::PeriPll614M0 => 614_400_000,
+            E907ClockSource::VideoPll2x | E907ClockSource::CpuPll => return None,
+        };
+        Some(source_frequency / u32::from(clock.divisor()))
+    }
+
     /// Select the board HOSC and enable the peripheral clock for UART `I`.
     #[inline]
     pub fn enable_uart<const I: usize>(&self, ccu: &CCU, aon_ccu: &AON_CCU) -> UartClock<I> {
@@ -158,6 +236,81 @@ impl Clocks {
             frequency: hosc_hz.Hz(),
         }
     }
+
+    /// Reset USB0, enable its bus/reference clocks, and return its oscillator.
+    ///
+    /// The sequence follows the V821 BootROM ordering. Pass the returned
+    /// oscillator to the independent V821 USB PHY initialization. The mutable
+    /// peripheral-token borrows prove that neither the controller nor PHY has
+    /// an active safe owner while their reset lines are toggled; the mutable
+    /// CCU borrow serializes the read-modify-write sequence with safe callers.
+    pub fn enable_usb(
+        &self,
+        _usb0: &mut USB0,
+        _usb_phy0: &mut USB_PHY0,
+        ccu: &mut CCU,
+        aon_ccu: &AON_CCU,
+        delay: &mut impl DelayNs,
+    ) -> Oscillator {
+        // SAFETY: `CCU` is the singleton application-domain clock token. Each
+        // operation preserves unrelated fields and touches only the USB reset
+        // and gate bits. Delays preserve the BootROM's required edge ordering.
+        unsafe {
+            ccu.bus_reset0.modify(|value| value.assert_usb_phy());
+            ccu.bus_clock_gating0.modify(|value| value.mask_usb_otg());
+            ccu.bus_reset0.modify(|value| value.assert_usb_otg());
+            ccu.bus_reset0.modify(|value| value.assert_usb_hclk());
+        }
+        delay.delay_us(20);
+
+        // SAFETY: same exclusive CCU ownership and USB-only fields as above.
+        unsafe {
+            ccu.bus_clock_gating0.modify(|value| value.mask_usb_hclk());
+        }
+        delay.delay_us(20);
+
+        // SAFETY: same exclusive CCU ownership and USB-only fields as above.
+        unsafe {
+            ccu.bus_reset0.modify(|value| value.deassert_usb_phy());
+        }
+        delay.delay_us(50);
+
+        // SAFETY: same exclusive CCU ownership and USB-only fields as above.
+        unsafe {
+            ccu.bus_reset0.modify(|value| value.deassert_usb_otg());
+        }
+        delay.delay_us(100);
+
+        // SAFETY: same exclusive CCU ownership and USB-only fields as above.
+        unsafe {
+            ccu.bus_clock_gating0.modify(|value| value.pass_usb_otg());
+        }
+        delay.delay_us(50);
+
+        // SAFETY: same exclusive CCU ownership and USB-only fields as above.
+        unsafe {
+            ccu.bus_reset0.modify(|value| value.deassert_usb_hclk());
+        }
+        delay.delay_us(20);
+
+        // SAFETY: same exclusive CCU ownership and USB-only fields as above.
+        unsafe {
+            ccu.bus_clock_gating0.modify(|value| value.pass_usb_hclk());
+        }
+        delay.delay_us(20);
+
+        // SAFETY: same exclusive CCU ownership. Enabling the reference clock is
+        // the final step, after both reset domains and bus gates are live.
+        unsafe {
+            ccu.usb_clock.modify(|value| value.enable());
+        }
+
+        if aon_ccu.dcxo_status.read().is_24_mhz() {
+            Oscillator::Mhz24
+        } else {
+            Oscillator::Mhz40
+        }
+    }
 }
 
 /// Enabled clock input for V821 UART `I`.
@@ -181,7 +334,12 @@ impl<const I: usize> allwinner_hal::uart::Clock<I> for &UartClock<I> {
 
 #[doc(hidden)]
 #[inline]
-pub fn __rom_init_params() -> (Peripherals, Clocks) {
+/// Construct the singleton runtime parameters.
+///
+/// # Safety
+///
+/// This function may be called at most once during one firmware execution.
+pub unsafe fn __rom_init_params() -> (Peripherals, Clocks) {
     let peripherals = Peripherals {
         gpio: Pads::__new(),
         ccu: CCU { _private: () },
@@ -190,6 +348,8 @@ pub fn __rom_init_params() -> (Peripherals, Clocks) {
         uart1: UART1 { _private: () },
         uart2: UART2 { _private: () },
         uart3: UART3 { _private: () },
+        usb0: USB0 { _private: () },
+        usb_phy0: USB_PHY0 { _private: () },
     };
     // TODO: correct clock configuration
     let clocks = Clocks {

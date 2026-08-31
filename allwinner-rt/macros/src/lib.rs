@@ -71,15 +71,17 @@ pub fn entry(args: TokenStream, input: TokenStream) -> TokenStream {
     }
 
     let attrs = f.attrs;
-    let unsafety = f.sig.unsafety;
+    let unsafety = f.sig.safety;
     let args = f.sig.inputs;
     let stmts = f.block.stmts;
     let ret = f.sig.output;
 
     quote!(
         #[unsafe(export_name = "main")]
-        pub fn main() {
-            let (p, c) = ::allwinner_rt::__rom_init_params();
+        pub unsafe fn main() {
+            // SAFETY: the runtime calls this generated entry point exactly
+            // once, so singleton peripheral tokens are constructed once.
+            let (p, c) = unsafe { ::allwinner_rt::__rom_init_params() };
             unsafe { __allwinner_rt_macros__main(p, c) }
         }
         #[allow(non_snake_case)]

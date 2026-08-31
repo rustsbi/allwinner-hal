@@ -500,6 +500,12 @@ impl EndpointZeroControlStatus {
         Self(Self::SERVICE_RECEIVED_PACKET | Self::SEND_STALL)
     }
 
+    /// Request an endpoint-zero STALL when no receive packet needs servicing.
+    #[inline]
+    pub const fn stall() -> Self {
+        Self(Self::SEND_STALL)
+    }
+
     /// Queue an endpoint-zero IN packet and optionally end the data stage.
     #[inline]
     pub const fn queue_transmit_packet(data_end: bool) -> Self {
@@ -571,6 +577,8 @@ pub struct ReceiveControlStatus(u16);
 impl ReceiveControlStatus {
     const PACKET_READY: u16 = 1 << 0;
     const FLUSH_FIFO: u16 = 1 << 4;
+    const SEND_STALL: u16 = 1 << 5;
+    const SENT_STALL: u16 = 1 << 6;
     const CLEAR_DATA_TOGGLE: u16 = 1 << 7;
 
     /// Return whether an OUT packet is waiting in the FIFO.
@@ -579,10 +587,22 @@ impl ReceiveControlStatus {
         self.0 & Self::PACKET_READY != 0
     }
 
+    /// Return whether a STALL is requested or has been sent.
+    #[inline]
+    pub const fn is_stalled(self) -> bool {
+        self.0 & (Self::SEND_STALL | Self::SENT_STALL) != 0
+    }
+
     /// Clear receive status and release the current OUT packet.
     #[inline]
     pub const fn clear() -> Self {
         Self(0)
+    }
+
+    /// Request a STALL from a receive endpoint.
+    #[inline]
+    pub const fn stall() -> Self {
+        Self(Self::SEND_STALL)
     }
 
     /// Flush one FIFO bank and reset the endpoint data toggle.
@@ -686,6 +706,12 @@ impl InterfaceStatusControl {
     #[inline]
     pub const fn use_all_vbus_valid_sources(self) -> Self {
         Self((self.0 & !Self::VBUS_VALID_SOURCE) | Self::VBUS_VALID_SOURCE)
+    }
+
+    /// Use the selected VBUS sources without a force override.
+    #[inline]
+    pub const fn use_detected_vbus(self) -> Self {
+        Self(self.0 & !Self::FORCE_VBUS_VALID)
     }
 
     /// Force the VBUS-valid input high.
@@ -947,6 +973,7 @@ mod tests {
             EndpointZeroControlStatus::service_received_packet_and_stall().0,
             0x60
         );
+        assert_eq!(EndpointZeroControlStatus::stall().0, 0x20);
         assert_eq!(
             EndpointZeroControlStatus::queue_transmit_packet(false).0,
             0x02
@@ -967,6 +994,8 @@ mod tests {
         );
 
         assert!(ReceiveControlStatus(1).packet_ready());
+        assert!(ReceiveControlStatus(0x40).is_stalled());
+        assert_eq!(ReceiveControlStatus::stall().0, 0x0020);
         assert_eq!(
             ReceiveControlStatus::flush_and_clear_data_toggle().0,
             0x0090
@@ -991,6 +1020,7 @@ mod tests {
             .without_change_detect();
         assert_eq!(interface.0 & 0x70, 0);
         assert_eq!(interface.0 & 0x0001_fc00, 0x0001_fc00);
+        assert_eq!(interface.use_detected_vbus().0 & (0x3 << 12), 0);
     }
 
     #[test]

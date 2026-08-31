@@ -25,6 +25,8 @@ compile_error!("the V821 MCU runtime requires a 32-bit RISC-V target");
 mod macros;
 
 mod boot0;
+#[cfg(all(feature = "v821-mcu", target_arch = "riscv32"))]
+mod critical_section;
 mod panic;
 pub use boot0::EgonHead;
 

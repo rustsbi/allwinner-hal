@@ -1,15 +1,27 @@
 #![no_std]
 #![no_main]
 
+#[path = "usb-msc.rs"]
+mod usb_msc;
+
+use allwinner_hal::usb::{Usb, UsbBus as AllwinnerUsbBus, phy::v821::UsbPhy};
 use allwinner_rt::{Clocks, Peripherals, entry};
-use v821_avaota_f1::{
-    console::{Command, Console, InputEvent},
-    usb_composite::UsbComposite,
-    usb_msc::BLOCK_SIZE,
+use embedded_hal::delay::DelayNs;
+use riscv::delay::McycleDelay;
+use usb_device::{
+    UsbError,
+    bus::{UsbBus, UsbBusAllocator},
+    device::{StringDescriptors, UsbDeviceBuilder, UsbDeviceState, UsbVidPid},
 };
+use usb_msc::{BLOCK_SIZE, UsbMassStorage};
+use usbd_serial::SerialPort;
+use v821_avaota_f1::console::{Command, Console, InputEvent};
 
 const BLOCK_COUNT: u32 = 2_880;
 const README_BLOCK: u32 = 33;
+const CDC_TX_CAPACITY: usize = 128;
+const GREETING: &[u8] = b"Welcome to the V821 CDC + MSC composite example!\r\n> ";
+const HELP_REPLY: &[u8] = b"\r\nCommands:\r\n  help   show this help\r\n  hello  print hello world\r\n  exit   return to FEL\r\n> ";
 const README_TEXT: &[u8] = b"Avaota F1 V821 USB composite example\r\n\
 \r\n\
 The CDC-ACM console and this read-only mass-storage volume are active at the same time.\r\n\
@@ -17,54 +29,175 @@ Open the virtual serial port and type `help` while browsing this drive.\r\n";
 const README_BLOCK_COUNT: u32 = README_TEXT.len().div_ceil(BLOCK_SIZE) as u32;
 
 #[entry]
-fn main(_peripherals: Peripherals, _clocks: Clocks) {
-    // SAFETY: the runtime gives this single-core payload exclusive ownership;
-    // USB0 is polled with interrupts disabled.
-    let mut usb = unsafe { UsbComposite::from_v821_mmio(BLOCK_COUNT, CompositeDisk::read_sector) };
-    usb.initialize();
+fn main(peripherals: Peripherals, clocks: Clocks) {
+    let mut usb0 = peripherals.usb0;
+    let mut usb_phy0 = peripherals.usb_phy0;
+    let mut ccu = peripherals.ccu;
+    let aon_ccu = peripherals.aon_ccu;
+    let mut delay = McycleDelay::new(clocks.mcycle_ticks_second(&aon_ccu).unwrap());
+    let oscillator = clocks.enable_usb(&mut usb0, &mut usb_phy0, &mut ccu, &aon_ccu, &mut delay);
+
+    let usb = Usb::new(usb0, &mut delay);
+    let mut _usb_phy = UsbPhy::new(usb_phy0, oscillator, &mut delay);
+    if !usb.is_vbus_valid() {
+        _usb_phy.force_vbus_valid();
+    }
+
+    let usb_bus = UsbBusAllocator::new(AllwinnerUsbBus::new(usb));
+    // Allocate CDC first so interfaces 0/1 form its IAD; MSC then becomes
+    // interface 2 and receives the next bulk endpoint pair.
+    let mut serial = SerialPort::new(&usb_bus);
+    let mut storage = UsbMassStorage::new(&usb_bus, BLOCK_COUNT, CompositeDisk::read_sector);
+    let strings = [StringDescriptors::default()
+        .manufacturer("RustSBI")
+        .product("Avaota F1 CDC + MSC")
+        .serial_number("0821F100000003")];
+    let mut usb_device = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x1f3a, 0x8213))
+        .strings(&strings)
+        .unwrap()
+        .composite_with_iads()
+        .device_release(0x0100)
+        .max_packet_size_0(64)
+        .unwrap()
+        .build();
 
     let mut console = Console::<32>::new();
-    let mut received = [0u8; 64];
-    let mut prompt_visible = false;
+    let mut received = [0u8; 1];
+    let mut tx = CdcTx::new();
+    let mut greeting_visible = false;
 
     loop {
-        let count = usb.poll(&mut received);
+        usb_device.poll(&mut [&mut serial, &mut storage]);
+        // Safe eject only completes the MSC command. The CDC console and the
+        // composite USB device deliberately remain active.
+        let _ = storage.poll();
 
-        if !usb.is_configured() {
-            prompt_visible = false;
+        if usb_device.state() != UsbDeviceState::Configured {
+            greeting_visible = false;
+            tx.clear();
             continue;
         }
-        if !prompt_visible {
-            usb.write(b"Welcome to the V821 CDC + MSC composite example!\r\n> ");
-            prompt_visible = true;
+
+        match tx.poll(&mut serial) {
+            TxProgress::Pending => continue,
+            TxProgress::Exit => {
+                delay.delay_ms(10);
+                return;
+            }
+            TxProgress::Error => {
+                greeting_visible = false;
+                continue;
+            }
+            TxProgress::Ready => {}
         }
 
-        for byte in &received[..count] {
-            match console.push(*byte) {
-                InputEvent::None => {}
-                InputEvent::Echo(byte) => usb.write(&[byte]),
-                InputEvent::Erase => usb.write(b"\x08 \x08"),
-                InputEvent::Bell => usb.write(b"\x07"),
-                InputEvent::Command(command) => {
-                    usb.write(b"\r\n");
-                    match command {
-                        Command::Empty => {}
-                        Command::Hello => usb.write(b"hello world\r\n"),
-                        Command::Help => usb.write(
-                            b"Commands:\r\n  help   show this help\r\n  hello  print hello world\r\n  exit   return to FEL\r\n",
-                        ),
-                        Command::Exit => {
-                            usb.write(b"Bye!\r\n");
-                            let _ = usb.flush();
-                            return;
-                        }
-                        Command::Unknown => usb.write(b"unknown command; try help\r\n"),
-                    }
-                    usb.write(b"> ");
+        if !greeting_visible {
+            tx.queue(GREETING, false);
+            greeting_visible = true;
+            continue;
+        }
+
+        let count = match serial.read(&mut received) {
+            Ok(count) => count,
+            Err(UsbError::WouldBlock) => 0,
+            Err(_) => {
+                greeting_visible = false;
+                continue;
+            }
+        };
+        if count == 0 {
+            continue;
+        }
+
+        match console.push(received[0]) {
+            InputEvent::None => {}
+            InputEvent::Echo(byte) => tx.queue(&[byte], false),
+            InputEvent::Erase => tx.queue(b"\x08 \x08", false),
+            InputEvent::Bell => tx.queue(b"\x07", false),
+            InputEvent::Command(command) => match command {
+                Command::Empty => tx.queue(b"\r\n> ", false),
+                Command::Hello => tx.queue(b"\r\nhello world\r\n> ", false),
+                Command::Help => tx.queue(HELP_REPLY, false),
+                Command::Exit => tx.queue(b"\r\nBye!\r\n", true),
+                Command::Unknown => tx.queue(b"\r\nunknown command; try help\r\n> ", false),
+            },
+        }
+    }
+}
+
+struct CdcTx {
+    bytes: [u8; CDC_TX_CAPACITY],
+    len: usize,
+    offset: usize,
+    exit_after_flush: bool,
+}
+
+impl CdcTx {
+    const fn new() -> Self {
+        Self {
+            bytes: [0; CDC_TX_CAPACITY],
+            len: 0,
+            offset: 0,
+            exit_after_flush: false,
+        }
+    }
+
+    fn queue(&mut self, bytes: &[u8], exit_after_flush: bool) {
+        debug_assert!(self.len == 0);
+        assert!(bytes.len() <= self.bytes.len());
+        self.bytes[..bytes.len()].copy_from_slice(bytes);
+        self.len = bytes.len();
+        self.offset = 0;
+        self.exit_after_flush = exit_after_flush;
+    }
+
+    fn clear(&mut self) {
+        self.len = 0;
+        self.offset = 0;
+        self.exit_after_flush = false;
+    }
+
+    /// Performs at most one non-blocking CDC write or flush attempt.
+    fn poll<B: UsbBus>(&mut self, serial: &mut SerialPort<'_, B>) -> TxProgress {
+        if self.len == 0 {
+            return TxProgress::Ready;
+        }
+        if self.offset < self.len {
+            match serial.write(&self.bytes[self.offset..self.len]) {
+                Ok(count) => self.offset += count,
+                Err(UsbError::WouldBlock) => {}
+                Err(_) => {
+                    self.clear();
+                    return TxProgress::Error;
                 }
+            }
+            return TxProgress::Pending;
+        }
+
+        match serial.flush() {
+            Ok(()) => {
+                let exit = self.exit_after_flush;
+                self.clear();
+                if exit {
+                    TxProgress::Exit
+                } else {
+                    TxProgress::Ready
+                }
+            }
+            Err(UsbError::WouldBlock) => TxProgress::Pending,
+            Err(_) => {
+                self.clear();
+                TxProgress::Error
             }
         }
     }
+}
+
+enum TxProgress {
+    Ready,
+    Pending,
+    Exit,
+    Error,
 }
 
 struct CompositeDisk;

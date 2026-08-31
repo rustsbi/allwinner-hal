@@ -17,11 +17,13 @@ categories = ["os", "embedded", "hardware-support", "no-std"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-volatile-register = "0.2.1"
+volatile-register = "0.2.2"
 embedded-hal = "1.0.0"
-embedded-io = "0.6.1"
+embedded-io = "0.7.1"
 embedded-time = "0.12.1"
 uart16550 = "0.0.1"
-plic = "0.0.2"
-embedded-sdmmc = "0.9.0"
+plic = "0.0.3"
+embedded-sdmmc = "0.10.0"
 log = "0.4"
+critical-section = "1.2.0"
+usb-device = "0.3.2"

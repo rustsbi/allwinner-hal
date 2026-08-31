@@ -1,8 +1,18 @@
 #![no_std]
 #![no_main]
 
+#[path = "usb-msc.rs"]
+mod usb_msc;
+
+use allwinner_hal::usb::{Usb, UsbBus as AllwinnerUsbBus, phy::v821::UsbPhy};
 use allwinner_rt::{Clocks, Peripherals, entry};
-use v821_avaota_f1::usb_msc::{BLOCK_SIZE, UsbMassStorage};
+use embedded_hal::delay::DelayNs;
+use riscv::delay::McycleDelay;
+use usb_device::{
+    bus::UsbBusAllocator,
+    device::{StringDescriptors, UsbDeviceBuilder, UsbVidPid},
+};
+use usb_msc::{BLOCK_SIZE, UsbMassStorage};
 
 const BLOCK_COUNT: u32 = 2_880;
 const README_BLOCK: u32 = 33;
@@ -26,15 +36,37 @@ ig牛逼!lpl牛逼!翻过那座山，他们听到了你的故事，等来了那�
 const README_BLOCK_COUNT: u32 = README_TEXT.len().div_ceil(BLOCK_SIZE) as u32;
 
 #[entry]
-fn main(_peripherals: Peripherals, _clocks: Clocks) {
-    // SAFETY: the runtime gives this single-core payload exclusive ownership;
-    // USB0 is polled with interrupts disabled.
-    let mut storage =
-        unsafe { UsbMassStorage::from_v821_mmio(BLOCK_COUNT, VirtualDisk::read_sector) };
-    storage.initialize();
+fn main(peripherals: Peripherals, clocks: Clocks) {
+    let mut usb0 = peripherals.usb0;
+    let mut usb_phy0 = peripherals.usb_phy0;
+    let mut ccu = peripherals.ccu;
+    let aon_ccu = peripherals.aon_ccu;
+    let mut delay = McycleDelay::new(clocks.mcycle_ticks_second(&aon_ccu).unwrap());
+    let oscillator = clocks.enable_usb(&mut usb0, &mut usb_phy0, &mut ccu, &aon_ccu, &mut delay);
+
+    let usb = Usb::new(usb0, &mut delay);
+    let mut _usb_phy = UsbPhy::new(usb_phy0, oscillator, &mut delay);
+    if !usb.is_vbus_valid() {
+        _usb_phy.force_vbus_valid();
+    }
+
+    let usb_bus = UsbBusAllocator::new(AllwinnerUsbBus::new(usb));
+    let mut storage = UsbMassStorage::new(&usb_bus, BLOCK_COUNT, VirtualDisk::read_sector);
+    let strings = [StringDescriptors::default()
+        .manufacturer("RustSBI")
+        .product("Avaota F1")
+        .serial_number("0821F100000001")];
+    let mut usb_device = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x1f3a, 0x8211))
+        .strings(&strings)
+        .unwrap()
+        .max_packet_size_0(64)
+        .unwrap()
+        .build();
 
     loop {
+        usb_device.poll(&mut [&mut storage]);
         if storage.poll() {
+            delay.delay_ms(10);
             return;
         }
     }

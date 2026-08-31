@@ -9,8 +9,8 @@ repository.workspace = true
 [dependencies]
 allwinner-hal = { path = "../../allwinner-hal" }
 allwinner-rt = { path = "../../allwinner-rt", features = ["d1", "panic-halt"] }
-embedded-io = "0.6.1"
-embedded-sdmmc = "0.9.0"
+embedded-io = "0.7.1"
+embedded-sdmmc = "0.10.0"
 embedded-time = "0.12.1"
 
 [lib]

@@ -51,6 +51,8 @@ pub struct AonRegisterBlock {
     _reserved_408: [u8; 0x178],
     /// 0x580 - special APB clock configuration register.
     pub apb_special_clock: RW<ApbSpecialClock>,
+    /// 0x584 - E907 core clock configuration register.
+    pub e907_clock: RW<E907Clock>,
 }
 
 /// DCXO clock source status register.
@@ -65,6 +67,60 @@ impl DcxoStatus {
     #[inline]
     pub const fn is_24_mhz(self) -> bool {
         self.0 & Self::CLOCK_24_MHZ != 0
+    }
+}
+
+/// Clock source for the V821 E907 core.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum E907ClockSource {
+    /// High-speed oscillator.
+    Hosc = 0,
+    /// Doubled video PLL output.
+    VideoPll2x = 1,
+    /// Internal 1 MHz RC oscillator.
+    Rc1M = 2,
+    /// Alternate internal 1 MHz RC oscillator selection.
+    Rc1M0 = 3,
+    /// CPU PLL output.
+    CpuPll = 4,
+    /// 1024 MHz peripheral PLL output.
+    PeriPll1024M = 5,
+    /// 614.4 MHz peripheral PLL output.
+    PeriPll614M = 6,
+    /// Alternate 614.4 MHz peripheral PLL selection.
+    PeriPll614M0 = 7,
+}
+
+/// E907 core clock configuration register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct E907Clock(u32);
+
+impl E907Clock {
+    const CLOCK_SOURCE: u32 = 0x7 << 24;
+    const DIVIDER: u32 = 0x1f;
+
+    /// Return the selected clock source.
+    #[inline]
+    pub const fn clock_source(self) -> E907ClockSource {
+        match (self.0 & Self::CLOCK_SOURCE) >> 24 {
+            0 => E907ClockSource::Hosc,
+            1 => E907ClockSource::VideoPll2x,
+            2 => E907ClockSource::Rc1M,
+            3 => E907ClockSource::Rc1M0,
+            4 => E907ClockSource::CpuPll,
+            5 => E907ClockSource::PeriPll1024M,
+            6 => E907ClockSource::PeriPll614M,
+            7 => E907ClockSource::PeriPll614M0,
+            _ => unreachable!(),
+        }
+    }
+
+    /// Return the clock divisor in the range 1 through 32.
+    #[inline]
+    pub const fn divisor(self) -> u8 {
+        ((self.0 & Self::DIVIDER) + 1) as u8
     }
 }
 
@@ -267,7 +323,8 @@ mod tests {
         assert_eq!(size_of::<AppRegisterBlock>(), 0x94);
         assert_eq!(offset_of!(AonRegisterBlock, dcxo_status), 0x404);
         assert_eq!(offset_of!(AonRegisterBlock, apb_special_clock), 0x580);
-        assert_eq!(size_of::<AonRegisterBlock>(), 0x584);
+        assert_eq!(offset_of!(AonRegisterBlock, e907_clock), 0x584);
+        assert_eq!(size_of::<AonRegisterBlock>(), 0x588);
     }
 
     #[test]
@@ -327,5 +384,16 @@ mod tests {
         assert_eq!(clock.clock_source(), ApbSpecialClockSource::Peri192M);
         assert_eq!(clock.divisor(), 32);
         assert_eq!(clock.0 & 0x0300_001f, 0x0300_001f);
+    }
+
+    #[test]
+    fn e907_clock_fields() {
+        let clock = E907Clock(0);
+        assert_eq!(clock.clock_source(), E907ClockSource::Hosc);
+        assert_eq!(clock.divisor(), 1);
+
+        let clock = E907Clock((E907ClockSource::PeriPll1024M as u32) << 24 | 3);
+        assert_eq!(clock.clock_source(), E907ClockSource::PeriPll1024M);
+        assert_eq!(clock.divisor(), 4);
     }
 }

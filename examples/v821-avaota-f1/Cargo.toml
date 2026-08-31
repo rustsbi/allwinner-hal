@@ -2,6 +2,7 @@
 name = "v821-avaota-f1"
 version = "0.0.0"
 publish = false
+autobins = false
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -9,6 +10,10 @@ repository.workspace = true
 [dependencies]
 allwinner-hal = { path = "../../allwinner-hal" }
 allwinner-rt = { path = "../../allwinner-rt", default-features = false, features = ["v821-mcu", "panic-halt"] }
+embedded-hal = "1.0.0"
+riscv = { version = "0.16.1", default-features = false }
+usb-device = "0.3.2"
+usbd-serial = "0.2.2"
 
 [lib]
 name = "v821_avaota_f1"
