@@ -8,37 +8,22 @@
 
 use allwinner_hal::{
     ccu::v821::{AonRegisterBlock, AppRegisterBlock},
-    usb::RegisterBlock as UsbRegisterBlock,
+    usb::{
+        PhyRegisterBlock as UsbPhyRegisterBlock, RegisterBlock as UsbRegisterBlock,
+        register::{
+            BusInterruptEnable, EndpointIndex, EndpointZeroControlStatus, FifoAddress, FifoSize,
+            FunctionAddress, MaximumPacketSize, ReceiveControlStatus, ReceiveInterruptEnable,
+            ReceiveInterruptStatus, TransmitControlStatus, TransmitInterruptEnable,
+            TransmitInterruptStatus,
+        },
+    },
 };
 
 const USB0_BASE: usize = 0x4410_0000;
+const USB_PHY0_BASE: usize = 0x4410_0400;
 const APP_CCU_BASE: usize = 0x4200_1000;
 const AON_CCU_BASE: usize = 0x4a01_0000;
 const COUNTER_LOW: usize = 0x3000_bff8;
-
-const USB_POWER_HS_ENABLE: u8 = 0x20;
-const USB_POWER_SOFT_CONNECT: u8 = 0x40;
-const USB_POWER_ISO_UPDATE: u8 = 0x80;
-
-const USB_BUS_RESET: u8 = 0x04;
-const USB_CSR0_RX_PACKET_READY: u16 = 0x0001;
-const USB_CSR0_TX_PACKET_READY: u16 = 0x0002;
-const USB_CSR0_SENT_STALL: u16 = 0x0004;
-const USB_CSR0_DATA_END: u16 = 0x0008;
-const USB_CSR0_SETUP_END: u16 = 0x0010;
-const USB_CSR0_SEND_STALL: u16 = 0x0020;
-const USB_CSR0_SERVICE_RX_PACKET_READY: u16 = 0x0040;
-const USB_CSR0_SERVICE_SETUP_END: u16 = 0x0080;
-
-const USB_TXCSR_TX_PACKET_READY: u16 = 0x0001;
-const USB_TXCSR_FLUSH_FIFO: u16 = 0x0008;
-const USB_TXCSR_SEND_STALL: u16 = 0x0010;
-const USB_TXCSR_SENT_STALL: u16 = 0x0020;
-const USB_TXCSR_CLEAR_DATA_TOGGLE: u16 = 0x0040;
-const USB_TXCSR_MODE: u16 = 0x2000;
-const USB_RXCSR_RX_PACKET_READY: u16 = 0x0001;
-const USB_RXCSR_FLUSH_FIFO: u16 = 0x0010;
-const USB_RXCSR_CLEAR_DATA_TOGGLE: u16 = 0x0080;
 
 const EP0_MAX_PACKET: usize = 64;
 const PROFILE_CDC_ACM: u8 = 0;
@@ -53,13 +38,13 @@ const DATA_OUT_ENDPOINT: u8 = 2;
 const DATA_IN_ENDPOINT: u8 = 2;
 const MSC_COMPOSITE_OUT_ENDPOINT: u8 = 3;
 const MSC_COMPOSITE_IN_ENDPOINT: u8 = 3;
-const FIFO_SIZE_SINGLE_512: u8 = 0x06;
-const FIFO_SIZE_DOUBLE_512: u8 = 0x16;
-const NOTIFY_TX_FIFO_ADDRESS: u16 = 0x0040;
-const MSC_COMPOSITE_TX_FIFO_ADDRESS: u16 = 0x0080;
-const DATA_TX_FIFO_ADDRESS: u16 = 0x00c0;
-const DATA_RX_FIFO_ADDRESS: u16 = 0x0140;
-const MSC_COMPOSITE_RX_FIFO_ADDRESS: u16 = 0x01c0;
+const FIFO_SIZE_SINGLE_512: FifoSize = FifoSize::single_512();
+const FIFO_SIZE_DOUBLE_512: FifoSize = FifoSize::double_512();
+const NOTIFY_TX_FIFO_ADDRESS: FifoAddress = FifoAddress::from_byte_offset(0x0200);
+const MSC_COMPOSITE_TX_FIFO_ADDRESS: FifoAddress = FifoAddress::from_byte_offset(0x0400);
+const DATA_TX_FIFO_ADDRESS: FifoAddress = FifoAddress::from_byte_offset(0x0600);
+const DATA_RX_FIFO_ADDRESS: FifoAddress = FifoAddress::from_byte_offset(0x0a00);
+const MSC_COMPOSITE_RX_FIFO_ADDRESS: FifoAddress = FifoAddress::from_byte_offset(0x0e00);
 
 const CDC_SET_LINE_CODING: u8 = 0x20;
 const CDC_GET_LINE_CODING: u8 = 0x21;
@@ -273,6 +258,7 @@ pub(crate) type UsbCdcMscTransport = UsbDevice<PROFILE_CDC_MSC>;
 /// Exclusive owner of USB0 while the Boot0 payload is running on the E907.
 pub struct UsbDevice<const PROFILE: u8> {
     registers: &'static UsbRegisterBlock,
+    phy_registers: &'static UsbPhyRegisterBlock,
     app_ccu: &'static AppRegisterBlock,
     aon_ccu: &'static AonRegisterBlock,
     ep0_state: Ep0State,
@@ -290,23 +276,25 @@ pub struct UsbDevice<const PROFILE: u8> {
 }
 
 impl<const PROFILE: u8> UsbDevice<PROFILE> {
-    /// Maps V821 USB0 and takes exclusive ownership after the BootROM handoff.
+    /// Maps the V821 USB0 controller and PHY after the BootROM handoff.
     ///
     /// # Safety
     ///
     /// The caller must run on the V821 E907 after BootROM has transferred
     /// control from SPI Boot0 or FEL, with interrupts disabled and no other
-    /// core or ISR accessing USB0 or its APP-CCU fields. The address and layout
-    /// must match sun300iw1p1/V821 revision P1.
+    /// core or ISR accessing USB0, USB PHY0, or their APP-CCU fields. The
+    /// addresses and layouts must match sun300iw1p1/V821 revision P1.
     pub unsafe fn from_v821_mmio() -> Self {
-        // SAFETY: all three source-verified blocks are aligned and exclusively
+        // SAFETY: all four source-verified blocks are aligned and exclusively
         // owned under the caller's E907/interrupt preconditions.
         let registers = unsafe { &*(USB0_BASE as *const UsbRegisterBlock) };
+        let phy_registers = unsafe { &*(USB_PHY0_BASE as *const UsbPhyRegisterBlock) };
         let app_ccu = unsafe { &*(APP_CCU_BASE as *const AppRegisterBlock) };
         let aon_ccu = unsafe { &*(AON_CCU_BASE as *const AonRegisterBlock) };
 
         Self {
             registers,
+            phy_registers,
             app_ccu,
             aon_ccu,
             ep0_state: Ep0State::Idle,
@@ -329,21 +317,39 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
     pub fn initialize(&mut self) {
         self.initialize_v821_usb0_hardware();
 
-        self.registers
-            .power
-            .write(self.registers.power.read() & !USB_POWER_SOFT_CONNECT);
+        // SAFETY: this UsbDevice exclusively owns USB0 for the payload's
+        // lifetime, so these configuration writes cannot race another writer.
+        unsafe {
+            self.registers
+                .power
+                .write(self.registers.power.read().set_soft_connected(false));
+        }
         delay_microseconds(250_000);
 
         // Select the same PIO bus mode used by BootROM FEL.
-        self.registers
-            .vendor_control
-            .write(self.registers.vendor_control.read() & !1);
-        self.registers.interrupt_usb_enable.write(0);
-        self.registers.interrupt_tx_enable.write(0);
-        self.registers.interrupt_rx_enable.write(0);
+        // SAFETY: same exclusive USB0 ownership as above.
+        unsafe {
+            self.registers
+                .vendor_control
+                .write(self.registers.vendor_control.read().select_pio_bus());
+            self.registers
+                .interrupt_usb_enable
+                .write(BusInterruptEnable::default());
+            self.registers
+                .interrupt_tx_enable
+                .write(TransmitInterruptEnable::default());
+            self.registers
+                .interrupt_rx_enable
+                .write(ReceiveInterruptEnable::default());
+        }
         self.acknowledge_all_pending_interrupts();
 
-        self.registers.function_address.write(0);
+        // SAFETY: same exclusive USB0 ownership as above.
+        unsafe {
+            self.registers
+                .function_address
+                .write(FunctionAddress::default());
+        }
         self.ep0_state = Ep0State::Idle;
         self.configured = false;
         self.data_alt_setting = 0;
@@ -357,13 +363,28 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
 
         // Full speed keeps bulk endpoints at the declared 64-byte max-packet
         // size and avoids unverified high-speed PHY behavior.
-        let power = self.registers.power.read()
-            & !(USB_POWER_HS_ENABLE | USB_POWER_ISO_UPDATE | USB_POWER_SOFT_CONNECT);
-        self.registers.power.write(power);
-        self.registers.interrupt_usb_enable.write(0x07);
+        let power = self
+            .registers
+            .power
+            .read()
+            .set_high_speed_enabled(false)
+            .set_iso_update_enabled(false)
+            .set_soft_connected(false);
+        let bus_interrupts = BusInterruptEnable::default()
+            .enable_suspend()
+            .enable_resume()
+            .enable_reset();
+        // SAFETY: same exclusive USB0 ownership as above.
+        unsafe {
+            self.registers.power.write(power);
+            self.registers.interrupt_usb_enable.write(bus_interrupts);
+        }
 
         delay_microseconds(1_000);
-        self.registers.power.write(power | USB_POWER_SOFT_CONNECT);
+        // SAFETY: same exclusive USB0 ownership as above.
+        unsafe {
+            self.registers.power.write(power.set_soft_connected(true));
+        }
     }
 
     fn initialize_v821_usb0_hardware(&self) {
@@ -439,53 +460,58 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
         // BootROM records its normalized oscillator choice in bit 31:
         // set means 24 MHz; clear means 40 MHz.
         let serial_byte = if self.aon_ccu.dcxo_status.read().is_24_mhz() {
-            0x14_u32
+            0x14_u8
         } else {
-            0x0c_u32
+            0x0c_u8
         };
-        for selector in 11_u32..19 {
-            let data_bit = (serial_byte >> (selector - 11)) & 1;
-            let control = &self.registers.phy.phy_control_28nm;
+        for selector in 11_u8..19 {
+            let data_high = serial_byte & (1 << (selector - 11)) != 0;
+            let control = &self.phy_registers.phy_control_28nm;
 
             // Preserve every volatile transaction from BootROM 0x52e2..0x531e.
             // The four writes enable the VC bus, drive its clock low, present
             // the selector/data bit, then create the rising edge that latches it.
-            control.write(control.read() | (1 << 1));
-            control.write(control.read() & 0xffff_007e);
-            control.write(control.read() | (selector << 8) | (data_bit << 7));
-            control.write(control.read() | 1);
+            // SAFETY: USB0 and its PHY are exclusively owned by this payload;
+            // each typed value preserves the BootROM's four-write sequence.
+            unsafe {
+                control.write(control.read().enable_vc_bus());
+                control.write(control.read().prepare_vc_write());
+                control.write(control.read().set_vc_address_and_data(selector, data_high));
+                control.write(control.read().raise_vc_clock());
+            }
             delay_microseconds(50);
         }
 
         // BootROM 0x8768 selects USB0's OTG controller path before setup.
-        self.registers
-            .phy
-            .phy_select
-            .write(self.registers.phy.phy_select.read() | 1);
-        self.registers
-            .phy
-            .phy_control_28nm
-            .write(self.registers.phy.phy_control_28nm.read() & !(1 << 3));
+        // SAFETY: same exclusive USB0 and PHY ownership as above.
+        unsafe {
+            self.phy_registers
+                .phy_select
+                .write(self.phy_registers.phy_select.read().select_otg_controller());
+            self.phy_registers
+                .phy_control_28nm
+                .write(self.phy_registers.phy_control_28nm.read().power_up());
+        }
         delay_microseconds(20);
 
-        self.registers
-            .phy
+        self.phy_registers
             .interface_status_control
-            .modify(|value| value | 0x0000_c000);
-        self.registers
-            .phy
+            .modify_control(|value| value.force_id_high());
+        self.phy_registers
             .interface_status_control
-            .modify(|value| value | 0x0001_0c00);
-        if self.registers.device_control.read() & 0x18 != 0x18 {
-            self.registers
-                .phy
+            .modify_control(|value| {
+                value
+                    .set_dpdm_pullup_enabled(true)
+                    .use_all_vbus_valid_sources()
+            });
+        if !self.registers.device_control.read().is_vbus_valid() {
+            self.phy_registers
                 .interface_status_control
-                .modify(|value| value | 0x3000);
+                .modify_control(|value| value.force_vbus_valid_high());
         }
-        self.registers
-            .phy
+        self.phy_registers
             .interface_status_control
-            .modify(|value| value & !0x0001_0000);
+            .modify_control(|value| value.set_dpdm_pullup_enabled(false));
     }
 
     pub fn is_configured(&self) -> bool {
@@ -567,7 +593,7 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
         self.select_endpoint(endpoint);
         self.registers
             .tx_csr
-            .write(USB_TXCSR_MODE | USB_TXCSR_SEND_STALL);
+            .write_transmit(TransmitControlStatus::stall());
         self.select_endpoint(0);
     }
 
@@ -597,18 +623,20 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
         }
 
         self.select_endpoint(endpoint);
-        if self.registers.rx_csr.read() & USB_RXCSR_RX_PACKET_READY == 0 {
+        if !self.registers.rx_csr.read().packet_ready() {
             return None;
         }
 
-        let count = (self.registers.rx_count.read() as usize).min(output.len());
+        let count = self.registers.rx_count.read().bytes().min(output.len());
         for byte in &mut output[..count] {
             *byte = self.registers.fifo[endpoint as usize].read_byte();
         }
         // RXCSR.RXPKTRDY is cleared by writing zero.  No persistent RXCSR
         // configuration bits are needed for this PIO bulk endpoint.
-        self.registers.rx_csr.write(0);
-        self.registers.interrupt_rx.acknowledge(1_u16 << endpoint);
+        self.registers.rx_csr.write(ReceiveControlStatus::clear());
+        self.registers
+            .interrupt_rx
+            .acknowledge(ReceiveInterruptStatus::for_endpoint(endpoint));
         Some(count)
     }
 
@@ -627,13 +655,13 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
     fn write_notification(&mut self, bytes: &[u8]) {
         while self.configured && self.data_alt_setting == 1 {
             self.select_endpoint(NOTIFY_IN_ENDPOINT);
-            if self.registers.tx_csr.read() & USB_TXCSR_TX_PACKET_READY == 0 {
+            if !self.registers.tx_csr.read_transmit().packet_ready() {
                 for byte in bytes {
                     self.registers.fifo[NOTIFY_IN_ENDPOINT as usize].write_byte(*byte);
                 }
                 self.registers
                     .tx_csr
-                    .write(USB_TXCSR_MODE | USB_TXCSR_TX_PACKET_READY);
+                    .write_transmit(TransmitControlStatus::queue_packet());
                 return;
             }
             self.service_bus_and_control();
@@ -654,10 +682,7 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
         while self.endpoint_transfers_active(endpoint) && !bytes.is_empty() {
             while self.endpoint_transfers_active(endpoint) {
                 self.select_endpoint(endpoint);
-                if self.registers.tx_csr.read()
-                    & (USB_TXCSR_TX_PACKET_READY | USB_TXCSR_SEND_STALL | USB_TXCSR_SENT_STALL)
-                    == 0
-                {
+                if self.registers.tx_csr.read_transmit().can_accept_packet() {
                     break;
                 }
                 self.service_bus_and_control();
@@ -673,7 +698,7 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
             }
             self.registers
                 .tx_csr
-                .write(USB_TXCSR_MODE | USB_TXCSR_TX_PACKET_READY);
+                .write_transmit(TransmitControlStatus::queue_packet());
             bytes = &bytes[count..];
         }
     }
@@ -685,13 +710,10 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
     fn write_zero_length_packet_to(&mut self, endpoint: u8) {
         while self.endpoint_transfers_active(endpoint) {
             self.select_endpoint(endpoint);
-            if self.registers.tx_csr.read()
-                & (USB_TXCSR_TX_PACKET_READY | USB_TXCSR_SEND_STALL | USB_TXCSR_SENT_STALL)
-                == 0
-            {
+            if self.registers.tx_csr.read_transmit().can_accept_packet() {
                 self.registers
                     .tx_csr
-                    .write(USB_TXCSR_MODE | USB_TXCSR_TX_PACKET_READY);
+                    .write_transmit(TransmitControlStatus::queue_packet());
                 return;
             }
             self.service_bus_and_control();
@@ -711,7 +733,7 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
     fn flush_endpoint(&mut self, endpoint: u8) -> bool {
         while self.endpoint_transfers_active(endpoint) {
             self.select_endpoint(endpoint);
-            let pending = self.registers.tx_csr.read() & USB_TXCSR_TX_PACKET_READY != 0;
+            let pending = self.registers.tx_csr.read_transmit().packet_ready();
             self.service_bus_and_control();
             if !pending {
                 return true;
@@ -724,28 +746,35 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
     /// processing the current packet.
     fn service_bus_and_control(&mut self) -> bool {
         let usb_status = self.registers.interrupt_usb.status();
-        if usb_status != 0 {
+        if !usb_status.is_empty() {
             self.registers.interrupt_usb.acknowledge(usb_status);
         }
-        if usb_status & USB_BUS_RESET != 0 {
+        if usb_status.reset_pending() {
             self.handle_bus_reset();
             return true;
         }
 
         let tx_status = self.registers.interrupt_tx.status();
-        if tx_status & 1 != 0 {
-            self.registers.interrupt_tx.acknowledge(1);
+        if tx_status.endpoint_pending(0) {
+            self.registers
+                .interrupt_tx
+                .acknowledge(TransmitInterruptStatus::for_endpoint(0));
             self.handle_endpoint_zero();
         }
-        let completed_nonzero = tx_status & !1;
-        if completed_nonzero != 0 {
+        let completed_nonzero = tx_status.without_endpoint(0);
+        if !completed_nonzero.is_empty() {
             self.registers.interrupt_tx.acknowledge(completed_nonzero);
         }
         false
     }
 
     fn handle_bus_reset(&mut self) {
-        self.registers.function_address.write(0);
+        // SAFETY: UsbDevice exclusively owns USB0 and resets its address.
+        unsafe {
+            self.registers
+                .function_address
+                .write(FunctionAddress::default());
+        }
         self.ep0_state = Ep0State::Idle;
         self.configured = false;
         self.data_alt_setting = 0;
@@ -760,34 +789,42 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
 
     fn handle_endpoint_zero(&mut self) {
         self.select_endpoint(0);
-        let csr0 = self.registers.tx_csr.read();
+        let csr0 = self.registers.tx_csr.read_endpoint_zero();
 
-        if csr0 & USB_CSR0_SENT_STALL != 0 {
-            self.registers.tx_csr.write(0);
+        if csr0.sent_stall() {
+            self.registers
+                .tx_csr
+                .write_endpoint_zero(EndpointZeroControlStatus::clear());
             self.ep0_state = Ep0State::Idle;
             return;
         }
-        if csr0 & USB_CSR0_SETUP_END != 0 {
-            self.registers.tx_csr.write(USB_CSR0_SERVICE_SETUP_END);
+        if csr0.setup_end() {
+            self.registers
+                .tx_csr
+                .write_endpoint_zero(EndpointZeroControlStatus::service_setup_end());
             self.ep0_state = Ep0State::Idle;
         }
 
         match self.ep0_state {
-            Ep0State::Idle if csr0 & USB_CSR0_RX_PACKET_READY != 0 => self.handle_setup_packet(),
-            Ep0State::Tx { .. } if csr0 & USB_CSR0_TX_PACKET_READY == 0 => {
-                self.continue_control_in()
-            }
-            Ep0State::ReceiveLineCoding { received } if csr0 & USB_CSR0_RX_PACKET_READY != 0 => {
+            Ep0State::Idle if csr0.received_packet_ready() => self.handle_setup_packet(),
+            Ep0State::Tx { .. } if !csr0.transmit_packet_ready() => self.continue_control_in(),
+            Ep0State::ReceiveLineCoding { received } if csr0.received_packet_ready() => {
                 self.receive_line_coding(received)
             }
-            Ep0State::ReceiveNtbInputSize if csr0 & USB_CSR0_RX_PACKET_READY != 0 => {
+            Ep0State::ReceiveNtbInputSize if csr0.received_packet_ready() => {
                 self.receive_ntb_input_size()
             }
-            Ep0State::ApplyAddress(address) if csr0 & USB_CSR0_TX_PACKET_READY == 0 => {
-                self.registers
-                    .tx_csr
-                    .write(USB_CSR0_SERVICE_RX_PACKET_READY | USB_CSR0_SERVICE_SETUP_END);
-                self.registers.function_address.write(address);
+            Ep0State::ApplyAddress(address) if !csr0.transmit_packet_ready() => {
+                self.registers.tx_csr.write_endpoint_zero(
+                    EndpointZeroControlStatus::service_received_packet_and_setup_end(),
+                );
+                // SAFETY: USB0 is exclusively owned and address is validated
+                // from the host's seven-bit SET_ADDRESS value.
+                unsafe {
+                    self.registers
+                        .function_address
+                        .write(FunctionAddress::new(address));
+                }
                 self.ep0_state = Ep0State::Idle;
             }
             _ => {}
@@ -797,12 +834,12 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
     fn handle_setup_packet(&mut self) {
         // COUNT0 can settle a few cycles after the EP0 interrupt.  Both the
         // V821 BootROM and Tina UDC retry this exact read up to 16 times.
-        let mut count = self.registers.rx_count.read() as usize;
+        let mut count = self.registers.rx_count.read().bytes();
         for _ in 0..16 {
             if count == 8 {
                 break;
             }
-            count = self.registers.rx_count.read() as usize;
+            count = self.registers.rx_count.read().bytes();
         }
         if count != 8 {
             for _ in 0..count.min(EP0_MAX_PACKET) {
@@ -852,9 +889,9 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
             (0x00, 0x05) if setup.index == 0 && setup.length == 0 => {
                 // Tina and MUSB finish a zero-data OUT request with 0x48.
                 // FEL's private 0x4a sequence leaves TXPKTRDY stuck here.
-                self.registers
-                    .tx_csr
-                    .write(USB_CSR0_SERVICE_RX_PACKET_READY | USB_CSR0_DATA_END);
+                self.registers.tx_csr.write_endpoint_zero(
+                    EndpointZeroControlStatus::service_received_packet_and_complete(),
+                );
                 self.ep0_state = Ep0State::ApplyAddress((setup.value & 0x7f) as u8);
             }
             (0x00, 0x09) if setup.index == 0 && setup.length == 0 => {
@@ -1010,7 +1047,7 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
                     self.ntb_input_size.fill(0);
                     self.registers
                         .tx_csr
-                        .write(USB_CSR0_SERVICE_RX_PACKET_READY);
+                        .write_endpoint_zero(EndpointZeroControlStatus::service_received_packet());
                     self.ep0_state = Ep0State::ReceiveNtbInputSize;
                 }
                 (0x21, NCM_SET_ETHERNET_PACKET_FILTER) if setup.index == 0 && setup.length == 0 => {
@@ -1029,7 +1066,7 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
             (0x21, CDC_SET_LINE_CODING) if setup.index == 0 && setup.length == 7 => {
                 self.registers
                     .tx_csr
-                    .write(USB_CSR0_SERVICE_RX_PACKET_READY);
+                    .write_endpoint_zero(EndpointZeroControlStatus::service_received_packet());
                 self.ep0_state = Ep0State::ReceiveLineCoding { received: 0 };
             }
             (0x21, CDC_SET_CONTROL_LINE_STATE) | (0x21, CDC_SEND_BREAK)
@@ -1042,7 +1079,7 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
     }
 
     fn receive_line_coding(&mut self, received: usize) {
-        let count = self.registers.rx_count.read() as usize;
+        let count = self.registers.rx_count.read().bytes();
         let accepted = count.min(7_usize.saturating_sub(received));
         for slot in &mut self.line_coding[received..received + accepted] {
             *slot = self.registers.fifo[0].read_byte();
@@ -1053,20 +1090,20 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
 
         let next = received + accepted;
         if next == 7 || count < EP0_MAX_PACKET {
-            self.registers
-                .tx_csr
-                .write(USB_CSR0_SERVICE_RX_PACKET_READY | USB_CSR0_DATA_END);
+            self.registers.tx_csr.write_endpoint_zero(
+                EndpointZeroControlStatus::service_received_packet_and_complete(),
+            );
             self.ep0_state = Ep0State::Idle;
         } else {
             self.registers
                 .tx_csr
-                .write(USB_CSR0_SERVICE_RX_PACKET_READY);
+                .write_endpoint_zero(EndpointZeroControlStatus::service_received_packet());
             self.ep0_state = Ep0State::ReceiveLineCoding { received: next };
         }
     }
 
     fn receive_ntb_input_size(&mut self) {
-        let count = self.registers.rx_count.read() as usize;
+        let count = self.registers.rx_count.read().bytes();
         let accepted = count.min(self.ntb_input_size.len());
         for slot in &mut self.ntb_input_size[..accepted] {
             *slot = self.registers.fifo[0].read_byte();
@@ -1076,9 +1113,9 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
         }
 
         if count == self.ntb_input_size.len() && u32::from_le_bytes(self.ntb_input_size) == 2048 {
-            self.registers
-                .tx_csr
-                .write(USB_CSR0_SERVICE_RX_PACKET_READY | USB_CSR0_DATA_END);
+            self.registers.tx_csr.write_endpoint_zero(
+                EndpointZeroControlStatus::service_received_packet_and_complete(),
+            );
             self.ep0_state = Ep0State::Idle;
         } else {
             self.stall_endpoint_zero();
@@ -1092,7 +1129,7 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
         // then fill FIFO0 and prime TX separately.
         self.registers
             .tx_csr
-            .write(USB_CSR0_SERVICE_RX_PACKET_READY);
+            .write_endpoint_zero(EndpointZeroControlStatus::service_received_packet());
         self.ep0_state = Ep0State::Tx {
             source,
             total,
@@ -1120,9 +1157,8 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
         let next = offset + count;
         let defer_zlp = next == total && needs_zlp && count != 0;
 
-        let mut csr0 = USB_CSR0_TX_PACKET_READY;
-        if next == total && !defer_zlp {
-            csr0 |= USB_CSR0_DATA_END;
+        let transfer_complete = next == total && !defer_zlp;
+        if transfer_complete {
             self.ep0_state = Ep0State::Idle;
         } else {
             self.ep0_state = Ep0State::Tx {
@@ -1132,7 +1168,9 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
                 needs_zlp: next < total && needs_zlp,
             };
         }
-        self.registers.tx_csr.write(csr0);
+        self.registers.tx_csr.write_endpoint_zero(
+            EndpointZeroControlStatus::queue_transmit_packet(transfer_complete),
+        );
     }
 
     fn source_len(&self, source: TxSource) -> usize {
@@ -1179,7 +1217,7 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
         self.select_endpoint(0);
         self.registers
             .tx_csr
-            .write(USB_CSR0_SERVICE_RX_PACKET_READY | USB_CSR0_DATA_END);
+            .write_endpoint_zero(EndpointZeroControlStatus::service_received_packet_and_complete());
         self.ep0_state = Ep0State::Idle;
     }
 
@@ -1187,7 +1225,7 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
         self.select_endpoint(0);
         self.registers
             .tx_csr
-            .write(USB_CSR0_SERVICE_RX_PACKET_READY | USB_CSR0_SEND_STALL);
+            .write_endpoint_zero(EndpointZeroControlStatus::service_received_packet_and_stall());
         self.ep0_state = Ep0State::Idle;
     }
 
@@ -1209,9 +1247,9 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
         let endpoint = endpoint_address & 0x0f;
         let wedged = endpoint_address == Self::mass_storage_in_address() && self.bulk_in_wedged;
         self.select_endpoint(endpoint);
-        let csr = self.registers.tx_csr.read();
+        let csr = self.registers.tx_csr.read_transmit();
         self.select_endpoint(0);
-        Some(wedged || csr & (USB_TXCSR_SEND_STALL | USB_TXCSR_SENT_STALL) != 0)
+        Some(wedged || csr.is_stalled())
     }
 
     const fn is_valid_endpoint_address(endpoint_address: u8) -> bool {
@@ -1253,15 +1291,15 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
     }
 
     fn flush_tx_fifo(&self, double_buffered: bool) {
-        let command = USB_TXCSR_MODE | USB_TXCSR_CLEAR_DATA_TOGGLE | USB_TXCSR_FLUSH_FIFO;
-        self.registers.tx_csr.write(command);
+        let command = TransmitControlStatus::flush_and_clear_data_toggle();
+        self.registers.tx_csr.write_transmit(command);
         if double_buffered {
-            self.registers.tx_csr.write(command);
+            self.registers.tx_csr.write_transmit(command);
         }
     }
 
     fn flush_rx_fifo(&self, double_buffered: bool) {
-        let command = USB_RXCSR_CLEAR_DATA_TOGGLE | USB_RXCSR_FLUSH_FIFO;
+        let command = ReceiveControlStatus::flush_and_clear_data_toggle();
         self.registers.rx_csr.write(command);
         if double_buffered {
             self.registers.rx_csr.write(command);
@@ -1275,89 +1313,148 @@ impl<const PROFILE: u8> UsbDevice<PROFILE> {
             // at byte 0x200. ACM leaves it idle; NCM uses it for link and speed
             // notifications after alternate setting 1 becomes active.
             self.select_endpoint(NOTIFY_IN_ENDPOINT);
-            self.registers.tx_csr.write(0);
-            self.registers.tx_max_packet.write(16);
+            self.registers
+                .tx_csr
+                .write_transmit(TransmitControlStatus::clear());
+            // SAFETY: this driver owns the USB controller and writes a valid
+            // packet size to the currently selected endpoint register.
+            unsafe {
+                self.registers
+                    .tx_max_packet
+                    .write(MaximumPacketSize::new(16));
+            }
             self.flush_tx_fifo(false);
-            self.registers.tx_fifo_size.write(FIFO_SIZE_SINGLE_512);
-            self.registers.tx_fifo_address.write(NOTIFY_TX_FIFO_ADDRESS);
+            // SAFETY: the typed values describe an aligned, in-range FIFO
+            // allocation for the currently selected endpoint.
+            unsafe {
+                self.registers.tx_fifo_size.write(FIFO_SIZE_SINGLE_512);
+                self.registers.tx_fifo_address.write(NOTIFY_TX_FIFO_ADDRESS);
+            }
         }
 
         // EP2 IN bulk: two 512-byte banks (1024 bytes total) at byte 0x600.
         self.select_endpoint(DATA_IN_ENDPOINT);
-        self.registers.tx_csr.write(0);
-        self.registers.tx_max_packet.write(64);
+        self.registers
+            .tx_csr
+            .write_transmit(TransmitControlStatus::clear());
+        // SAFETY: this driver owns the USB controller and writes a valid
+        // packet size to the currently selected endpoint register.
+        unsafe {
+            self.registers
+                .tx_max_packet
+                .write(MaximumPacketSize::new(64));
+        }
         self.flush_tx_fifo(true);
-        self.registers.tx_fifo_size.write(FIFO_SIZE_DOUBLE_512);
-        self.registers.tx_fifo_address.write(DATA_TX_FIFO_ADDRESS);
+        // SAFETY: the typed values describe an aligned, in-range FIFO
+        // allocation for the currently selected endpoint.
+        unsafe {
+            self.registers.tx_fifo_size.write(FIFO_SIZE_DOUBLE_512);
+            self.registers.tx_fifo_address.write(DATA_TX_FIFO_ADDRESS);
+        }
 
         // EP2 OUT bulk: two 512-byte banks (1024 bytes total) at byte 0xa00.
-        self.registers.rx_csr.write(0);
-        self.registers.rx_max_packet.write(64);
+        self.registers.rx_csr.write(ReceiveControlStatus::clear());
+        // SAFETY: this driver owns the USB controller and writes a valid
+        // packet size to the currently selected endpoint register.
+        unsafe {
+            self.registers
+                .rx_max_packet
+                .write(MaximumPacketSize::new(64));
+        }
         self.flush_rx_fifo(true);
-        self.registers.rx_fifo_size.write(FIFO_SIZE_DOUBLE_512);
-        self.registers.rx_fifo_address.write(DATA_RX_FIFO_ADDRESS);
+        // SAFETY: the typed values describe an aligned, in-range FIFO
+        // allocation for the currently selected endpoint.
+        unsafe {
+            self.registers.rx_fifo_size.write(FIFO_SIZE_DOUBLE_512);
+            self.registers.rx_fifo_address.write(DATA_RX_FIFO_ADDRESS);
+        }
 
         if PROFILE == PROFILE_CDC_MSC {
             // EP3 IN uses the 512-byte gap at byte 0x400, between EP1 and
             // EP2's banks. EP3 OUT uses the final bank at byte 0xe00.
             self.select_endpoint(MSC_COMPOSITE_IN_ENDPOINT);
-            self.registers.tx_csr.write(0);
-            self.registers.tx_max_packet.write(64);
+            self.registers
+                .tx_csr
+                .write_transmit(TransmitControlStatus::clear());
+            // SAFETY: this driver owns the USB controller and writes a valid
+            // packet size to the currently selected endpoint register.
+            unsafe {
+                self.registers
+                    .tx_max_packet
+                    .write(MaximumPacketSize::new(64));
+            }
             self.flush_tx_fifo(false);
-            self.registers.tx_fifo_size.write(FIFO_SIZE_SINGLE_512);
-            self.registers
-                .tx_fifo_address
-                .write(MSC_COMPOSITE_TX_FIFO_ADDRESS);
+            // SAFETY: the typed values describe an aligned, in-range FIFO
+            // allocation for the currently selected endpoint.
+            unsafe {
+                self.registers.tx_fifo_size.write(FIFO_SIZE_SINGLE_512);
+                self.registers
+                    .tx_fifo_address
+                    .write(MSC_COMPOSITE_TX_FIFO_ADDRESS);
+            }
 
-            self.registers.rx_csr.write(0);
-            self.registers.rx_max_packet.write(64);
+            self.registers.rx_csr.write(ReceiveControlStatus::clear());
+            // SAFETY: this driver owns the USB controller and writes a valid
+            // packet size to the currently selected endpoint register.
+            unsafe {
+                self.registers
+                    .rx_max_packet
+                    .write(MaximumPacketSize::new(64));
+            }
             self.flush_rx_fifo(false);
-            self.registers.rx_fifo_size.write(FIFO_SIZE_SINGLE_512);
-            self.registers
-                .rx_fifo_address
-                .write(MSC_COMPOSITE_RX_FIFO_ADDRESS);
+            // SAFETY: the typed values describe an aligned, in-range FIFO
+            // allocation for the currently selected endpoint.
+            unsafe {
+                self.registers.rx_fifo_size.write(FIFO_SIZE_SINGLE_512);
+                self.registers
+                    .rx_fifo_address
+                    .write(MSC_COMPOSITE_RX_FIFO_ADDRESS);
+            }
         }
 
-        let notify_interrupt = if PROFILE != PROFILE_MASS_STORAGE {
-            1 << NOTIFY_IN_ENDPOINT
-        } else {
-            0
-        };
-        let mass_storage_interrupt = if PROFILE == PROFILE_CDC_MSC {
-            1 << MSC_COMPOSITE_IN_ENDPOINT
-        } else {
-            0
-        };
-        self.registers
-            .interrupt_tx_enable
-            .write((1 << 0) | (1 << DATA_IN_ENDPOINT) | notify_interrupt | mass_storage_interrupt);
-        let mass_storage_rx_interrupt = if PROFILE == PROFILE_CDC_MSC {
-            1 << MSC_COMPOSITE_OUT_ENDPOINT
-        } else {
-            0
-        };
-        self.registers
-            .interrupt_rx_enable
-            .write((1 << DATA_OUT_ENDPOINT) | mass_storage_rx_interrupt);
+        let mut transmit_interrupts = TransmitInterruptEnable::default()
+            .enable_endpoint(0)
+            .enable_endpoint(DATA_IN_ENDPOINT);
+        if PROFILE != PROFILE_MASS_STORAGE {
+            transmit_interrupts = transmit_interrupts.enable_endpoint(NOTIFY_IN_ENDPOINT);
+        }
+        if PROFILE == PROFILE_CDC_MSC {
+            transmit_interrupts = transmit_interrupts.enable_endpoint(MSC_COMPOSITE_IN_ENDPOINT);
+        }
+        let mut receive_interrupts =
+            ReceiveInterruptEnable::default().enable_endpoint(DATA_OUT_ENDPOINT);
+        if PROFILE == PROFILE_CDC_MSC {
+            receive_interrupts = receive_interrupts.enable_endpoint(MSC_COMPOSITE_OUT_ENDPOINT);
+        }
+        // SAFETY: this driver exclusively owns the controller interrupt masks;
+        // the typed masks enable only endpoints configured above.
+        unsafe {
+            self.registers
+                .interrupt_tx_enable
+                .write(transmit_interrupts);
+            self.registers.interrupt_rx_enable.write(receive_interrupts);
+        }
         self.select_endpoint(0);
     }
 
     #[inline(always)]
     fn select_endpoint(&self, endpoint: u8) {
-        self.registers.index.write(endpoint);
+        // SAFETY: this driver owns INDEX, and EndpointIndex validates the
+        // endpoint number before the volatile write.
+        unsafe { self.registers.index.write(EndpointIndex::new(endpoint)) }
     }
 
     fn acknowledge_all_pending_interrupts(&self) {
         let tx = self.registers.interrupt_tx.status();
-        if tx != 0 {
+        if !tx.is_empty() {
             self.registers.interrupt_tx.acknowledge(tx);
         }
         let rx = self.registers.interrupt_rx.status();
-        if rx != 0 {
+        if !rx.is_empty() {
             self.registers.interrupt_rx.acknowledge(rx);
         }
         let usb = self.registers.interrupt_usb.status();
-        if usb != 0 {
+        if !usb.is_empty() {
             self.registers.interrupt_usb.acknowledge(usb);
         }
     }
@@ -1475,15 +1572,9 @@ mod tests {
         );
     }
 
-    fn fifo_range(address: u16, size: u8) -> core::ops::Range<usize> {
-        let start = usize::from(address) * 8;
-        let bank_size = 1_usize << (usize::from(size & 0x0f) + 3);
-        let length = if size & 0x10 == 0 {
-            bank_size
-        } else {
-            bank_size * 2
-        };
-        start..start + length
+    fn fifo_range(address: FifoAddress, size: FifoSize) -> core::ops::Range<usize> {
+        let start = address.byte_offset();
+        start..start + size.total_bytes()
     }
 
     fn assert_configuration_descriptor(
