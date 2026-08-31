@@ -173,19 +173,14 @@ impl<const P: char, const N: u8> allwinner_hal::gpio::PadExt<'static, P, N> for 
 
 /// Clock configuration on current SoC.
 #[derive(Debug)]
-pub struct Clocks {
-    /// PSI clock frequency.
-    pub psi: Hertz,
-    /// Advanced Peripheral Bus 1 clock frequency.
-    pub apb1: Hertz,
-}
+pub struct Clocks;
 
 impl Clocks {
-    /// Return the current E907 `mcycle` frequency in ticks per second.
+    /// Return the E907 `mcycle` frequency in ticks per second.
     ///
-    /// The BootROM can leave the core on HOSC or switch it to a divided
-    /// peripheral PLL, depending on the boot path and chip configuration.
-    /// Dynamic video-PLL and CPU-PLL sources are not decoded yet.
+    /// The frequency remains valid while the E907 clock tree is unchanged.
+    /// The V821 BootROM enters Boot0 through HOSC or the 1024 MHz peripheral
+    /// PLL; other clock parents are not used by this runtime.
     pub fn mcycle_ticks_second(&self, aon_ccu: &AON_CCU) -> Option<u32> {
         let clock = aon_ccu.e907_clock.read();
         let source_frequency = match clock.clock_source() {
@@ -196,10 +191,8 @@ impl Clocks {
                     40_000_000
                 }
             }
-            E907ClockSource::Rc1M | E907ClockSource::Rc1M0 => 1_000_000,
             E907ClockSource::PeriPll1024M => 1_024_000_000,
-            E907ClockSource::PeriPll614M | E907ClockSource::PeriPll614M0 => 614_400_000,
-            E907ClockSource::VideoPll2x | E907ClockSource::CpuPll => return None,
+            _ => return None,
         };
         Some(source_frequency / u32::from(clock.divisor()))
     }
@@ -351,11 +344,7 @@ pub unsafe fn __rom_init_params() -> (Peripherals, Clocks) {
         usb0: USB0 { _private: () },
         usb_phy0: USB_PHY0 { _private: () },
     };
-    // TODO: correct clock configuration
-    let clocks = Clocks {
-        psi: 600_000_000.Hz(),
-        apb1: 24_000_000.Hz(),
-    };
+    let clocks = Clocks;
     (peripherals, clocks)
 }
 
