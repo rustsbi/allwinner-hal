@@ -14,7 +14,7 @@ pub use function::Function;
 pub use input::Input;
 pub use output::Output;
 pub use pad_ext::PadExt;
-pub use register::{Eint, PioPow, Port, RegisterBlock};
+pub use register::{Eint, PioPow, Port, v2};
 
 #[inline]
 const fn cfg_index(n: u8) -> (usize, u8) {

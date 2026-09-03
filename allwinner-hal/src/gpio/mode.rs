@@ -1,4 +1,7 @@
-use super::{cfg_index, register::RegisterBlock};
+use super::{
+    cfg_index,
+    register::{AnyRegisterBlock, GpioVersion, Versioned},
+};
 
 /// Internal function to set GPIO pad mode.
 #[inline]
@@ -9,26 +12,30 @@ where
 {
     // take ownership of pad
     let (port, number) = value.port_number();
+    let version = value.gpio_version();
     let gpio = value.register_block();
     unsafe { write_mode::<T, U>(&mut value) };
     // return ownership of pad
-    unsafe { U::from_gpio(port, number, gpio) }
+    unsafe { U::from_gpio(port, number, version, gpio) }
 }
 
 #[inline]
 unsafe fn write_mode<'a, T: PortAndNumber<'a>, U: FromRegisters<'a>>(value: &mut T) {
     let gpio = value.register_block();
+    let version = value.gpio_version();
     // calculate mask, value and register address
-    let (mask, value, port, cfg_reg_idx) = {
+    let (mask, mode, port, cfg_reg_idx) = {
         let (port, number) = value.port_number();
         let (cfg_reg_idx, cfg_field_idx) = cfg_index(number);
         let mask = !(0xF << cfg_field_idx);
-        let value = (U::VALUE as u32) << cfg_field_idx;
-        (mask, value, port, cfg_reg_idx)
+        let mode = (U::VALUE as u32) << cfg_field_idx;
+        (mask, mode, port, cfg_reg_idx)
     };
     // apply configuration
-    let cfg_reg = &gpio.port(port).cfg[cfg_reg_idx];
-    unsafe { cfg_reg.modify(|cfg| (cfg & mask) | value) };
+    let cfg_reg = match unsafe { gpio.with_version(version) } {
+        Versioned::V2(gpio) => &gpio.port(port).cfg[cfg_reg_idx],
+    };
+    unsafe { cfg_reg.modify(|cfg| (cfg & mask) | mode) };
 }
 
 #[inline]
@@ -40,10 +47,11 @@ where
 {
     // retrieve information of pad
     let (port, number) = value.port_number();
+    let version = value.gpio_version();
     let gpio = value.register_block();
     // set pad to new mode
     unsafe { write_mode::<T, U>(value) };
-    let mut pad = unsafe { U::from_gpio(port, number, gpio) };
+    let mut pad = unsafe { U::from_gpio(port, number, version, gpio) };
     let val = f(&mut pad);
     // restore pad to original mode
     unsafe { write_mode::<T, T>(value) };
@@ -52,10 +60,16 @@ where
 
 pub trait PortAndNumber<'a> {
     fn port_number(&self) -> (char, u8);
-    fn register_block(&self) -> &'a RegisterBlock;
+    fn gpio_version(&self) -> GpioVersion;
+    fn register_block(&self) -> &'a AnyRegisterBlock;
 }
 
 pub trait FromRegisters<'a> {
     const VALUE: u8;
-    unsafe fn from_gpio(port: char, number: u8, gpio: &'a RegisterBlock) -> Self;
+    unsafe fn from_gpio(
+        port: char,
+        number: u8,
+        version: GpioVersion,
+        gpio: &'a AnyRegisterBlock,
+    ) -> Self;
 }

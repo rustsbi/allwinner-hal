@@ -1,14 +1,15 @@
 use super::{
     input::Input,
     mode::{FromRegisters, PortAndNumber, borrow_with_mode, set_mode},
-    register::RegisterBlock,
+    register::{AnyRegisterBlock, GpioVersion, Versioned, v2::RegisterBlockV2},
 };
 
 /// Output mode pad.
 pub struct Output<'a> {
     port: char,
     number: u8,
-    gpio: &'a RegisterBlock,
+    version: GpioVersion,
+    gpio: &'a AnyRegisterBlock,
 }
 
 impl<'a> Output<'a> {
@@ -23,8 +24,13 @@ impl<'a> Output<'a> {
     // Macro internal function for ROM runtime; DO NOT USE.
     #[doc(hidden)]
     #[inline]
-    pub unsafe fn __new(port: char, number: u8, gpio: &'a RegisterBlock) -> Self {
-        set_mode(Self { gpio, port, number })
+    pub unsafe fn __new_v2(port: char, number: u8, gpio: &'a RegisterBlockV2) -> Self {
+        set_mode(Self {
+            gpio: gpio.as_any(),
+            port,
+            version: GpioVersion::V2,
+            number,
+        })
     }
 }
 
@@ -35,22 +41,24 @@ impl<'a> embedded_hal::digital::ErrorType for Output<'a> {
 impl<'a> embedded_hal::digital::OutputPin for Output<'a> {
     #[inline]
     fn set_low(&mut self) -> Result<(), Self::Error> {
-        unsafe {
-            self.gpio
-                .port(self.port)
-                .dat
-                .modify(|value| value & !(1 << self.number))
-        };
+        match unsafe { self.gpio.with_version(self.version) } {
+            Versioned::V2(gpio) => unsafe {
+                gpio.port(self.port)
+                    .dat
+                    .modify(|value| value & !(1 << self.number))
+            },
+        }
         Ok(())
     }
     #[inline]
     fn set_high(&mut self) -> Result<(), Self::Error> {
-        unsafe {
-            self.gpio
-                .port(self.port)
-                .dat
-                .modify(|value| value | (1 << self.number))
-        };
+        match unsafe { self.gpio.with_version(self.version) } {
+            Versioned::V2(gpio) => unsafe {
+                gpio.port(self.port)
+                    .dat
+                    .modify(|value| value | (1 << self.number))
+            },
+        }
         Ok(())
     }
 }
@@ -58,11 +66,17 @@ impl<'a> embedded_hal::digital::OutputPin for Output<'a> {
 impl<'a> embedded_hal::digital::StatefulOutputPin for Output<'a> {
     #[inline]
     fn is_set_high(&mut self) -> Result<bool, Self::Error> {
-        Ok(self.gpio.port(self.port).dat.read() & (1 << self.number) != 0)
+        let value = match unsafe { self.gpio.with_version(self.version) } {
+            Versioned::V2(gpio) => gpio.port(self.port).dat.read(),
+        };
+        Ok(value & (1 << self.number) != 0)
     }
     #[inline]
     fn is_set_low(&mut self) -> Result<bool, Self::Error> {
-        Ok(self.gpio.port(self.port).dat.read() & (1 << self.number) == 0)
+        let value = match unsafe { self.gpio.with_version(self.version) } {
+            Versioned::V2(gpio) => gpio.port(self.port).dat.read(),
+        };
+        Ok(value & (1 << self.number) == 0)
     }
 }
 
@@ -72,7 +86,11 @@ impl<'a> PortAndNumber<'a> for Output<'a> {
         (self.port, self.number)
     }
     #[inline]
-    fn register_block(&self) -> &'a RegisterBlock {
+    fn gpio_version(&self) -> GpioVersion {
+        self.version
+    }
+    #[inline]
+    fn register_block(&self) -> &'a AnyRegisterBlock {
         self.gpio
     }
 }
@@ -80,7 +98,17 @@ impl<'a> PortAndNumber<'a> for Output<'a> {
 impl<'a> FromRegisters<'a> for Output<'a> {
     const VALUE: u8 = 1;
     #[inline]
-    unsafe fn from_gpio(port: char, number: u8, gpio: &'a RegisterBlock) -> Self {
-        Self { port, number, gpio }
+    unsafe fn from_gpio(
+        port: char,
+        number: u8,
+        version: GpioVersion,
+        gpio: &'a AnyRegisterBlock,
+    ) -> Self {
+        Self {
+            port,
+            number,
+            version,
+            gpio,
+        }
     }
 }

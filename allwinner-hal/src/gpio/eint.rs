@@ -1,22 +1,28 @@
 use super::{
     cfg_index,
     mode::{FromRegisters, PortAndNumber, set_mode},
-    register::RegisterBlock,
+    register::{AnyRegisterBlock, GpioVersion, Versioned, v2::RegisterBlockV2},
 };
 
 /// External interrupt mode pad.
 pub struct EintPad<'a> {
     port: char,
     number: u8,
-    gpio: &'a RegisterBlock,
+    version: GpioVersion,
+    gpio: &'a AnyRegisterBlock,
 }
 
 impl<'a> EintPad<'a> {
     // Macro internal function for ROM runtime; DO NOT USE.
     #[doc(hidden)]
     #[inline]
-    pub unsafe fn __new(port: char, number: u8, gpio: &'a RegisterBlock) -> Self {
-        set_mode(Self { gpio, port, number })
+    pub unsafe fn __new_v2(port: char, number: u8, gpio: &'a RegisterBlockV2) -> Self {
+        set_mode(Self {
+            gpio: gpio.as_any(),
+            port,
+            version: GpioVersion::V2,
+            number,
+        })
     }
 }
 
@@ -46,34 +52,38 @@ impl<'a> EintPad<'a> {
             (cfg_reg_idx, mask, cfg_field_idx)
         };
         let value = event_id << cfg_field_idx;
-        let cfg_reg = &self.gpio.eint(self.port).cfg[cfg_reg_idx];
+        let cfg_reg = match unsafe { self.gpio.with_version(self.version) } {
+            Versioned::V2(gpio) => &gpio.eint(self.port).cfg[cfg_reg_idx],
+        };
         unsafe { cfg_reg.modify(|cfg| (cfg & mask) | value) };
     }
     #[inline]
     pub fn enable_interrupt(&mut self) {
-        unsafe {
-            self.gpio
-                .eint(self.port)
-                .ctl
-                .modify(|value| value | (1 << self.number))
-        }
+        let ctl = match unsafe { self.gpio.with_version(self.version) } {
+            Versioned::V2(gpio) => &gpio.eint(self.port).ctl,
+        };
+        unsafe { ctl.modify(|value| value | (1 << self.number)) }
     }
     #[inline]
     pub fn disable_interrupt(&mut self) {
-        unsafe {
-            self.gpio
-                .eint(self.port)
-                .ctl
-                .modify(|value| value & !(1 << self.number))
-        }
+        let ctl = match unsafe { self.gpio.with_version(self.version) } {
+            Versioned::V2(gpio) => &gpio.eint(self.port).ctl,
+        };
+        unsafe { ctl.modify(|value| value & !(1 << self.number)) }
     }
     #[inline]
     pub fn clear_interrupt_pending_bit(&mut self) {
-        unsafe { self.gpio.eint(self.port).status.write(1 << self.number) }
+        let status = match unsafe { self.gpio.with_version(self.version) } {
+            Versioned::V2(gpio) => &gpio.eint(self.port).status,
+        };
+        unsafe { status.write(1 << self.number) }
     }
     #[inline]
     pub fn check_interrupt(&mut self) -> bool {
-        self.gpio.eint(self.port).status.read() & (1 << self.number) != 0
+        let status = match unsafe { self.gpio.with_version(self.version) } {
+            Versioned::V2(gpio) => &gpio.eint(self.port).status,
+        };
+        status.read() & (1 << self.number) != 0
     }
 }
 
@@ -83,7 +93,11 @@ impl<'a> PortAndNumber<'a> for EintPad<'a> {
         (self.port, self.number)
     }
     #[inline]
-    fn register_block(&self) -> &'a RegisterBlock {
+    fn gpio_version(&self) -> GpioVersion {
+        self.version
+    }
+    #[inline]
+    fn register_block(&self) -> &'a AnyRegisterBlock {
         self.gpio
     }
 }
@@ -91,7 +105,17 @@ impl<'a> PortAndNumber<'a> for EintPad<'a> {
 impl<'a> FromRegisters<'a> for EintPad<'a> {
     const VALUE: u8 = 14;
     #[inline]
-    unsafe fn from_gpio(port: char, number: u8, gpio: &'a RegisterBlock) -> Self {
-        Self { port, number, gpio }
+    unsafe fn from_gpio(
+        port: char,
+        number: u8,
+        version: GpioVersion,
+        gpio: &'a AnyRegisterBlock,
+    ) -> Self {
+        Self {
+            port,
+            number,
+            version,
+            gpio,
+        }
     }
 }

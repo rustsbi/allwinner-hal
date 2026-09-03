@@ -36,7 +36,7 @@ pub struct Peripherals {
 
 soc! {
     /// General Purpose Input/Output peripheral for PA, PC, PD and PL pads.
-    pub struct GPIO => 0x42000000, allwinner_hal::gpio::RegisterBlock;
+    pub struct GPIO => 0x42000000, allwinner_hal::gpio::v2::RegisterBlockV2;
     /// Application-domain Clock Control Unit peripheral.
     pub struct CCU => 0x42001000, AppRegisterBlock;
     // TODO pub struct GPADC => 0x42009000
@@ -130,44 +130,44 @@ impl<const P: char, const N: u8> Pad<P, N> {
 impl<'a, const P: char, const N: u8> allwinner_hal::gpio::PadExt<'a, P, N> for &'a mut Pad<P, N> {
     #[inline]
     fn into_input(self) -> allwinner_hal::gpio::Input<'a> {
-        unsafe { allwinner_hal::gpio::Input::__new(P, N, &GPIO { _private: () }) }
+        unsafe { allwinner_hal::gpio::Input::__new_v2(P, N, &GPIO { _private: () }) }
     }
 
     #[inline]
     fn into_output(self) -> allwinner_hal::gpio::Output<'a> {
-        unsafe { allwinner_hal::gpio::Output::__new(P, N, &GPIO { _private: () }) }
+        unsafe { allwinner_hal::gpio::Output::__new_v2(P, N, &GPIO { _private: () }) }
     }
 
     #[inline]
     fn into_function<const F: u8>(self) -> allwinner_hal::gpio::Function<'a, P, N, F> {
-        unsafe { allwinner_hal::gpio::Function::__new(&GPIO { _private: () }) }
+        unsafe { allwinner_hal::gpio::Function::__new_v2(&GPIO { _private: () }) }
     }
 
     #[inline]
     fn into_eint(self) -> allwinner_hal::gpio::EintPad<'a> {
-        unsafe { allwinner_hal::gpio::EintPad::__new(P, N, &GPIO { _private: () }) }
+        unsafe { allwinner_hal::gpio::EintPad::__new_v2(P, N, &GPIO { _private: () }) }
     }
 }
 
 impl<const P: char, const N: u8> allwinner_hal::gpio::PadExt<'static, P, N> for Pad<P, N> {
     #[inline]
     fn into_input(self) -> allwinner_hal::gpio::Input<'static> {
-        unsafe { allwinner_hal::gpio::Input::__new(P, N, &GPIO { _private: () }) }
+        unsafe { allwinner_hal::gpio::Input::__new_v2(P, N, &GPIO { _private: () }) }
     }
 
     #[inline]
     fn into_output(self) -> allwinner_hal::gpio::Output<'static> {
-        unsafe { allwinner_hal::gpio::Output::__new(P, N, &GPIO { _private: () }) }
+        unsafe { allwinner_hal::gpio::Output::__new_v2(P, N, &GPIO { _private: () }) }
     }
 
     #[inline]
     fn into_function<const F: u8>(self) -> allwinner_hal::gpio::Function<'static, P, N, F> {
-        unsafe { allwinner_hal::gpio::Function::__new(&GPIO { _private: () }) }
+        unsafe { allwinner_hal::gpio::Function::__new_v2(&GPIO { _private: () }) }
     }
 
     #[inline]
     fn into_eint(self) -> allwinner_hal::gpio::EintPad<'static> {
-        unsafe { allwinner_hal::gpio::EintPad::__new(P, N, &GPIO { _private: () }) }
+        unsafe { allwinner_hal::gpio::EintPad::__new_v2(P, N, &GPIO { _private: () }) }
     }
 }
 

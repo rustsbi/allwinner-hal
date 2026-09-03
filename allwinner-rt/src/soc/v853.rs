@@ -2,7 +2,7 @@
 
 soc! {
     /// General Purpose Input/Output peripheral for PA, PC, PD and PL pads.
-    pub struct GPIO => 0x4004A400, allwinner_hal::gpio::RegisterBlock;
+    pub struct GPIO => 0x4004A400, allwinner_hal::gpio::v2::RegisterBlockV2;
 }
 
 /// Ownership of a V853 GPIO pad.

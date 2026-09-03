@@ -2,14 +2,15 @@ use super::{
     input::Input,
     mode::{FromRegisters, PortAndNumber, borrow_with_mode, set_mode},
     output::Output,
-    register::RegisterBlock,
+    register::{AnyRegisterBlock, GpioVersion, v2::RegisterBlockV2},
 };
 
 /// Alternate function pad.
 ///
 /// F should be in 2..=8.
 pub struct Function<'a, const P: char, const N: u8, const F: u8> {
-    gpio: &'a RegisterBlock,
+    version: GpioVersion,
+    gpio: &'a AnyRegisterBlock,
 }
 
 impl<'a, const P: char, const N: u8, const F: u8> Function<'a, P, N, F> {
@@ -32,8 +33,11 @@ impl<'a, const P: char, const N: u8, const F: u8> Function<'a, P, N, F> {
     // Macro internal function for ROM runtime; DO NOT USE.
     #[doc(hidden)]
     #[inline]
-    pub unsafe fn __new(gpio: &'a RegisterBlock) -> Self {
-        set_mode(Self { gpio })
+    pub unsafe fn __new_v2(gpio: &'a RegisterBlockV2) -> Self {
+        set_mode(Self {
+            version: GpioVersion::V2,
+            gpio: gpio.as_any(),
+        })
     }
 }
 
@@ -43,7 +47,11 @@ impl<'a, const P: char, const N: u8, const F: u8> PortAndNumber<'a> for Function
         (P, N)
     }
     #[inline]
-    fn register_block(&self) -> &'a RegisterBlock {
+    fn gpio_version(&self) -> GpioVersion {
+        self.version
+    }
+    #[inline]
+    fn register_block(&self) -> &'a AnyRegisterBlock {
         self.gpio
     }
 }
@@ -51,7 +59,7 @@ impl<'a, const P: char, const N: u8, const F: u8> PortAndNumber<'a> for Function
 impl<'a, const P: char, const N: u8, const F: u8> FromRegisters<'a> for Function<'a, P, N, F> {
     const VALUE: u8 = F;
     #[inline]
-    unsafe fn from_gpio(_: char, _: u8, gpio: &'a RegisterBlock) -> Self {
-        Self { gpio }
+    unsafe fn from_gpio(_: char, _: u8, version: GpioVersion, gpio: &'a AnyRegisterBlock) -> Self {
+        Self { version, gpio }
     }
 }
