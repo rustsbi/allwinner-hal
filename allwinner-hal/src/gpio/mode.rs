@@ -28,11 +28,12 @@ unsafe fn write_mode<'a, T: PortAndNumber<'a>, U: FromRegisters<'a>>(value: &mut
         let (port, number) = value.port_number();
         let (cfg_reg_idx, cfg_field_idx) = cfg_index(number);
         let mask = !(0xF << cfg_field_idx);
-        let mode = (U::VALUE as u32) << cfg_field_idx;
+        let mode = (U::mode_value(version) as u32) << cfg_field_idx;
         (mask, mode, port, cfg_reg_idx)
     };
     // apply configuration
     let cfg_reg = match unsafe { gpio.with_version(version) } {
+        Versioned::V1(gpio) => &gpio.port(port).cfg[cfg_reg_idx],
         Versioned::V2(gpio) => &gpio.port(port).cfg[cfg_reg_idx],
     };
     unsafe { cfg_reg.modify(|cfg| (cfg & mask) | mode) };
@@ -65,7 +66,7 @@ pub trait PortAndNumber<'a> {
 }
 
 pub trait FromRegisters<'a> {
-    const VALUE: u8;
+    fn mode_value(version: GpioVersion) -> u8;
     unsafe fn from_gpio(
         port: char,
         number: u8,

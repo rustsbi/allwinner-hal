@@ -2,7 +2,7 @@ use super::{
     input::Input,
     mode::{FromRegisters, PortAndNumber, borrow_with_mode, set_mode},
     output::Output,
-    register::{AnyRegisterBlock, GpioVersion, v2::RegisterBlockV2},
+    register::{AnyRegisterBlock, GpioVersion, v1::RegisterBlockV1, v2::RegisterBlockV2},
 };
 
 /// Alternate function pad.
@@ -33,6 +33,15 @@ impl<'a, const P: char, const N: u8, const F: u8> Function<'a, P, N, F> {
     // Macro internal function for ROM runtime; DO NOT USE.
     #[doc(hidden)]
     #[inline]
+    pub unsafe fn __new_v1(gpio: &'a RegisterBlockV1) -> Self {
+        set_mode(Self {
+            version: GpioVersion::V1,
+            gpio: gpio.as_any(),
+        })
+    }
+    // Macro internal function for ROM runtime; DO NOT USE.
+    #[doc(hidden)]
+    #[inline]
     pub unsafe fn __new_v2(gpio: &'a RegisterBlockV2) -> Self {
         set_mode(Self {
             version: GpioVersion::V2,
@@ -57,7 +66,10 @@ impl<'a, const P: char, const N: u8, const F: u8> PortAndNumber<'a> for Function
 }
 
 impl<'a, const P: char, const N: u8, const F: u8> FromRegisters<'a> for Function<'a, P, N, F> {
-    const VALUE: u8 = F;
+    #[inline]
+    fn mode_value(_: GpioVersion) -> u8 {
+        F
+    }
     #[inline]
     unsafe fn from_gpio(_: char, _: u8, version: GpioVersion, gpio: &'a AnyRegisterBlock) -> Self {
         Self { version, gpio }
