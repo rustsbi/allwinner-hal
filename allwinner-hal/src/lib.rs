@@ -8,6 +8,9 @@
 //! this package with `embedded-hal` ecosystem drivers to provide abundant amount of features.
 #![no_std]
 #[deny(missing_docs)]
+#[macro_use]
+mod macros;
+
 pub mod ccu;
 pub mod com;
 #[macro_use]

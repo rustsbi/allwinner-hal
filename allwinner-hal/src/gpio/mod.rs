@@ -1,4 +1,5 @@
 //! Allwinner GPIO controller.
+
 mod eint;
 mod flex_pad;
 mod function;
@@ -14,7 +15,7 @@ pub use function::Function;
 pub use input::Input;
 pub use output::Output;
 pub use pad_ext::PadExt;
-pub use register::{Eint, PioPow, Port, v1, v2};
+pub use register::{Eint, PioPow, Port, v1, v2, v3, v4};
 
 #[inline]
 const fn cfg_index(n: u8) -> (usize, u8) {

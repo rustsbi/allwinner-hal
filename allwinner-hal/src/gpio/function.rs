@@ -1,8 +1,8 @@
 use super::{
     input::Input,
-    mode::{FromRegisters, PortAndNumber, borrow_with_mode, set_mode},
+    mode::{FromRegisters, PortAndNumber, borrow_with_mode},
     output::Output,
-    register::{AnyRegisterBlock, GpioVersion, v1::RegisterBlockV1, v2::RegisterBlockV2},
+    register::{AnyRegisterBlock, GpioVersion},
 };
 
 /// Alternate function pad.
@@ -30,24 +30,7 @@ impl<'a, const P: char, const N: u8, const F: u8> Function<'a, P, N, F> {
     {
         borrow_with_mode(self, f)
     }
-    // Macro internal function for ROM runtime; DO NOT USE.
-    #[doc(hidden)]
-    #[inline]
-    pub unsafe fn __new_v1(gpio: &'a RegisterBlockV1) -> Self {
-        set_mode(Self {
-            version: GpioVersion::V1,
-            gpio: gpio.as_any(),
-        })
-    }
-    // Macro internal function for ROM runtime; DO NOT USE.
-    #[doc(hidden)]
-    #[inline]
-    pub unsafe fn __new_v2(gpio: &'a RegisterBlockV2) -> Self {
-        set_mode(Self {
-            version: GpioVersion::V2,
-            gpio: gpio.as_any(),
-        })
-    }
+    impl_gpio_constructors!(function);
 }
 
 impl<'a, const P: char, const N: u8, const F: u8> PortAndNumber<'a> for Function<'a, P, N, F> {

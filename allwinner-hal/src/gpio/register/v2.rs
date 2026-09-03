@@ -1,6 +1,6 @@
 //! GPIO peripheral in D1, T113, V851, V853, V861, F101 and V821 series.
 
-use super::{AnyRegisterBlock, Eint, PioPow, Port};
+use super::{AnyRegisterBlock, Eint, PioPow, Port, PortRegisters};
 
 /// Generic Purpose Input/Output registers, version 2.
 #[repr(C)]
@@ -31,15 +31,16 @@ impl RegisterBlockV2 {
     }
 
     #[inline]
-    pub(crate) const fn port(&self, p: char) -> &Port {
-        match p {
+    pub(in crate::gpio) const fn port(&self, p: char) -> PortRegisters<'_> {
+        let port = match p {
             'A'..='I' => &self.sys_port[p as usize - b'A' as usize],
             'L' => &self.rtc_port,
             _ => panic!("unsupported GPIO port"),
-        }
+        };
+        PortRegisters::new(&port.cfg, &port.dat)
     }
     #[inline]
-    pub(crate) const fn eint(&self, p: char) -> &Eint {
+    pub(in crate::gpio) const fn eint(&self, p: char) -> &Eint {
         match p {
             'A'..='I' => &self.sys_eint[p as usize - b'A' as usize],
             'L' => &self.rtc_eint,
@@ -90,8 +91,8 @@ mod tests {
         ];
 
         for (p, port_offset, eint_offset) in test_cases {
-            let port_ref = block.port(p);
-            let offset = unsafe { (port_ref as *const _ as *const u8).offset_from(base_addr) };
+            let port = block.port(p);
+            let offset = unsafe { port.cfg.as_ptr().cast::<u8>().offset_from(base_addr) };
             assert_eq!(
                 offset, port_offset,
                 "port offset for port {} should be 0x{:0x}",

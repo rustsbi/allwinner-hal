@@ -1,6 +1,6 @@
 use super::{
     cfg_index,
-    register::{AnyRegisterBlock, GpioVersion, Versioned},
+    register::{AnyRegisterBlock, GpioVersion},
 };
 
 /// Internal function to set GPIO pad mode.
@@ -32,10 +32,7 @@ unsafe fn write_mode<'a, T: PortAndNumber<'a>, U: FromRegisters<'a>>(value: &mut
         (mask, mode, port, cfg_reg_idx)
     };
     // apply configuration
-    let cfg_reg = match unsafe { gpio.with_version(version) } {
-        Versioned::V1(gpio) => &gpio.port(port).cfg[cfg_reg_idx],
-        Versioned::V2(gpio) => &gpio.port(port).cfg[cfg_reg_idx],
-    };
+    let cfg_reg = &unsafe { gpio.with_version(version) }.port(port).cfg[cfg_reg_idx];
     unsafe { cfg_reg.modify(|cfg| (cfg & mask) | mode) };
 }
 

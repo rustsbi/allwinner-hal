@@ -1,6 +1,6 @@
 //! GPIO peripheral in H313, H616, H618, A133 and R818 series.
 
-use super::{AnyRegisterBlock, Eint, PioPow};
+use super::{AnyRegisterBlock, Eint, PioPow, PortRegisters};
 use volatile_register::RW;
 
 /// GPIO port register group, version 1.
@@ -49,16 +49,17 @@ impl RegisterBlockV1 {
     }
 
     #[inline]
-    pub(crate) const fn port(&self, p: char) -> &PortV1 {
-        match p {
+    pub(in crate::gpio) const fn port(&self, p: char) -> PortRegisters<'_> {
+        let port = match p {
             'A'..='J' => &self.sys_port[p as usize - b'A' as usize],
             'L' => &self.rtc_port,
             _ => panic!("unsupported GPIO port"),
-        }
+        };
+        PortRegisters::new(&port.cfg, &port.dat)
     }
 
     #[inline]
-    pub(crate) const fn eint(&self, p: char) -> &Eint {
+    pub(in crate::gpio) const fn eint(&self, p: char) -> &Eint {
         match p {
             // H313/H616/H618/A133 use PA as EINT bank 0 and have no PB;
             // R818 uses PB as EINT bank 0 and has no PA. From PC onwards,
@@ -123,8 +124,8 @@ mod tests {
         ];
 
         for (p, port_offset, eint_offset) in test_cases {
-            let port_ref = block.port(p);
-            let offset = unsafe { (port_ref as *const _ as *const u8).offset_from(base_addr) };
+            let port = block.port(p);
+            let offset = unsafe { port.cfg.as_ptr().cast::<u8>().offset_from(base_addr) };
             assert_eq!(offset, port_offset, "incorrect port {p} offset");
 
             let eint_ref = block.eint(p);

@@ -1,9 +1,7 @@
 use super::{
     cfg_index,
-    mode::{FromRegisters, PortAndNumber, set_mode},
-    register::{
-        AnyRegisterBlock, GpioVersion, Versioned, v1::RegisterBlockV1, v2::RegisterBlockV2,
-    },
+    mode::{FromRegisters, PortAndNumber},
+    register::{AnyRegisterBlock, GpioVersion},
 };
 
 /// External interrupt mode pad.
@@ -15,28 +13,7 @@ pub struct EintPad<'a> {
 }
 
 impl<'a> EintPad<'a> {
-    // Macro internal function for ROM runtime; DO NOT USE.
-    #[doc(hidden)]
-    #[inline]
-    pub unsafe fn __new_v1(port: char, number: u8, gpio: &'a RegisterBlockV1) -> Self {
-        set_mode(Self {
-            gpio: gpio.as_any(),
-            port,
-            version: GpioVersion::V1,
-            number,
-        })
-    }
-    // Macro internal function for ROM runtime; DO NOT USE.
-    #[doc(hidden)]
-    #[inline]
-    pub unsafe fn __new_v2(port: char, number: u8, gpio: &'a RegisterBlockV2) -> Self {
-        set_mode(Self {
-            gpio: gpio.as_any(),
-            port,
-            version: GpioVersion::V2,
-            number,
-        })
-    }
+    impl_gpio_constructors!(pad);
 }
 
 /// External interrupt event.
@@ -65,42 +42,37 @@ impl<'a> EintPad<'a> {
             (cfg_reg_idx, mask, cfg_field_idx)
         };
         let value = event_id << cfg_field_idx;
-        let cfg_reg = match unsafe { self.gpio.with_version(self.version) } {
-            Versioned::V1(gpio) => &gpio.eint(self.port).cfg[cfg_reg_idx],
-            Versioned::V2(gpio) => &gpio.eint(self.port).cfg[cfg_reg_idx],
-        };
+        let cfg_reg = &unsafe { self.gpio.with_version(self.version) }
+            .eint(self.port)
+            .cfg[cfg_reg_idx];
         unsafe { cfg_reg.modify(|cfg| (cfg & mask) | value) };
     }
     #[inline]
     pub fn enable_interrupt(&mut self) {
-        let ctl = match unsafe { self.gpio.with_version(self.version) } {
-            Versioned::V1(gpio) => &gpio.eint(self.port).ctl,
-            Versioned::V2(gpio) => &gpio.eint(self.port).ctl,
-        };
+        let ctl = &unsafe { self.gpio.with_version(self.version) }
+            .eint(self.port)
+            .ctl;
         unsafe { ctl.modify(|value| value | (1 << self.number)) }
     }
     #[inline]
     pub fn disable_interrupt(&mut self) {
-        let ctl = match unsafe { self.gpio.with_version(self.version) } {
-            Versioned::V1(gpio) => &gpio.eint(self.port).ctl,
-            Versioned::V2(gpio) => &gpio.eint(self.port).ctl,
-        };
+        let ctl = &unsafe { self.gpio.with_version(self.version) }
+            .eint(self.port)
+            .ctl;
         unsafe { ctl.modify(|value| value & !(1 << self.number)) }
     }
     #[inline]
     pub fn clear_interrupt_pending_bit(&mut self) {
-        let status = match unsafe { self.gpio.with_version(self.version) } {
-            Versioned::V1(gpio) => &gpio.eint(self.port).status,
-            Versioned::V2(gpio) => &gpio.eint(self.port).status,
-        };
+        let status = &unsafe { self.gpio.with_version(self.version) }
+            .eint(self.port)
+            .status;
         unsafe { status.write(1 << self.number) }
     }
     #[inline]
     pub fn check_interrupt(&mut self) -> bool {
-        let status = match unsafe { self.gpio.with_version(self.version) } {
-            Versioned::V1(gpio) => &gpio.eint(self.port).status,
-            Versioned::V2(gpio) => &gpio.eint(self.port).status,
-        };
+        let status = &unsafe { self.gpio.with_version(self.version) }
+            .eint(self.port)
+            .status;
         status.read() & (1 << self.number) != 0
     }
 }
@@ -125,7 +97,7 @@ impl<'a> FromRegisters<'a> for EintPad<'a> {
     fn mode_value(version: GpioVersion) -> u8 {
         match version {
             GpioVersion::V1 => 6,
-            GpioVersion::V2 => 14,
+            GpioVersion::V2 | GpioVersion::V3 | GpioVersion::V4 => 14,
         }
     }
     #[inline]
@@ -156,6 +128,14 @@ mod tests {
         );
         assert_eq!(
             <EintPad<'_> as FromRegisters<'_>>::mode_value(GpioVersion::V2),
+            14
+        );
+        assert_eq!(
+            <EintPad<'_> as FromRegisters<'_>>::mode_value(GpioVersion::V3),
+            14
+        );
+        assert_eq!(
+            <EintPad<'_> as FromRegisters<'_>>::mode_value(GpioVersion::V4),
             14
         );
     }

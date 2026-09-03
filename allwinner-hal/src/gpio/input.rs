@@ -1,9 +1,7 @@
 use super::{
-    mode::{FromRegisters, PortAndNumber, borrow_with_mode, set_mode},
+    mode::{FromRegisters, PortAndNumber, borrow_with_mode},
     output::Output,
-    register::{
-        AnyRegisterBlock, GpioVersion, Versioned, v1::RegisterBlockV1, v2::RegisterBlockV2,
-    },
+    register::{AnyRegisterBlock, GpioVersion},
 };
 
 /// Input mode pad.
@@ -23,28 +21,7 @@ impl<'a> Input<'a> {
     {
         borrow_with_mode(self, f)
     }
-    // Macro internal function for ROM runtime; DO NOT USE.
-    #[doc(hidden)]
-    #[inline]
-    pub unsafe fn __new_v1(port: char, number: u8, gpio: &'a RegisterBlockV1) -> Self {
-        set_mode(Self {
-            gpio: gpio.as_any(),
-            port,
-            version: GpioVersion::V1,
-            number,
-        })
-    }
-    // Macro internal function for ROM runtime; DO NOT USE.
-    #[doc(hidden)]
-    #[inline]
-    pub unsafe fn __new_v2(port: char, number: u8, gpio: &'a RegisterBlockV2) -> Self {
-        set_mode(Self {
-            gpio: gpio.as_any(),
-            port,
-            version: GpioVersion::V2,
-            number,
-        })
-    }
+    impl_gpio_constructors!(pad);
 }
 
 impl<'a> embedded_hal::digital::ErrorType for Input<'a> {
@@ -54,18 +31,18 @@ impl<'a> embedded_hal::digital::ErrorType for Input<'a> {
 impl<'a> embedded_hal::digital::InputPin for Input<'a> {
     #[inline]
     fn is_high(&mut self) -> Result<bool, Self::Error> {
-        let value = match unsafe { self.gpio.with_version(self.version) } {
-            Versioned::V1(gpio) => gpio.port(self.port).dat.read(),
-            Versioned::V2(gpio) => gpio.port(self.port).dat.read(),
-        };
+        let value = unsafe { self.gpio.with_version(self.version) }
+            .port(self.port)
+            .dat
+            .read();
         Ok(value & (1 << self.number) != 0)
     }
     #[inline]
     fn is_low(&mut self) -> Result<bool, Self::Error> {
-        let value = match unsafe { self.gpio.with_version(self.version) } {
-            Versioned::V1(gpio) => gpio.port(self.port).dat.read(),
-            Versioned::V2(gpio) => gpio.port(self.port).dat.read(),
-        };
+        let value = unsafe { self.gpio.with_version(self.version) }
+            .port(self.port)
+            .dat
+            .read();
         Ok(value & (1 << self.number) == 0)
     }
 }
