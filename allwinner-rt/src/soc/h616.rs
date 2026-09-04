@@ -1,6 +1,8 @@
 //! H313, H616 and H618 chip platforms.
 
 soc! {
+    /// Clock Control Unit peripheral.
+    pub struct CCU => 0x0300_1000, allwinner_hal::ccu::h616::RegisterBlock;
     /// General Purpose Input/Output peripheral for the main GPIO domain.
     pub struct GPIO => 0x0300_B000, allwinner_hal::gpio::v1::RegisterBlockV1;
 }

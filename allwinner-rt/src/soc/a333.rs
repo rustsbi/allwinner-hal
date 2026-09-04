@@ -1,6 +1,8 @@
 //! A333 and A537 chip platforms.
 
 soc! {
+    /// Clock Control Unit peripheral.
+    pub struct CCU => 0x0300_8000, allwinner_hal::ccu::a537::RegisterBlock;
     /// General Purpose Input/Output peripheral for the main GPIO domain.
     pub struct GPIO => 0x0300_0000, allwinner_hal::gpio::v4::RegisterBlockV4;
 }

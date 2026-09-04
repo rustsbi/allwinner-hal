@@ -1,6 +1,8 @@
 //! F101 chip platform.
 
 soc! {
+    /// Clock Control Unit peripheral.
+    pub struct CCU => 0x0200_1000, allwinner_hal::ccu::f101::RegisterBlock;
     /// General Purpose Input/Output peripheral for the main GPIO domain.
     pub struct GPIO => 0x0200_0000, allwinner_hal::gpio::v2::RegisterBlockV2;
 }

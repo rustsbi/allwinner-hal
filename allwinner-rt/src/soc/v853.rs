@@ -1,6 +1,8 @@
 //! V851, V851s, V851se and V853 chip platforms.
 
 soc! {
+    /// Main Clock Control Unit peripheral.
+    pub struct CCU => 0x0200_1000, allwinner_hal::ccu::v853::RegisterBlock;
     /// General Purpose Input/Output peripheral for PA, PB and PC pads.
     pub struct GPIO => 0x4004A400, allwinner_hal::gpio::v2::RegisterBlockV2;
 }

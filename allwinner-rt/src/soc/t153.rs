@@ -1,6 +1,8 @@
 //! T153 chip platform.
 
 soc! {
+    /// Clock Control Unit peripheral.
+    pub struct CCU => 0x0200_2000, allwinner_hal::ccu::t153::RegisterBlock;
     /// General Purpose Input/Output peripheral for the main GPIO domain.
     pub struct GPIO => 0x0360_4000, allwinner_hal::gpio::v3::RegisterBlockV3;
 }
