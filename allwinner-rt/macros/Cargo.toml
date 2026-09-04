@@ -20,9 +20,9 @@ categories = ["embedded", "hardware-support", "no-std"]
 proc-macro = true
 
 [dependencies]
-quote = "1.0"
-proc-macro2 = "1.0"
+quote = "1.0.47"
+proc-macro2 = "1.0.107"
 
 [dependencies.syn]
-version = "3.0"
+version = "3.0.4"
 features = ["extra-traits", "full"]
