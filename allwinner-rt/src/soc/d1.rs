@@ -5,7 +5,7 @@ mod interrupt;
 mod peripheral;
 
 pub use clock::{Clocks, UartClock};
-pub use interrupt::{Interrupt, Machine, Supevisor};
+pub use interrupt::{Interrupt, Machine, Supervisor};
 pub use peripheral::*;
 
 use embedded_time::rate::Extensions;

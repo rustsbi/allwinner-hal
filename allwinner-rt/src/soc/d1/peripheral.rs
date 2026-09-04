@@ -52,7 +52,7 @@ soc! {
     /// LED control peripheral.
     pub struct LEDC => 0x02008000, allwinner_hal::ledc::RegisterBlock;
     /// Clock control unit peripheral.
-    pub struct CCU => 0x02001000, allwinner_hal::ccu::RegisterBlock;
+    pub struct CCU => 0x02001000, allwinner_hal::ccu::d1::RegisterBlock;
     /// Universal Asynchronous Receiver/Transmitter 0.
     pub struct UART0 => 0x02500000, allwinner_hal::uart::RegisterBlock;
     /// Common control peripheral of DDR SDRAM.

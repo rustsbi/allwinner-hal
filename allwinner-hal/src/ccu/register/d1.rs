@@ -1,10 +1,21 @@
 //! Clock Control Unit peripheral registers.
-use super::{
+use crate::ccu::{
     factor::{AxiFactorN, FactorP, PeriFactorN},
     pll::{PllCpuControl, PllDdrControl, PllPeri0Control},
     source::{CpuClockSource, DramClockSource, SmhcClockSource, SpiClockSource},
 };
 use volatile_register::RW;
+
+/// UART bus gating and reset register.
+pub type UartBusGating = super::BusGatingReset<6>;
+/// SPI bus gating and reset register.
+pub type SpiBusGating = super::BusGatingReset<2>;
+/// SMHC bus gating and reset register.
+pub type SmhcBusGating = super::BusGatingReset<3>;
+/// DRAM bus gating and reset register.
+pub use super::SingleBusGatingReset as DramBusGating;
+/// LEDC bus gating and reset register.
+pub use super::SingleBusGatingReset as LedcBusGating;
 
 /// Clock Control Unit registers.
 #[repr(C)]
@@ -233,65 +244,6 @@ impl DramClock {
     }
 }
 
-/// Dram Bus Gating Reset register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct DramBusGating(u32);
-
-impl DramBusGating {
-    const DRAM_RST: u32 = 1 << 16;
-    const DRAM_GATING: u32 = 1 << 0;
-
-    /// Assert dram reset.
-    #[inline]
-    pub const fn assert_reset(self) -> Self {
-        Self(self.0 & !Self::DRAM_RST)
-    }
-    /// De-assert dram reset.
-    #[inline]
-    pub const fn deassert_reset(self) -> Self {
-        Self(self.0 | Self::DRAM_RST)
-    }
-    /// Mask the dram gating.
-    #[inline]
-    pub const fn gate_mask(self) -> Self {
-        Self(self.0 & !Self::DRAM_GATING)
-    }
-    /// Unmask (pass) the dram gating.
-    #[inline]
-    pub const fn gate_pass(self) -> Self {
-        Self(self.0 | Self::DRAM_GATING)
-    }
-}
-
-/// UART Bus Gating Reset register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct UartBusGating(u32);
-
-impl UartBusGating {
-    /// Disable clock gate for UART `I`.
-    #[inline]
-    pub const fn gate_mask<const I: usize>(self) -> Self {
-        Self(self.0 & !(1 << I))
-    }
-    /// Enable clock gate for UART `I`.
-    #[inline]
-    pub const fn gate_pass<const I: usize>(self) -> Self {
-        Self(self.0 | (1 << I))
-    }
-    /// Assert reset signal for UART `I`.
-    #[inline]
-    pub const fn assert_reset<const I: usize>(self) -> Self {
-        Self(self.0 & !(1 << (I + 16)))
-    }
-    /// Deassert reset signal for UART `I`.
-    #[inline]
-    pub const fn deassert_reset<const I: usize>(self) -> Self {
-        Self(self.0 | (1 << (I + 16)))
-    }
-}
-
 /// SPI Clock register.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -356,34 +308,6 @@ impl SpiClock {
     #[inline]
     pub const fn set_factor_m(self, val: u8) -> Self {
         Self((self.0 & !Self::FACTOR_M) | val as u32)
-    }
-}
-
-/// SPI Bus Gating Reset register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct SpiBusGating(u32);
-
-impl SpiBusGating {
-    /// Disable clock gate for SPI `I`.
-    #[inline]
-    pub const fn gate_mask<const I: usize>(self) -> Self {
-        Self(self.0 & !(1 << I))
-    }
-    /// Enable clock gate for SPI `I`.
-    #[inline]
-    pub const fn gate_pass<const I: usize>(self) -> Self {
-        Self(self.0 | (1 << I))
-    }
-    /// Assert reset signal for SPI `I`.
-    #[inline]
-    pub const fn assert_reset<const I: usize>(self) -> Self {
-        Self(self.0 & !(1 << (I + 16)))
-    }
-    /// Deassert reset signal for SPI `I`.
-    #[inline]
-    pub const fn deassert_reset<const I: usize>(self) -> Self {
-        Self(self.0 | (1 << (I + 16)))
     }
 }
 
@@ -471,34 +395,6 @@ impl SmhcClock {
     }
 }
 
-/// SMHC Clock Reset register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct SmhcBusGating(u32);
-
-impl SmhcBusGating {
-    /// Disable clock gate for SMHC `I`.
-    #[inline]
-    pub const fn gate_mask<const I: usize>(self) -> Self {
-        Self(self.0 & !(1 << I))
-    }
-    /// Enable clock gate for SMHC `I`.
-    #[inline]
-    pub const fn gate_pass<const I: usize>(self) -> Self {
-        Self(self.0 | (1 << I))
-    }
-    /// Assert reset signal for SMHC `I`.
-    #[inline]
-    pub const fn assert_reset<const I: usize>(self) -> Self {
-        Self(self.0 & !(1 << (I + 16)))
-    }
-    /// Deassert reset signal for SMHC `I`.
-    #[inline]
-    pub const fn deassert_reset<const I: usize>(self) -> Self {
-        Self(self.0 | (1 << (I + 16)))
-    }
-}
-
 /// LEDC Clock register.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -578,39 +474,12 @@ impl LedcClock {
     }
 }
 
-/// LEDC Clock Reset register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct LedcBusGating(u32);
-
-impl LedcBusGating {
-    /// Disable clock gate for LEDC.
-    #[inline]
-    pub const fn gate_mask(self) -> Self {
-        Self(self.0 & !(1 << 0))
-    }
-    /// Enable clock gate for LEDC.
-    #[inline]
-    pub const fn gate_pass(self) -> Self {
-        Self(self.0 | (1 << 0))
-    }
-    /// Assert reset signal for LEDC.
-    #[inline]
-    pub const fn assert_reset(self) -> Self {
-        Self(self.0 & !(1 << (0 + 16)))
-    }
-    /// Deassert reset signal for LEDC.
-    #[inline]
-    pub const fn deassert_reset(self) -> Self {
-        Self(self.0 | (1 << (0 + 16)))
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use super::super::BusGatingReset;
     use super::{
         AxiFactorN, CpuAxiConfig, CpuClockSource, DramBusGating, DramClock, DramClockSource,
-        FactorP, MbusClock, PeriFactorN, RegisterBlock, SmhcBusGating, SmhcClock, SmhcClockSource,
+        FactorP, MbusClock, PeriFactorN, RegisterBlock, SmhcClock, SmhcClockSource,
     };
     use core::mem::offset_of;
     #[test]
@@ -804,7 +673,7 @@ mod tests {
 
     #[test]
     fn struct_uart_bgr_functions() {
-        let mut val = super::UartBusGating(0x0);
+        let mut val = BusGatingReset::<6>(0x0);
 
         val = val.gate_pass::<0>();
         assert_eq!(val.0, 0x00000001);
@@ -891,7 +760,7 @@ mod tests {
 
     #[test]
     fn struct_spi_bgr_functions() {
-        let mut val = super::SpiBusGating(0x0);
+        let mut val = BusGatingReset::<2>(0x0);
 
         val = val.gate_pass::<0>();
         assert_eq!(val.0, 0x00000001);
@@ -986,7 +855,7 @@ mod tests {
 
     #[test]
     fn struct_smhc_bgr_functions() {
-        let mut val = SmhcBusGating(0x0);
+        let mut val = BusGatingReset::<3>(0x0);
 
         val = val.gate_pass::<0>();
         assert_eq!(val.0, 0x00000001);

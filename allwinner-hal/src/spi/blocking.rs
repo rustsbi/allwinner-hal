@@ -25,7 +25,7 @@ impl<'a, SPI: AsRef<RegisterBlock>> Spi<'a, SPI> {
         mode: impl Into<Mode>,
         // freq: Hertz,
         // clock: impl Clock,
-        // ccu: &ccu::RegisterBlock,
+        // ccu: &ccu::d1::RegisterBlock,
     ) -> Self {
         // TODO move clock out of SPI initialization
         // // 1. unwrap parameters

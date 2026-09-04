@@ -185,7 +185,7 @@ impl<SMHC: AsRef<RegisterBlock>, PADS> Smhc<SMHC, PADS> {
         smhc: SMHC,
         pads: PADS,
         clock: impl Clock,
-        ccu: &ccu::RegisterBlock,
+        ccu: &ccu::d1::RegisterBlock,
     ) -> Self {
         let divider = 2;
         let (factor_n, factor_m) =
@@ -271,7 +271,7 @@ impl<SMHC: AsRef<RegisterBlock>, PADS> Smhc<SMHC, PADS> {
     }
     /// Close SMHC and release peripheral.
     #[inline]
-    pub fn free(self, ccu: &ccu::RegisterBlock) -> (SMHC, PADS) {
+    pub fn free(self, ccu: &ccu::d1::RegisterBlock) -> (SMHC, PADS) {
         unsafe {
             const SMHC_IDX: usize = 0; // TODO
             ccu.smhc_bgr.modify(|val| val.assert_reset::<SMHC_IDX>());

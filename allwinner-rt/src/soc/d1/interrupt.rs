@@ -41,9 +41,9 @@ impl plic::HartContext for Machine {
 
 /// Supervisor mode hart context for Allwinner D1 T-Head C906 core.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Supevisor;
+pub struct Supervisor;
 
-impl plic::HartContext for Supevisor {
+impl plic::HartContext for Supervisor {
     fn index(self) -> usize {
         1
     }

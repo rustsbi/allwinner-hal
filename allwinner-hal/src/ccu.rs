@@ -5,8 +5,7 @@ mod pll;
 mod register;
 mod source;
 
-/// V821-specific APP and always-on CCU registers.
-pub mod v821;
+use self::d1::RegisterBlock;
 
 pub(crate) use factor::calculate_best_peripheral_factors_nm;
 pub use factor::{AxiFactorN, FactorP, PeriFactorN};
