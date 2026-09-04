@@ -89,45 +89,8 @@ impl<const P: char, const N: u8> Pad<P, N> {
     }
 }
 
-impl<'a, const P: char, const N: u8> allwinner_hal::gpio::PadExt<'a, P, N> for &'a mut Pad<P, N> {
-    #[inline]
-    fn into_input(self) -> allwinner_hal::gpio::Input<'a> {
-        unsafe { allwinner_hal::gpio::Input::__new_v2(P, N, &GPIO { _private: () }) }
-    }
-    #[inline]
-    fn into_output(self) -> allwinner_hal::gpio::Output<'a> {
-        unsafe { allwinner_hal::gpio::Output::__new_v2(P, N, &GPIO { _private: () }) }
-    }
-    #[inline]
-    fn into_function<const F: u8>(self) -> allwinner_hal::gpio::Function<'a, P, N, F> {
-        unsafe { allwinner_hal::gpio::Function::__new_v2(&GPIO { _private: () }) }
-    }
-    #[inline]
-    fn into_eint(self) -> allwinner_hal::gpio::EintPad<'a> {
-        unsafe { allwinner_hal::gpio::EintPad::__new_v2(P, N, &GPIO { _private: () }) }
-    }
-}
-
-impl<const P: char, const N: u8> allwinner_hal::gpio::PadExt<'static, P, N> for Pad<P, N> {
-    #[inline]
-    fn into_input(self) -> allwinner_hal::gpio::Input<'static> {
-        unsafe { allwinner_hal::gpio::Input::__new_v2(P, N, &GPIO { _private: () }) }
-    }
-    #[inline]
-    fn into_output(self) -> allwinner_hal::gpio::Output<'static> {
-        unsafe { allwinner_hal::gpio::Output::__new_v2(P, N, &GPIO { _private: () }) }
-    }
-    #[inline]
-    fn into_function<const F: u8>(self) -> allwinner_hal::gpio::Function<'static, P, N, F> {
-        unsafe { allwinner_hal::gpio::Function::__new_v2(&GPIO { _private: () }) }
-    }
-    #[inline]
-    fn into_eint(self) -> allwinner_hal::gpio::EintPad<'static> {
-        unsafe { allwinner_hal::gpio::EintPad::__new_v2(P, N, &GPIO { _private: () }) }
-    }
-}
-
 impl_gpio_pins! {
+    __new_v2;
     pb0: ('B', 0);
     pb1: ('B', 1);
     pb2: ('B', 2);

@@ -56,9 +56,18 @@ pub mod arch {
 }
 
 pub mod soc {
+    pub mod a133;
+    pub mod a333;
+    pub mod a733;
     pub mod d1;
+    pub mod f101;
+    pub mod h616;
+    pub mod t113;
+    pub mod t153;
+    pub mod t536;
     pub mod v821;
     pub mod v853;
+    pub mod v861;
 }
 
 #[allow(unused)]

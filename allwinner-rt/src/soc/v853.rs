@@ -1,7 +1,7 @@
-//! V853, V851s, V851se chip platforms.
+//! V851, V851s, V851se and V853 chip platforms.
 
 soc! {
-    /// General Purpose Input/Output peripheral for PA, PC, PD and PL pads.
+    /// General Purpose Input/Output peripheral for PA, PB and PC pads.
     pub struct GPIO => 0x4004A400, allwinner_hal::gpio::v2::RegisterBlockV2;
 }
 
@@ -20,6 +20,7 @@ impl<const P: char, const N: u8> Pad<P, N> {
 }
 
 impl_gpio_pins! {
+    __new_v2;
     pa0: ('A', 0);
     pa1: ('A', 1);
     pa2: ('A', 2);
