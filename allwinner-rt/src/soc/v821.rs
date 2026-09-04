@@ -6,7 +6,7 @@ use allwinner_hal::{
     uart::UartExt,
     usb::{
         Instance as UsbInstance,
-        phy::v821::{Instance as UsbPhyInstance, Oscillator},
+        phy::v2::{Instance as UsbPhyInstance, Oscillator},
     },
 };
 use embedded_hal::delay::DelayNs;
@@ -50,9 +50,9 @@ soc! {
     /// Universal Asynchronous Receiver/Transmitter 3.
     pub struct UART3 => 0x42500C00, allwinner_hal::uart::RegisterBlock;
     /// USB On-The-Go device controller 0.
-    pub struct USB0 => 0x44100000, allwinner_hal::usb::RegisterBlock;
+    pub struct USB0 => 0x44100000, allwinner_hal::usb::UsbRegisterBlock;
     /// USB physical layer peripheral 0.
-    pub struct USB_PHY0 => 0x44100400, allwinner_hal::usb::PhyRegisterBlock;
+    pub struct USB_PHY0 => 0x44100400, allwinner_hal::usb::phy_v2::RegisterBlockV2;
     // TODO pub struct TWI0 => 0x42502000
     // TODO pub struct TWI1 => 0x42502400
     // TODO pub struct TWI2 => 0x42502800
@@ -74,7 +74,7 @@ impl_uart! {
 // USB controller register block for the lifetime of the firmware.
 unsafe impl UsbInstance<'static> for USB0 {
     #[inline]
-    fn register_block(self) -> &'static allwinner_hal::usb::RegisterBlock {
+    fn register_block(self) -> &'static allwinner_hal::usb::UsbRegisterBlock {
         // SAFETY: consuming the sole runtime token grants exclusive access.
         unsafe { &*Self::ptr() }
     }
@@ -84,7 +84,7 @@ unsafe impl UsbInstance<'static> for USB0 {
 // capability lifetime, preventing another safe controller construction.
 unsafe impl<'a> UsbInstance<'a> for &'a mut USB0 {
     #[inline]
-    fn register_block(self) -> &'a allwinner_hal::usb::RegisterBlock {
+    fn register_block(self) -> &'a allwinner_hal::usb::UsbRegisterBlock {
         // SAFETY: `self` is the unique mutable borrow of the singleton token.
         unsafe { &*USB0::ptr() }
     }
@@ -92,10 +92,10 @@ unsafe impl<'a> UsbInstance<'a> for &'a mut USB0 {
 
 // SAFETY: the runtime constructs exactly one `USB_PHY0` token in
 // `__rom_init_params`; it owns the independent V821 USB PHY mapping paired with
-// USB0 and uses the verified `PhyRegisterBlock` layout.
+// USB0 and uses the verified version 2 register layout.
 unsafe impl UsbPhyInstance<'static> for USB_PHY0 {
     #[inline]
-    fn register_block(self) -> &'static allwinner_hal::usb::PhyRegisterBlock {
+    fn register_block(self) -> &'static allwinner_hal::usb::phy_v2::RegisterBlockV2 {
         // SAFETY: consuming the sole runtime token grants exclusive access.
         unsafe { &*Self::ptr() }
     }
@@ -105,7 +105,7 @@ unsafe impl UsbPhyInstance<'static> for USB_PHY0 {
 // capability lifetime, preventing another safe PHY construction.
 unsafe impl<'a> UsbPhyInstance<'a> for &'a mut USB_PHY0 {
     #[inline]
-    fn register_block(self) -> &'a allwinner_hal::usb::PhyRegisterBlock {
+    fn register_block(self) -> &'a allwinner_hal::usb::phy_v2::RegisterBlockV2 {
         // SAFETY: `self` is the unique mutable borrow of the singleton token.
         unsafe { &*USB_PHY0::ptr() }
     }

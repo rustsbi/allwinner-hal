@@ -4,7 +4,7 @@
 //! CDC-NCM Ethernet device backed by usb-device and the ownership-based
 //! Allwinner USB HAL. The class and its IPv6 demo remain local to this example.
 
-use allwinner_hal::usb::{Usb, UsbBus as AllwinnerUsbBus, phy::v821::UsbPhy};
+use allwinner_hal::usb::{Usb, UsbBus as AllwinnerUsbBus, phy::v2::UsbPhy};
 use allwinner_rt::{Clocks, Peripherals, entry};
 use riscv::delay::McycleDelay;
 use usb_device::{

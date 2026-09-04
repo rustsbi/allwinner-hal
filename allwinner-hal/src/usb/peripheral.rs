@@ -1,6 +1,6 @@
 use embedded_hal::delay::DelayNs;
 
-use super::register::{
+use super::register::usb::{
     BusInterruptEnable, FunctionAddress, ReceiveInterruptEnable, RegisterBlock,
     TransmitInterruptEnable,
 };
@@ -23,7 +23,7 @@ pub unsafe trait Instance<'a> {
 ///
 /// The chip-specific PHY is intentionally not retained here. Configure and
 /// keep ownership of it separately, for example with
-/// [`crate::usb::phy::v821::UsbPhy`] on V821.
+/// [`crate::usb::phy::v2::UsbPhy`] on V821.
 pub struct Usb<'a> {
     registers: &'a RegisterBlock,
 }

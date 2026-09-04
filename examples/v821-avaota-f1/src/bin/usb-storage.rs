@@ -4,7 +4,7 @@
 #[path = "usb-msc.rs"]
 mod usb_msc;
 
-use allwinner_hal::usb::{Usb, UsbBus as AllwinnerUsbBus, phy::v821::UsbPhy};
+use allwinner_hal::usb::{Usb, UsbBus as AllwinnerUsbBus, phy::v2::UsbPhy};
 use allwinner_rt::{Clocks, Peripherals, entry};
 use embedded_hal::delay::DelayNs;
 use riscv::delay::McycleDelay;

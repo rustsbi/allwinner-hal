@@ -4,7 +4,7 @@
 #[path = "usb-msc.rs"]
 mod usb_msc;
 
-use allwinner_hal::usb::{Usb, UsbBus as AllwinnerUsbBus, phy::v821::UsbPhy};
+use allwinner_hal::usb::{Usb, UsbBus as AllwinnerUsbBus, phy::v2::UsbPhy};
 use allwinner_rt::{Clocks, Peripherals, entry};
 use embedded_hal::delay::DelayNs;
 use riscv::delay::McycleDelay;
@@ -29,13 +29,13 @@ Open the virtual serial port and type `help` while browsing this drive.\r\n";
 const README_BLOCK_COUNT: u32 = README_TEXT.len().div_ceil(BLOCK_SIZE) as u32;
 
 #[entry]
-fn main(peripherals: Peripherals, clocks: Clocks) {
-    let mut usb0 = peripherals.usb0;
-    let mut usb_phy0 = peripherals.usb_phy0;
-    let mut ccu = peripherals.ccu;
-    let aon_ccu = peripherals.aon_ccu;
-    let mut delay = McycleDelay::new(clocks.mcycle_ticks_second(&aon_ccu).unwrap());
-    let oscillator = clocks.enable_usb(&mut usb0, &mut usb_phy0, &mut ccu, &aon_ccu, &mut delay);
+fn main(p: Peripherals, c: Clocks) {
+    let mut usb0 = p.usb0;
+    let mut usb_phy0 = p.usb_phy0;
+    let mut ccu = p.ccu;
+    let aon_ccu = p.aon_ccu;
+    let mut delay = McycleDelay::new(c.mcycle_ticks_second(&aon_ccu).unwrap());
+    let oscillator = c.enable_usb(&mut usb0, &mut usb_phy0, &mut ccu, &aon_ccu, &mut delay);
 
     let usb = Usb::new(usb0, &mut delay);
     let mut _usb_phy = UsbPhy::new(usb_phy0, oscillator, &mut delay);

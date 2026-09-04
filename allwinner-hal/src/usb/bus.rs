@@ -10,7 +10,7 @@ use usb_device::{
 use super::{
     Usb,
     peripheral::acknowledge_pending,
-    register::{
+    register::usb::{
         BusInterruptEnable, EndpointIndex, EndpointZeroControlStatus, FifoAddress, FifoSize,
         FunctionAddress, MaximumPacketSize, ReceiveControlStatus, ReceiveInterruptEnable,
         TransmitControlStatus, TransmitInterruptEnable,

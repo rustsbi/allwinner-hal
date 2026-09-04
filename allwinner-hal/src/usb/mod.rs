@@ -7,8 +7,9 @@
 mod bus;
 mod peripheral;
 pub mod phy;
-pub mod register;
+mod register;
 
 pub use bus::UsbBus;
 pub use peripheral::{Instance, Usb};
-pub use register::{PhyRegisterBlock, RegisterBlock};
+pub use register::usb::RegisterBlock as UsbRegisterBlock;
+pub use register::{InterfaceStatusControl, InterfaceStatusControlRegister, phy_v1, phy_v2, usb};
