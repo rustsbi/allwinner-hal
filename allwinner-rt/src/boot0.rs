@@ -1,3 +1,4 @@
+#[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
 use crate::start;
 
 /// The 44-byte metadata portion of an eGON.BT0 file header.
@@ -37,6 +38,7 @@ static EGON_HEAD: EgonHead = EgonHead {
 
 // Keep the linker entry visible and exactly four bytes long: the BootROM reads
 // the non-secure image magic from offset 4.
+#[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
 core::arch::global_asm! {
     ".pushsection .text.head, \"ax\", @progbits",
     ".global head_jump",

@@ -5,10 +5,8 @@
 /// # Safety
 ///
 /// This is the naked entry point called by the BootROM.
-#[cfg_attr(
-    any(all(feature = "thead-e907", target_arch = "riscv32"), doc),
-    unsafe(link_section = ".text.entry")
-)]
+#[cfg(all(feature = "thead-e907", target_arch = "riscv32"))]
+#[unsafe(link_section = ".text.entry")]
 #[unsafe(naked)]
 pub unsafe extern "C" fn thead_e907_start() {
     use crate::main;
@@ -156,6 +154,7 @@ pub unsafe extern "C" fn thead_e907_start() {
 }
 
 /// Stop a T-Head E907 core.
+#[cfg(all(feature = "thead-e907", target_arch = "riscv32"))]
 #[unsafe(naked)]
 pub unsafe extern "C" fn thead_e907_halt() -> ! {
     core::arch::naked_asm!(

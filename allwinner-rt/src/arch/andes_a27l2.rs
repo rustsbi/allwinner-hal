@@ -1,10 +1,8 @@
 /// Jump over head data to executable code.
 ///
 /// TODO Andes start code.
-#[cfg_attr(
-    any(all(feature = "andes-a27l2", target_arch = "riscv64"), doc),
-    unsafe(link_section = ".text.entry")
-)]
+#[cfg(all(feature = "andes-a27l2", target_arch = "riscv64"))]
+#[unsafe(link_section = ".text.entry")]
 #[unsafe(naked)]
 pub unsafe extern "C" fn start() -> ! {
     const STACK_SIZE: usize = 8 * 1024;
