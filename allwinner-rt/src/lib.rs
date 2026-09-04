@@ -40,9 +40,15 @@ pub use allwinner_rt_macros::entry;
 
 pub mod arch {
     pub mod andes_a27l2;
+    pub mod arm_cortex_a53;
+    pub mod arm_cortex_a55;
+    pub mod arm_cortex_a7;
+    pub mod arm_cortex_a73;
+    pub mod arm_cortex_a76;
     pub mod riscv_fpu;
     pub mod thead_c906;
     pub mod thead_c907;
+    pub mod thead_e902;
     pub mod thead_e907;
 }
 

@@ -34,17 +34,54 @@ default = ["nezha", "panic-halt"]
 panic-halt = []
 
 # SoC hart cluster specific features.
+# A133 and R818 chips. There is only one Arm CPU cluster.
+a133 = ["arm-cortex-a53"]
+# A333 and A537 chips. There are big, little and management MCU clusters.
+a333-big = ["arm-cortex-a73"]
+a333-little = ["arm-cortex-a53"]
+a333-mcu = ["thead-e902"]
+# A733 and T736 chips. There are big, little and management MCU clusters.
+a733-big = ["arm-cortex-a76"]
+a733-little = ["arm-cortex-a55"]
+a733-mcu = ["thead-e902"]
 # D1-like chips: D1-H, D1s, F133. Only one cluster per chip.
 d1 = ["thead-c906"]
+# F101 chip. There is only one RISC-V CPU cluster.
+f101 = ["thead-c907"]
+# H313, H616 and H618 chips. There is only one Arm CPU cluster.
+h616 = ["arm-cortex-a53"]
+# T113-i chip. There are Arm CPU and RISC-V clusters.
+t113-cpu = ["arm-cortex-a7"]
+t113-riscv = ["thead-c906"]
+# T153 chip. There are Arm CPU and RISC-V MCU clusters.
+t153-cpu = ["arm-cortex-a7"]
+t153-mcu = ["thead-e907"]
+# T536 and MR536 chips. Both have Arm CPU and E907 MCU clusters;
+# only T536 also has an E902 MCU cluster.
+t536-cpu = ["arm-cortex-a55"]
+t536-e907 = ["thead-e907"]
+t536-e902 = ["thead-e902"]
 # V821 chip. There are both CPU cluster and MCU cluster.
 v821-cpu = ["andes-a27l2"]
 v821-mcu = ["thead-e907", "dep:critical-section"]
+# V851, V851s, V851se and V853 chips. There are Arm CPU and RISC-V MCU clusters.
+v853-cpu = ["arm-cortex-a7"]
+v853-mcu = ["thead-e907"]
+# V861 chip. There are both CPU and MCU clusters.
+v861-cpu = ["thead-c907"]
+v861-mcu = ["thead-e907"]
 
 # Microarchitecture specific features.
 andes-a27l2 = []
 thead-c906 = []
 thead-c907 = []
+thead-e902 = []
 thead-e907 = []
+arm-cortex-a7 = []
+arm-cortex-a53 = []
+arm-cortex-a55 = []
+arm-cortex-a73 = []
+arm-cortex-a76 = []
 
 nezha = []
 lichee = []
