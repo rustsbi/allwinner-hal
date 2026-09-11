@@ -1,0 +1,61 @@
+[package]
+name = "rfel-payload"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license = "MIT"
+repository.workspace = true
+autobins = false
+
+[dependencies]
+panic-never = "0.1.0"
+
+[features]
+default = []
+d1 = []
+rv32 = []
+f101 = ["rv32"]
+v821 = ["rv32"]
+
+[[bin]]
+name = "read32"
+path = "src/bin/read32.rs"
+required-features = ["d1"]
+test = false
+bench = false
+
+[[bin]]
+name = "write32"
+path = "src/bin/write32.rs"
+required-features = ["d1"]
+test = false
+bench = false
+
+[[bin]]
+name = "read32_rv32"
+path = "src/bin/read32_rv32.rs"
+required-features = ["rv32"]
+test = false
+bench = false
+
+[[bin]]
+name = "write32_rv32"
+path = "src/bin/write32_rv32.rs"
+required-features = ["rv32"]
+test = false
+bench = false
+
+[[bin]]
+name = "fence_i_f101"
+path = "src/bin/fence_i_f101.rs"
+required-features = ["f101"]
+test = false
+bench = false
+
+[[bin]]
+name = "copy_v821"
+path = "src/bin/copy_v821.rs"
+required-features = ["v821"]
+test = false
+bench = false
+
