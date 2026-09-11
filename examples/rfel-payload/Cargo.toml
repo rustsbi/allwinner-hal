@@ -9,39 +9,23 @@ autobins = false
 
 [dependencies]
 panic-never = "0.1.0"
+rfel-payload-macros = { path = "macros" }
 
 [features]
 default = []
 d1 = []
-rv32 = []
-f101 = ["rv32"]
-v821 = ["rv32"]
+f101 = []
+v821 = []
 
 [[bin]]
 name = "read32"
 path = "src/bin/read32.rs"
-required-features = ["d1"]
 test = false
 bench = false
 
 [[bin]]
 name = "write32"
 path = "src/bin/write32.rs"
-required-features = ["d1"]
-test = false
-bench = false
-
-[[bin]]
-name = "read32_rv32"
-path = "src/bin/read32_rv32.rs"
-required-features = ["rv32"]
-test = false
-bench = false
-
-[[bin]]
-name = "write32_rv32"
-path = "src/bin/write32_rv32.rs"
-required-features = ["rv32"]
 test = false
 bench = false
 

@@ -1,0 +1,15 @@
+[package]
+name = "rfel-payload-macros"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license = "MIT"
+repository.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0.107"
+quote = "1.0.47"
+syn = { version = "3.0.4", features = ["full"] }

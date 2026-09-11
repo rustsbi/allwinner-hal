@@ -7,6 +7,7 @@ members = [
     "examples/d1-allwinner-nezha",
     "examples/v821-avaota-f1",
     "examples/rfel-payload",
+    "examples/rfel-payload/macros",
     "rfel",
 ]
 

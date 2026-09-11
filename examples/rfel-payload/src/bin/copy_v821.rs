@@ -1,42 +1,14 @@
 //! Aligned SRAM copy used for V821 BootROM reads.
 //! Append three LE u32s: source, destination, nonzero byte length divisible by four.
 //! Cache maintenance makes the CPU-written destination visible to FEL USB reads.
-#![cfg_attr(target_os = "none", no_std)]
-#![cfg_attr(target_os = "none", no_main)]
+#![no_std]
+#![no_main]
 
 use core::ptr::{read_volatile, write_volatile};
+use rfel_payload::entry;
 
-#[cfg(target_os = "none")]
-use panic_never as _;
-
-// Match the RV32 helper prefix before executing new code. Pass the appended
-// parameters in a0 using PC-relative addressing and preserve FEL's return address.
-#[cfg(all(target_os = "none", target_arch = "riscv32"))]
-core::arch::global_asm!(
-    r#"
-.section .text.payload,"ax"
-.global _start
-.option push
-.option norelax
-.option norvc
-_start:
-    lui t1, 0x400
-    csrrs zero, 0x7c0, t1
-    fence.i
-.Lparameters:
-    auipc a0, %pcrel_hi(__payload_end)
-    addi a0, a0, %pcrel_lo(.Lparameters)
-    jal zero, {body}
-.option pop
-"#,
-    body = sym copy,
-);
-
-#[cfg_attr(
-    not(all(target_os = "none", target_arch = "riscv32")),
-    allow(dead_code)
-)]
-unsafe extern "C" fn copy(parameters: *const u32) {
+#[entry]
+fn main(parameters: *mut u32) {
     // SAFETY: FEL supplies three initialized, aligned parameter words and valid
     // source/destination ranges. The byte length is nonzero and divisible by four.
     // FEL owns these ranges during the call; overlapping ranges copy forwards.
@@ -70,6 +42,3 @@ unsafe extern "C" fn copy(parameters: *const u32) {
         );
     }
 }
-
-#[cfg(not(target_os = "none"))]
-fn main() {}
