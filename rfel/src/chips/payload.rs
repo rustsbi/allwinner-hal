@@ -17,6 +17,38 @@ pub const WRITE32_V821: &[u8] = include_bytes!(concat!(
     "/assets/payloads/write32_v821.bin"
 ));
 
+/// F101 register helpers from xfel v1.3.6.
+pub const READ32_F101: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/payloads/read32_f101.bin"
+));
+pub const WRITE32_F101: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/payloads/write32_f101.bin"
+));
+pub const DDR_INIT_F101_S2: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/payloads/ddr_f101_s2.bin"
+));
+pub const DDR_INIT_F101_S3: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/payloads/ddr_f101_s3.bin"
+));
+pub const SPI_INIT_F101: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/payloads/spi_f101.bin"
+));
+
+/// Synchronize F101 instruction fetch when switching between SPI and PSRAM
+/// helpers at the same SRAM address. Keep the prefix identical to the
+/// register helpers so a cached scratchpad entry still reaches `fence.i`.
+pub const FENCE_I_F101: &[u8] = &[
+    0x37, 0x03, 0x40, 0x00, // lui t1, 0x400
+    0x73, 0x20, 0x03, 0x7c, // csrrs zero, mxstatus, t1
+    0x0f, 0x10, 0x00, 0x00, // fence.i
+    0x82, 0x80, // ret
+];
+
 /// Copy memory into an SRAM buffer on V821 and make the result visible to FEL.
 ///
 /// This RV32 helper takes three little-endian `u32` parameters immediately after

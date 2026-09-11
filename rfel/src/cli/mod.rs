@@ -139,7 +139,7 @@ pub enum Commands {
     },
     /// Initial ddr controller with optional type
     Ddr {
-        #[arg(long)]
+        #[arg(long, help = "Memory profile: d1, f133, f101-s2, or f101-s3")]
         profile: Option<String>,
     },
     /// Generate ECDSA signature file for the SID hash

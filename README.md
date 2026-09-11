@@ -16,6 +16,7 @@ contains the following projects:
 | D1 / D1-H | Supported | Supported | Supported |
 | D1s / F133 | Compatible, not tested | Supported | Supported |
 | V821 | Not yet supported | CPU runtime supported | Supported |
+| F101-S2 / F101-S3 | GPIO and CCU registers | CPU runtime, GPIO and CCU tokens | Supported |
 
 ## Using `rfel`
 

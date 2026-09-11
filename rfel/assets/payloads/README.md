@@ -15,3 +15,5 @@ The V821 BootROM copy helper is encoded as `COPY_V821` in
 `src/chips/payload.rs`. Unlike xfel's single-word helper, it copies a block into
 SRAM and finishes with `dcache.ciall` plus `sync.is`; without those operations,
 USB/FEL can observe stale cache lines during a full BootROM dump.
+
+These payloads are covered by the upstream [MIT license](./LICENSE-XFEL).

@@ -6,6 +6,7 @@ use crate::Fel;
 use crate::fel::error::FelError;
 
 pub mod d1;
+pub mod f101;
 pub mod payload;
 pub mod util;
 pub mod v821;
@@ -16,6 +17,10 @@ pub enum DdrProfile {
     D1,
     /// F133 / T113
     F133,
+    /// F101-S2 PSRAM.
+    F101S2,
+    /// F101-S3 PSRAM.
+    F101S3,
 }
 
 impl core::str::FromStr for DdrProfile {
@@ -25,6 +30,8 @@ impl core::str::FromStr for DdrProfile {
         match t.as_str() {
             "d1" | "d1s" | "d1-h" => Ok(DdrProfile::D1),
             "f133" | "t113" => Ok(DdrProfile::F133),
+            "f101-s2" => Ok(DdrProfile::F101S2),
+            "f101-s3" => Ok(DdrProfile::F101S3),
             _ => Err(()),
         }
     }
@@ -113,6 +120,7 @@ pub fn detect_from_fel(fel: &Fel<'_>) -> crate::fel::error::FelResult<Option<Box
     Ok(match v.chip() {
         Some(crate::Chip::D1) => Some(Box::new(d1::D1)),
         Some(crate::Chip::V821) => Some(Box::new(v821::V821)),
+        Some(crate::Chip::F101) => Some(Box::new(f101::F101)),
         _ => None,
     })
 }
@@ -128,6 +136,9 @@ mod tests {
         assert_eq!("d1-h".parse::<DdrProfile>(), Ok(DdrProfile::D1));
         assert_eq!("f133".parse::<DdrProfile>(), Ok(DdrProfile::F133));
         assert_eq!("T113".parse::<DdrProfile>(), Ok(DdrProfile::F133));
+        assert_eq!("f101-s2".parse::<DdrProfile>(), Ok(DdrProfile::F101S2));
+        assert_eq!(" F101-S3 ".parse::<DdrProfile>(), Ok(DdrProfile::F101S3));
+        assert!("f101".parse::<DdrProfile>().is_err());
         assert!("V821".parse::<DdrProfile>().is_err());
         assert!("abc".parse::<DdrProfile>().is_err());
     }

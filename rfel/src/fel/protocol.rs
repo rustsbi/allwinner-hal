@@ -113,6 +113,7 @@ impl Version {
         match self.id {
             0x0018_5900 => Some(Chip::D1),
             0x0018_8200 => Some(Chip::V821),
+            0x0019_3700 => Some(Chip::F101),
             _ => None,
         }
     }
@@ -157,6 +158,8 @@ pub enum Chip {
     D1 = 0x0018_5900,
     /// V821 chip.
     V821 = 0x0018_8200,
+    /// F101-S2 or F101-S3 chip.
+    F101 = 0x0019_3700,
 }
 
 #[cfg(test)]
@@ -244,5 +247,28 @@ mod tests {
         let v: Version = raw.into();
         assert_eq!(v.id(), 0x0018_8200);
         assert!(matches!(v.chip(), Some(Chip::V821)));
+    }
+
+    #[test]
+    #[cfg(target_endian = "little")]
+    fn test_f101_version_from_neko() {
+        // Version response reported by a Yuzuki Neko in FEL mode.
+        let mut raw = [0u8; 32];
+        raw[..8].copy_from_slice(b"AWUSBFEX");
+        raw[8..12].copy_from_slice(&0x0019_3700u32.to_le_bytes());
+        raw[18] = 0x44;
+        raw[19] = 0x08;
+        raw[20..24].copy_from_slice(&0x0002_0000u32.to_le_bytes());
+
+        let version: Version = raw.into();
+        assert!(matches!(version.chip(), Some(Chip::F101)));
+        assert_eq!(version.id(), Chip::F101 as u32);
+        assert_eq!(version.scratchpad(), 0x0002_0000);
+        assert_eq!(version.dflag, 0x44);
+        assert_eq!(version.dlength, 0x08);
+        assert!(format!("{version:?}").contains("F101"));
+
+        raw[8..12].copy_from_slice(&0xffff_ffffu32.to_le_bytes());
+        assert!(Version::from(raw).chip().is_none());
     }
 }

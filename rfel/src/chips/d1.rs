@@ -71,6 +71,9 @@ impl Chip for D1 {
         };
 
         match kind {
+            DdrProfile::F101S2 | DdrProfile::F101S3 => Err(ChipError::Unsupported(
+                "D1/F133 requires a d1 or f133 DDR profile",
+            )),
             DdrProfile::D1 => {
                 if payload::DDR_INIT_D1.is_empty() {
                     return Err(ChipError::NotImplemented(

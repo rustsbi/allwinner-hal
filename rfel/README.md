@@ -6,6 +6,7 @@ Supported chips:
 
 - D1 / D1s / D1-H / F133
 - V821
+- F101-S2 / F101-S3
 
 On V821, the BootROM window at `0x00000000..0x0000c000` cannot be read with
 the FEL read command directly. The memory-reading commands automatically use a
