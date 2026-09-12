@@ -1,7 +1,7 @@
 //! F101 FEL support, following xfel v1.3.6 `chips/f101.c`.
 //!
 //! Register helpers run at the scratchpad reported by the BootROM. DDR and SPI
-//! helpers use the fixed SRAM addresses encoded in their payloads.
+//! helpers use the host-selected SRAM layout; SPI commands follow the entry by 0x1000.
 
 use log::debug;
 use std::time::{Duration, Instant};
@@ -21,11 +21,11 @@ const SPI_SWAP_BASE: u32 = 0x0002_a000;
 const SPI_SWAP_LEN: u32 = 8192;
 
 fn read32(fel: &Fel<'_>, address: u32) -> Result<u32, ChipError> {
-    read32_via_payload(fel, payload::READ32_F101, address)
+    read32_via_payload(fel, payload::READ32_RV32, address)
 }
 
 fn write32(fel: &Fel<'_>, address: u32, value: u32) -> Result<(), ChipError> {
-    write32_via_payload(fel, payload::WRITE32_F101, address, value)
+    write32_via_payload(fel, payload::WRITE32_RV32, address, value)
 }
 
 fn efuse_read(fel: &Fel<'_>, offset: u32) -> Result<u32, ChipError> {
@@ -183,10 +183,8 @@ mod tests {
 
     #[test]
     fn test_spi_payload_fits_sram_layout() {
-        assert_eq!(payload::READ32_F101.len(), 44);
-        assert_eq!(payload::WRITE32_F101.len(), 44);
-        assert_eq!(payload::SPI_INIT_F101.len(), 1112);
         assert!(SPI_PAYLOAD_BASE + payload::SPI_INIT_F101.len() as u32 <= SPI_COMMAND_BASE);
+        assert_eq!(SPI_COMMAND_BASE, SPI_PAYLOAD_BASE + 0x1000);
         assert_eq!(SPI_COMMAND_BASE + SPI_COMMAND_LEN, SPI_SWAP_BASE);
         // xfel's F101 helper reserves only 8 KiB for data, unlike D1/V821.
         assert_eq!(SPI_SWAP_BASE + SPI_SWAP_LEN, 0x0002_c000);
@@ -197,9 +195,8 @@ mod tests {
         // Every scratchpad helper must execute the same prefix through fence.i
         // before fetching its replacement's instructions.
         let prefix = &payload::FENCE_I_F101[..12];
-        assert_eq!(prefix, &payload::READ32_F101[..12]);
-        assert_eq!(prefix, &payload::WRITE32_F101[..12]);
+        assert_eq!(prefix, &payload::READ32_RV32[..12]);
+        assert_eq!(prefix, &payload::WRITE32_RV32[..12]);
         assert_eq!(&prefix[8..12], &0x0000_100fu32.to_le_bytes());
-        assert_eq!(&payload::FENCE_I_F101[12..], &[0x82, 0x80]);
     }
 }

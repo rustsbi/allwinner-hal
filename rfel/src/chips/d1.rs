@@ -222,5 +222,7 @@ mod tests {
         // Basic constant relationships
         assert_eq!(D1_SRAM_BASE, 0x0002_0000);
         assert_eq!(DDR_PARAM_ADDR, D1_SRAM_BASE + 0x18);
+        assert_eq!(SPI_COMMAND_BASE, SPI_PAYLOAD_BASE + 0x1000);
+        assert!(SPI_PAYLOAD_BASE + payload::SPI_INIT_D1.len() as u32 <= SPI_COMMAND_BASE);
     }
 }

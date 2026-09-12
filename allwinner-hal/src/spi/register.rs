@@ -115,6 +115,7 @@ pub struct TransferControl(u32);
 
 impl TransferControl {
     const XCH: u32 = 1 << 31;
+    const SDM: u32 = 1 << 13;
     const CPOL: u32 = 1 << 1;
     const CPHA: u32 = 1 << 0;
     /// Check if burst exchange has finished.
@@ -126,6 +127,11 @@ impl TransferControl {
     #[inline]
     pub const fn start_burst_exchange(self) -> Self {
         Self(self.0 | Self::XCH)
+    }
+    /// Enable or disable normal sampling for SPI clocks up to 24 MHz.
+    #[inline]
+    pub const fn set_normal_sample(self, val: bool) -> Self {
+        Self((self.0 & !Self::SDM) | if val { Self::SDM } else { 0 })
     }
     /// Sets SPI work mode.
     #[inline]
@@ -351,6 +357,11 @@ mod tests {
 
     #[test]
     fn test_spi_transfer_control() {
+        assert_eq!(TransferControl(0).set_normal_sample(true).0, 1 << 13);
+        assert_eq!(
+            TransferControl(u32::MAX).set_normal_sample(false).0,
+            u32::MAX & !(1 << 13)
+        );
         let mut reg = TransferControl(0x0);
         reg = reg.start_burst_exchange();
         assert!(!reg.burst_finished());

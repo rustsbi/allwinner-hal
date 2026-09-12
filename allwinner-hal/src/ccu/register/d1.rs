@@ -264,6 +264,11 @@ impl SpiClock {
     pub const fn bits(self) -> u32 {
         self.0
     }
+    /// Mask (disable) the SPI module clock before changing its source or divisors.
+    #[inline]
+    pub const fn mask_clock(self) -> Self {
+        Self(self.0 & !Self::CLK_GATING)
+    }
     /// Unmask (enable) the SPI module clock.
     #[inline]
     pub const fn unmask_clock(self) -> Self {
@@ -718,6 +723,10 @@ mod tests {
 
     #[test]
     fn struct_spi_clock_functions() {
+        assert_eq!(
+            super::SpiClock::from_bits(u32::MAX).mask_clock().bits(),
+            0x7fff_ffff
+        );
         let bits = 0x1234_5678;
         assert_eq!(super::SpiClock::from_bits(bits).bits(), bits);
         assert_eq!(

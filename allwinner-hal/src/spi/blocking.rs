@@ -1,5 +1,5 @@
 use super::{
-    Pads,
+    Clock, Pads,
     register::{BurstControl, GlobalControl, RegisterBlock, TransferControl},
 };
 use crate::gpio::FlexPad;
@@ -25,23 +25,15 @@ impl<'a, SPI: AsRef<RegisterBlock>> Spi<'a, SPI> {
     // Like U-Boot's sun4i_spi_xfer, leave one entry free in the 64-byte FIFO.
     const MAX_BURST: usize = 63;
 
-    /// Create an SPI instance.
+    /// Create an SPI instance using a clock already configured by the runtime.
     pub fn new<const I: usize>(
         spi: SPI,
         pads: impl Pads<'a, I>,
         mode: impl Into<Mode>,
-        // freq: Hertz,
-        // clock: impl Clock,
-        // ccu: &ccu::d1::RegisterBlock,
+        clock: impl Clock<I>,
     ) -> Self {
-        // TODO move clock out of SPI initialization
-        // // 1. unwrap parameters
-        // let (Hertz(psi), Hertz(freq)) = (clock.spi_clock(), freq);
-        // let (factor_n, factor_m) = ccu::calculate_best_peripheral_factors_nm(psi, freq);
-        // // 2. init peripheral clocks
-        // // Reset and reconfigure clock source and divider
-        // unsafe { PINS::Clock::reconfigure(ccu, SpiClockSource::PllPeri1x, factor_m, factor_n) };
-        // 3. global configuration and soft reset
+        let normal_sample = clock.spi_clock().0 <= 24_000_000;
+        // 1. global configuration and soft reset
         unsafe {
             spi.as_ref().gcr.write(
                 GlobalControl::default()
@@ -54,11 +46,13 @@ impl<'a, SPI: AsRef<RegisterBlock>> Spi<'a, SPI> {
         while spi.as_ref().gcr.read().is_software_reset_finished() {
             core::hint::spin_loop();
         }
-        // 4. configure work mode
+        // 2. configure work mode
         unsafe {
-            spi.as_ref()
-                .tcr
-                .write(TransferControl::default().set_work_mode(mode.into()))
+            spi.as_ref().tcr.write(
+                TransferControl::default()
+                    .set_work_mode(mode.into())
+                    .set_normal_sample(normal_sample),
+            )
         };
         // Finally, return ownership of this structure.
         Spi {

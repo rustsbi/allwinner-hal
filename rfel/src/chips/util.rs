@@ -53,10 +53,10 @@ pub fn u32_params_le(params: &[u32]) -> Vec<u8> {
 
 /// Read a 32-bit register via read32 stub (executes at scratchpad)
 pub fn read32_via_stub(fel: &Fel<'_>, addr: u32) -> Result<u32, ChipError> {
-    let payload = payload::READ32;
+    let payload = payload::READ32_RV64;
     if payload.is_empty() {
         return Err(ChipError::NotImplemented(
-            "read32 stub missing: put assets/payloads/read32.bin",
+            "read32 stub missing: put assets/payloads/read32_rv64.bin",
         ));
     }
     read32_via_payload(fel, payload, addr)
@@ -64,10 +64,10 @@ pub fn read32_via_stub(fel: &Fel<'_>, addr: u32) -> Result<u32, ChipError> {
 
 /// Write a 32-bit register via write32 stub (executes at scratchpad)
 pub fn write32_via_stub(fel: &Fel<'_>, addr: u32, val: u32) -> Result<(), ChipError> {
-    let payload = payload::WRITE32;
+    let payload = payload::WRITE32_RV64;
     if payload.is_empty() {
         return Err(ChipError::NotImplemented(
-            "write32 stub missing: put assets/payloads/write32.bin",
+            "write32 stub missing: put assets/payloads/write32_rv64.bin",
         ));
     }
     write32_via_payload(fel, payload, addr, val)

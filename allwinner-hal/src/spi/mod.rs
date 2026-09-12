@@ -56,6 +56,8 @@ where
     }
 }
 
-pub trait Clock {
+/// Enabled and configured clock input for SPI peripheral `I`.
+pub trait Clock<const I: usize> {
+    /// Actual SPI clock frequency after SoC-specific clock configuration.
     fn spi_clock(&self) -> Hertz;
 }

@@ -4,7 +4,7 @@ mod clock;
 mod interrupt;
 mod peripheral;
 
-pub use clock::{Clocks, UartClock};
+pub use clock::{Clocks, SpiClock, UartClock};
 pub use interrupt::{Interrupt, Machine, Supervisor};
 pub use peripheral::*;
 

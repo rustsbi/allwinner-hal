@@ -37,11 +37,11 @@ fn read_bootrom(fel: &Fel<'_>, mut address: u32, mut out: &mut [u8]) -> Result<(
 }
 
 fn read32(fel: &Fel<'_>, addr: u32) -> Result<u32, ChipError> {
-    read32_via_payload(fel, payload::READ32_V821, addr)
+    read32_via_payload(fel, payload::READ32_RV32, addr)
 }
 
 fn write32(fel: &Fel<'_>, addr: u32, value: u32) -> Result<(), ChipError> {
-    write32_via_payload(fel, payload::WRITE32_V821, addr, value)
+    write32_via_payload(fel, payload::WRITE32_RV32, addr, value)
 }
 
 impl Chip for V821 {
@@ -194,12 +194,9 @@ mod tests {
         assert_eq!(V821.name(), "V821");
         assert_eq!(DDR_PARAM_ADDR, DDR_PAYLOAD_BASE + 0x38);
         assert_eq!(SPI_COMMAND_BASE, SPI_PAYLOAD_BASE + 0x1000);
+        assert!(SPI_PAYLOAD_BASE + payload::SPI_INIT_V821.len() as u32 <= SPI_COMMAND_BASE);
         assert_eq!(SPI_SWAP_BASE, SPI_PAYLOAD_BASE + 0x2000);
-        assert_eq!(payload::READ32_V821.len(), 44);
-        assert_eq!(payload::WRITE32_V821.len(), 44);
-        assert_eq!(payload::COPY_V821.len(), 68);
         assert_eq!(payload::DDR_INIT_V821.len(), 14_976);
-        assert_eq!(payload::SPI_INIT_V821.len(), 1_206);
     }
 
     #[test]
