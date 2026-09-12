@@ -13,6 +13,12 @@ panic-never = "0.1.0"
 rfel-payload-macros = { path = "macros" }
 
 [[bin]]
+name = "jtag"
+path = "src/bin/jtag.rs"
+test = false
+bench = false
+
+[[bin]]
 name = "read32"
 path = "src/bin/read32.rs"
 test = false

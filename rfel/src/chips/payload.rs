@@ -26,7 +26,8 @@ pub const FENCE_I_F101: &[u8] = include_bytes!("../../assets/payloads/fence_i_f1
 pub const COPY_V821: &[u8] = include_bytes!("../../assets/payloads/copy_v821.bin");
 
 // JTAG/DDR payload
-pub const JTAG_ENABLE_D1: &[u8] = include_bytes!("../../assets/payloads/jtag_d1.bin");
+pub const JTAG_RV64: &[u8] = include_bytes!("../../assets/payloads/jtag_rv64.bin");
+pub const JTAG_RV32: &[u8] = include_bytes!("../../assets/payloads/jtag_rv32.bin");
 pub const DDR_INIT_D1: &[u8] = include_bytes!("../../assets/payloads/ddr_d1.bin");
 pub const DDR_INIT_F133: &[u8] = include_bytes!("../../assets/payloads/ddr_f133.bin");
 
@@ -47,7 +48,8 @@ mod tests {
             WRITE32_RV64,
             COPY_V821,
             FENCE_I_F101,
-            JTAG_ENABLE_D1,
+            JTAG_RV64,
+            JTAG_RV32,
             DDR_INIT_D1,
             DDR_INIT_F133,
             DDR_INIT_F101_S2,

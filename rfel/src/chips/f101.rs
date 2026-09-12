@@ -86,14 +86,8 @@ impl Chip for F101 {
             return Err(ChipError::Unsupported("disable jtag not implemented"));
         }
 
-        const GPIOF_CFG0: u32 = 0x0200_00f0;
-        // PF0, PF1, PF3 and PF5 use function 4 for JTAG. Preserve other pins.
-        let mut value = read32(fel, GPIOF_CFG0)?;
-        for pin in [0, 1, 3, 5] {
-            let shift = pin * 4;
-            value = (value & !(0xf << shift)) | (4 << shift);
-        }
-        write32(fel, GPIOF_CFG0, value)
+        exec_stub(fel, payload::JTAG_RV32, &[], 0)?;
+        Ok(())
     }
 
     fn ddr(&self, fel: &Fel<'_>, profile: Option<DdrProfile>) -> Result<(), ChipError> {

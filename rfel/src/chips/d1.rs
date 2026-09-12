@@ -47,17 +47,17 @@ impl Chip for D1 {
         if !enable {
             return Err(ChipError::Unsupported("disable jtag not implemented"));
         }
-        if payload::JTAG_ENABLE_D1.is_empty() {
+        if payload::JTAG_RV64.is_empty() {
             return Err(ChipError::NotImplemented(
-                "jtag payload missing: put assets/payloads/jtag_d1.bin",
+                "jtag payload missing: put assets/payloads/jtag_rv64.bin",
             ));
         }
         debug!(
             "executing JTAG enable blob at 0x{D1_SRAM_BASE:08x} ({} bytes)",
-            payload::JTAG_ENABLE_D1.len()
+            payload::JTAG_RV64.len()
         );
         // Write in chunks and execute
-        write_all(fel, D1_SRAM_BASE, payload::JTAG_ENABLE_D1)?;
+        write_all(fel, D1_SRAM_BASE, payload::JTAG_RV64)?;
         fel.exec(D1_SRAM_BASE)?;
         Ok(())
     }
