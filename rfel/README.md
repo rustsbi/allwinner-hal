@@ -11,9 +11,7 @@ Supported chips:
 The following `0x0000c000..0x00010000` range is unmapped and is not part of the
 BootROM image; do not include it in a ROM dump.
 
-## Reference
-
-XFEL project: https://github.com/xboot/xfel
+All bundled payloads are built from the Rust sources in `examples/rfel-payload`; the [xfel license notice](assets/payloads/LICENSE-XFEL) is retained for code consulted during development.
 
 ## Auto flash selection
 

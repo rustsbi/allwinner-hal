@@ -1,4 +1,4 @@
-# xfel to Rust rfel Refactoring To-Do List
+# rfel Development To-Do List
 
 ## Phase 1: Foundational Work
 

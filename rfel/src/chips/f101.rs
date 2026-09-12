@@ -1,4 +1,4 @@
-//! F101 FEL support, following xfel v1.3.6 `chips/f101.c`.
+//! F101 FEL support.
 //!
 //! Register helpers run at the scratchpad reported by the BootROM. DDR and SPI
 //! helpers use the host-selected SRAM layout; SPI commands follow the entry by 0x1000.
@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use crate::{Fel, write_all};
 
 use super::util::{exec_stub, read32_via_payload, write32_via_payload};
-use super::{Chip, ChipError, ChipSpi, DdrProfile, SpiContext, payload};
+use super::{Chip, ChipError, ChipSpi, DdrProfile, SpiContext, ddr, payload};
 
 pub struct F101;
 
@@ -52,10 +52,10 @@ fn efuse_read(fel: &Fel<'_>, offset: u32) -> Result<u32, ChipError> {
     read32(fel, SID_READ_KEY)
 }
 
-fn ddr_payload(profile: Option<DdrProfile>) -> Result<&'static [u8], ChipError> {
+fn ddr_parameters(profile: Option<DdrProfile>) -> Result<&'static [u32; 24], ChipError> {
     match profile {
-        Some(DdrProfile::F101S2) => Ok(payload::DDR_INIT_F101_S2),
-        Some(DdrProfile::F101S3) => Ok(payload::DDR_INIT_F101_S3),
+        Some(DdrProfile::F101S2) => Ok(&ddr::F101_S2),
+        Some(DdrProfile::F101S3) => Ok(&ddr::F101_S3),
         _ => Err(ChipError::Unsupported(
             "F101 requires a PSRAM profile: rfel ddr --profile f101-s2 | f101-s3",
         )),
@@ -75,7 +75,7 @@ impl Chip for F101 {
     fn sid(&self, fel: &Fel<'_>) -> Result<Vec<u8>, ChipError> {
         let mut sid = Vec::with_capacity(16);
         for offset in [0, 4, 8, 12] {
-            // Preserve xfel's hexadecimal word order when the CLI prints bytes.
+            // Print each SID register in hexadecimal word order.
             sid.extend_from_slice(&efuse_read(fel, offset)?.to_be_bytes());
         }
         Ok(sid)
@@ -91,18 +91,19 @@ impl Chip for F101 {
     }
 
     fn ddr(&self, fel: &Fel<'_>, profile: Option<DdrProfile>) -> Result<(), ChipError> {
-        let payload = ddr_payload(profile)?;
-        debug!(
-            "F101 PSRAM: payload @0x{DDR_PAYLOAD_BASE:08x} ({} bytes)",
-            payload.len()
-        );
-        write_all(fel, DDR_PAYLOAD_BASE, payload)?;
-        // SPI and PSRAM share this address. The boot image has no initial
-        // fence.i, so invalidate cached SPI instructions from the scratchpad
-        // before entering the new image.
-        exec_stub(fel, payload::FENCE_I_F101, &[], 0)?;
-        fel.exec(DDR_PAYLOAD_BASE)?;
-        Ok(())
+        let parameters = ddr_parameters(profile)?;
+        ddr::run(
+            fel,
+            DDR_PAYLOAD_BASE,
+            payload::DDR_INIT_F101,
+            parameters,
+            || {
+                // PSRAM and SPI share SRAM; invalidate the previous entry from the
+                // scratchpad before fetching the replacement's instructions.
+                exec_stub(fel, payload::FENCE_I_F101, &[], 0)?;
+                Ok(())
+            },
+        )
     }
 
     fn as_spi(&self) -> Option<&dyn ChipSpi> {
@@ -150,26 +151,15 @@ mod tests {
 
     #[test]
     fn test_psram_profiles() {
-        // These are distinct complete boot images with their parameters embedded.
-        let s2 = ddr_payload(Some(DdrProfile::F101S2)).unwrap();
-        let s3 = ddr_payload(Some(DdrProfile::F101S3)).unwrap();
-        assert_ne!(s2, s3);
-        for image in [s2, s3] {
-            assert_eq!(&image[4..12], b"eGON.BT0");
-            assert_eq!(
-                u32::from_le_bytes(image[16..20].try_into().unwrap()) as usize,
-                image.len()
-            );
-            // The images encode their SRAM load address in the boot header.
-            assert_eq!(
-                u32::from_le_bytes(image[32..36].try_into().unwrap()),
-                DDR_PAYLOAD_BASE
-            );
-            assert_eq!(image.len(), 18_560);
-        }
+        let s2 = ddr_parameters(Some(DdrProfile::F101S2)).unwrap();
+        let s3 = ddr_parameters(Some(DdrProfile::F101S3)).unwrap();
+        assert_eq!(&s2[..2], &[228, 1]);
+        assert_eq!(&s3[..2], &[252, 3]);
+        assert_eq!(s2[4], 8);
+        assert_eq!(s3[4], 16);
         for profile in [None, Some(DdrProfile::D1), Some(DdrProfile::F133)] {
             assert!(matches!(
-                ddr_payload(profile),
+                ddr_parameters(profile),
                 Err(ChipError::Unsupported(_))
             ));
         }
@@ -180,7 +170,7 @@ mod tests {
         assert!(SPI_PAYLOAD_BASE + payload::SPI_INIT_F101.len() as u32 <= SPI_COMMAND_BASE);
         assert_eq!(SPI_COMMAND_BASE, SPI_PAYLOAD_BASE + 0x1000);
         assert_eq!(SPI_COMMAND_BASE + SPI_COMMAND_LEN, SPI_SWAP_BASE);
-        // xfel's F101 helper reserves only 8 KiB for data, unlike D1/V821.
+        // The F101 helper reserves 8 KiB for data.
         assert_eq!(SPI_SWAP_BASE + SPI_SWAP_LEN, 0x0002_c000);
     }
 

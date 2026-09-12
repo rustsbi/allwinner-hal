@@ -13,6 +13,24 @@ panic-never = "0.1.0"
 rfel-payload-macros = { path = "macros" }
 
 [[bin]]
+name = "ddr-d1"
+path = "src/bin/ddr_d1.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "ddr-f101"
+path = "src/bin/ddr_f101.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "ddr-v821"
+path = "src/bin/ddr_v821.rs"
+test = false
+bench = false
+
+[[bin]]
 name = "jtag"
 path = "src/bin/jtag.rs"
 test = false
@@ -59,4 +77,3 @@ name = "spi-v821"
 path = "src/bin/spi_v821.rs"
 test = false
 bench = false
-

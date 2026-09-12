@@ -27,7 +27,7 @@ fn main(parameters: *mut u32) {
             }
         }
 
-        // Preserve the original V821 cache-maintenance sequence before FEL reads
+        // Complete V821 cache maintenance before FEL reads
         // the SRAM through USB. This asm also acts as a compiler memory barrier.
         #[cfg(all(target_os = "none", target_arch = "riscv32"))]
         core::arch::asm!(

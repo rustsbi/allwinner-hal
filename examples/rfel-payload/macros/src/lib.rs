@@ -9,6 +9,7 @@ use syn::{
 };
 
 /// Export a private `fn(parameters: *mut u32)` as the unsafe C-ABI FEL entry.
+/// Use `#[entry(align_stack)]` when the ROM stack needs ABI alignment.
 #[proc_macro_attribute]
 pub fn entry(args: TokenStream, input: TokenStream) -> TokenStream {
     let function = parse_macro_input!(input as ItemFn);
@@ -18,10 +19,11 @@ pub fn entry(args: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 fn expand_entry(args: TokenStream2, function: ItemFn) -> syn::Result<TokenStream2> {
-    if !args.is_empty() {
+    let align_stack = args.to_string() == "align_stack";
+    if !args.is_empty() && !align_stack {
         return Err(syn::Error::new_spanned(
             args,
-            "`#[entry]` accepts no arguments",
+            "expected `#[entry]` or `#[entry(align_stack)]`",
         ));
     }
 
@@ -66,6 +68,48 @@ fn expand_entry(args: TokenStream2, function: ItemFn) -> syn::Result<TokenStream
     let name = &signature.ident;
     let inputs = &signature.inputs;
     let statements = &function.block.stmts;
+    if align_stack {
+        return Ok(quote! {
+            #(#attrs)*
+            unsafe extern "C" fn #name(#inputs) {
+                use ::rfel_payload as _;
+                #(#statements)*
+            }
+
+            #[cfg(all(target_os = "none", any(target_arch = "riscv32", target_arch = "riscv64")))]
+            #[unsafe(export_name = "__rfel_payload__main")]
+            #[unsafe(naked)]
+            unsafe extern "C" fn __rfel_payload_aligned_entry(_parameters: *mut u32) {
+                core::arch::naked_asm!(
+                    ".option push",
+                    ".option norelax",
+                    "mv t0, sp",
+                    "andi sp, sp, -16",
+                    "addi sp, sp, -16",
+                    ".if {rv64}",
+                    "sd t0, 0(sp)",
+                    "sd ra, 8(sp)",
+                    ".else",
+                    "sw t0, 0(sp)",
+                    "sw ra, 4(sp)",
+                    ".endif",
+                    "call {body}",
+                    ".if {rv64}",
+                    "ld t0, 0(sp)",
+                    "ld ra, 8(sp)",
+                    ".else",
+                    "lw t0, 0(sp)",
+                    "lw ra, 4(sp)",
+                    ".endif",
+                    "mv sp, t0",
+                    "ret",
+                    ".option pop",
+                    rv64 = const cfg!(target_arch = "riscv64") as usize,
+                    body = sym #name,
+                );
+            }
+        });
+    }
     Ok(quote! {
         #(#attrs)*
         #[unsafe(export_name = "__rfel_payload__main")]
@@ -89,6 +133,16 @@ mod tests {
             fn payload(parameters: *mut u32) {}
         );
         assert!(expand_entry(quote!(unexpected), function).is_err());
+    }
+
+    #[test]
+    fn accepts_aligned_entry() {
+        let function = parse_quote!(
+            fn payload(parameters: *mut u32) {}
+        );
+        let expansion = expand_entry(quote!(align_stack), function).unwrap();
+        let file: syn::File = syn::parse2(expansion).unwrap();
+        assert_eq!(file.items.len(), 2);
     }
 
     #[test]

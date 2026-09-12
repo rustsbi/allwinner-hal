@@ -1,8 +1,9 @@
-//! FEL register-access, instruction-synchronization, memory-copy and SPI payloads.
+//! FEL register-access, instruction-synchronization, memory-copy, SPI and DDR payloads.
 #![cfg_attr(target_os = "none", no_std)]
 
 pub use rfel_payload_macros::entry;
 
+pub mod ddr;
 pub mod env;
 pub mod spi;
 

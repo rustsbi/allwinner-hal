@@ -7,8 +7,7 @@ pub const WRITE32_RV64: &[u8] = include_bytes!("../../assets/payloads/write32_rv
 pub const READ32_RV32: &[u8] = include_bytes!("../../assets/payloads/read32_rv32.bin");
 pub const WRITE32_RV32: &[u8] = include_bytes!("../../assets/payloads/write32_rv32.bin");
 
-pub const DDR_INIT_F101_S2: &[u8] = include_bytes!("../../assets/payloads/ddr_f101_s2.bin");
-pub const DDR_INIT_F101_S3: &[u8] = include_bytes!("../../assets/payloads/ddr_f101_s3.bin");
+pub const DDR_INIT_F101: &[u8] = include_bytes!("../../assets/payloads/ddr_f101.bin");
 pub const SPI_INIT_F101: &[u8] = include_bytes!("../../assets/payloads/spi_f101.bin");
 
 /// Synchronize F101 instruction fetch when switching between SPI and PSRAM
@@ -29,7 +28,6 @@ pub const COPY_V821: &[u8] = include_bytes!("../../assets/payloads/copy_v821.bin
 pub const JTAG_RV64: &[u8] = include_bytes!("../../assets/payloads/jtag_rv64.bin");
 pub const JTAG_RV32: &[u8] = include_bytes!("../../assets/payloads/jtag_rv32.bin");
 pub const DDR_INIT_D1: &[u8] = include_bytes!("../../assets/payloads/ddr_d1.bin");
-pub const DDR_INIT_F133: &[u8] = include_bytes!("../../assets/payloads/ddr_f133.bin");
 
 pub const SPI_INIT_D1: &[u8] = include_bytes!("../../assets/payloads/spi_d1.bin");
 pub const DDR_INIT_V821: &[u8] = include_bytes!("../../assets/payloads/ddr_v821.bin");
@@ -51,9 +49,7 @@ mod tests {
             JTAG_RV64,
             JTAG_RV32,
             DDR_INIT_D1,
-            DDR_INIT_F133,
-            DDR_INIT_F101_S2,
-            DDR_INIT_F101_S3,
+            DDR_INIT_F101,
             DDR_INIT_V821,
             SPI_INIT_D1,
             SPI_INIT_F101,

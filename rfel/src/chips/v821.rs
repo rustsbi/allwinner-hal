@@ -3,12 +3,11 @@ use log::debug;
 use crate::{Fel, read_all, write_all};
 
 use super::util::{exec_stub, read32_via_payload, u32_params_le, write32_via_payload};
-use super::{Chip, ChipError, ChipSpi, DdrProfile, SpiContext, payload};
+use super::{Chip, ChipError, ChipSpi, DdrProfile, SpiContext, ddr, payload};
 
 pub struct V821;
 
 const DDR_PAYLOAD_BASE: u32 = 0x0200_8000;
-const DDR_PARAM_ADDR: u32 = 0x0200_8038;
 const SPI_PAYLOAD_BASE: u32 = 0x0200_0000;
 const SPI_COMMAND_BASE: u32 = 0x0200_1000;
 const SPI_SWAP_BASE: u32 = 0x0200_2000;
@@ -85,7 +84,7 @@ impl Chip for V821 {
 
         let mut sid = Vec::with_capacity(16);
         for offset in [0, 4, 8, 12] {
-            // xfel renders each SID register as an eight-digit hexadecimal word.
+            // Render each SID register as an eight-digit hexadecimal word.
             sid.extend_from_slice(&read32(fel, SID_BASE + offset)?.to_be_bytes());
         }
         Ok(sid)
@@ -112,41 +111,13 @@ impl Chip for V821 {
             return Err(ChipError::Unsupported("V821 does not use a DDR profile"));
         }
 
-        let params: [u32; 24] = [
-            528,         // dram_clk
-            2,           // dram_type
-            0x007b_7bf9, // dram_zq
-            0,           // dram_odt_en
-            0x0000_00d2, // dram_para1
-            0x0040_0000, // dram_para2
-            0x0000_0e73, // dram_mr0
-            0x0000_0002, // dram_mr1
-            0,           // dram_mr2
-            0,           // dram_mr3
-            0x0047_1992, // dram_tpr0
-            0x0131_a10c, // dram_tpr1
-            0x0005_7041, // dram_tpr2
-            0xb478_7896, // dram_tpr3
-            0,           // dram_tpr4
-            0x4848_4848, // dram_tpr5
-            0x0000_0048, // dram_tpr6
-            0x1621_121e, // dram_tpr7
-            0,           // dram_tpr8
-            0,           // dram_tpr9
-            0,           // dram_tpr10
-            0,           // dram_tpr11
-            0,           // dram_tpr12
-            0x3400_0100, // dram_tpr13
-        ];
-
-        debug!(
-            "V821 DDR: payload @0x{DDR_PAYLOAD_BASE:08x} ({} bytes), params @0x{DDR_PARAM_ADDR:08x}",
-            payload::DDR_INIT_V821.len()
-        );
-        write_all(fel, DDR_PAYLOAD_BASE, payload::DDR_INIT_V821)?;
-        write_all(fel, DDR_PARAM_ADDR, &u32_params_le(&params))?;
-        fel.exec(DDR_PAYLOAD_BASE)?;
-        Ok(())
+        ddr::run(
+            fel,
+            DDR_PAYLOAD_BASE,
+            payload::DDR_INIT_V821,
+            &ddr::V821,
+            || Ok(()),
+        )
     }
 
     fn as_spi(&self) -> Option<&dyn ChipSpi> {
@@ -192,11 +163,9 @@ mod tests {
     #[test]
     fn test_v821_layout() {
         assert_eq!(V821.name(), "V821");
-        assert_eq!(DDR_PARAM_ADDR, DDR_PAYLOAD_BASE + 0x38);
         assert_eq!(SPI_COMMAND_BASE, SPI_PAYLOAD_BASE + 0x1000);
         assert!(SPI_PAYLOAD_BASE + payload::SPI_INIT_V821.len() as u32 <= SPI_COMMAND_BASE);
         assert_eq!(SPI_SWAP_BASE, SPI_PAYLOAD_BASE + 0x2000);
-        assert_eq!(payload::DDR_INIT_V821.len(), 14_976);
     }
 
     #[test]

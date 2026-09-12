@@ -6,6 +6,7 @@ use crate::Fel;
 use crate::fel::error::FelError;
 
 pub mod d1;
+mod ddr;
 pub mod f101;
 pub mod payload;
 pub mod util;

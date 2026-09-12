@@ -1,6 +1,4 @@
-//! The byte-command interpreter shared by xfel's three SPI payloads.
-//! Ported from xboot/xfel; see LICENSE-XFEL. Register offsets and operation order
-//! were also checked against the payload disassembly.
+//! Shared byte-command interpreter for D1, F101 and V821 SPI payloads.
 
 use allwinner_hal::{
     ccu::{PeriFactorN, SpiClockSource, d1, f101, v821},
@@ -50,9 +48,9 @@ unsafe fn init(soc: Soc, spi: &RegisterBlock, base: usize) {
                 ccu.spi_clk[0].modify(|v| v.unmask_clock());
                 ccu.spi_bgr.modify(|v| v.gate_pass::<0>());
                 ccu.spi_clk[0].modify(|v| {
-                    // Match xfel's two-bit source mask. D1-H manual 3.2.6.65
-                    // defines bits 26:24 as one field: if bit 26 was set, this
-                    // reproduces xfel's reserved 0b101 selection, not PLL_PERI(1X).
+                    // Preserve bit 26 while updating the two lower source bits.
+                    // D1-H manual 3.2.6.65 defines bits 26:24 as one field;
+                    // an already-set bit 26 produces the reserved 0b101 value.
                     let source = v.set_clock_source(SpiClockSource::PllPeri1x);
                     d1::SpiClock::from_bits(source.bits() | (v.bits() & (1 << 26)))
                 });
@@ -106,7 +104,7 @@ unsafe fn select(base: usize, active: bool) {
 
 unsafe fn transfer(spi: &RegisterBlock, mut tx: *const u8, mut rx: *mut u8, mut len: u32) {
     // SAFETY: caller supplies valid buffers, or null for dummy TX/discarded RX.
-    // Byte FIFO transactions and the 64-byte burst limit match the original payload.
+    // Use byte FIFO transactions in bursts of at most 64 bytes.
     unsafe {
         while len != 0 {
             let count = len.min(64);
@@ -205,7 +203,7 @@ pub unsafe fn run(soc: Soc, commands: *const u8) {
                     let mut status = 0u8;
                     loop {
                         // Keep the host-selected CS asserted across status polls,
-                        // including the command retransmission used by the originals.
+                        // including command retransmission.
                         transfer(
                             spi,
                             tx.as_ptr(),
