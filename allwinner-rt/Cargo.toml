@@ -10,7 +10,6 @@ documentation = "https://docs.rs/allwinner-rt"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-readme = "README.md"
 keywords = ["allwinner"]
 categories = ["embedded", "hardware-support", "no-std"]
 

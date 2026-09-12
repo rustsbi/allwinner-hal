@@ -10,7 +10,6 @@ documentation = "https://docs.rs/allwinner-hal"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-readme = "README.md"
 keywords = ["hal", "allwinner"]
 categories = ["os", "embedded", "hardware-support", "no-std"]
 

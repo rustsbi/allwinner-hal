@@ -25,31 +25,31 @@ test = false
 bench = false
 
 [[bin]]
-name = "fence_i_f101"
+name = "fence-i-f101"
 path = "src/bin/fence_i_f101.rs"
 test = false
 bench = false
 
 [[bin]]
-name = "copy_v821"
+name = "copy-v821"
 path = "src/bin/copy_v821.rs"
 test = false
 bench = false
 
 [[bin]]
-name = "spi_d1"
+name = "spi-d1"
 path = "src/bin/spi_d1.rs"
 test = false
 bench = false
 
 [[bin]]
-name = "spi_f101"
+name = "spi-f101"
 path = "src/bin/spi_f101.rs"
 test = false
 bench = false
 
 [[bin]]
-name = "spi_v821"
+name = "spi-v821"
 path = "src/bin/spi_v821.rs"
 test = false
 bench = false

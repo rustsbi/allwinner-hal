@@ -1,20 +1,27 @@
 [package]
 name = "rfel"
+description = "Allwinner FEL tool for memory access and SPI flash programming"
 version = "0.0.0"
+authors = ["Zhouqi Jiang <luojia@rustsbi.com>"]
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+keywords = ["allwinner", "fel", "usb", "firmware", "flash"]
+categories = ["command-line-utilities", "development-tools::debugging", "hardware-support"]
 
 [dependencies]
 byteorder = "1.5.0"
 clap = { version = "4.6.6", features = ["derive"] }
 clap-verbosity-flag = "3.0.4"
+crossterm = { version = "0.29", default-features = false, features = ["windows"] }
+dialoguer = { version = "0.12", default-features = false }
 env_logger = "0.11.11"
 futures = "0.3.34"
 log = "0.4.34"
 num-traits = "0.2.19"
 nusb = "0.2.7"
 object = "0.40.0"
-project-root = "0.2.2"
 same-file = "1.0.6"
 thiserror = "2.0.20"
+toml_edit = "0.23"
+tempfile = "3"

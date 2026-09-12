@@ -19,6 +19,7 @@ use crate::chips;
 use crate::fel::Fel;
 use crate::ops::{self, flash, spinand, spinor};
 
+mod device;
 mod util;
 
 #[derive(Parser)]
@@ -30,7 +31,9 @@ mod util;
     disable_help_subcommand = true,
     help_template = r#"rfel(v{version}) - https://github.com/rustsbi/allwinner-hal
 usage:
-    rfel version                                        - Show chip version
+    rfel [--device <SELECTOR>] <command>
+    --device <SELECTOR> overrides RFEL_DEVICE and Rfel.toml
+    rfel version                                        - Show all FEL devices and chip versions
     rfel elf2bin --input <input-elf> [--output <output-bin>] - Convert ELF to raw binary data
     rfel patch --input <input-bin>  [--output <output-img>] - Patch binary into bootable image
     rfel hexdump <address> <length>                     - Dumps memory region in hex
@@ -63,6 +66,9 @@ usage:
 "#
 )]
 pub struct Cli {
+    /// USB topology selector from `rfel version` (overrides RFEL_DEVICE and Rfel.toml).
+    #[arg(long, global = true, value_name = "SELECTOR")]
+    pub device: Option<String>,
     #[command(flatten)]
     pub verbose: Verbosity,
     #[command(subcommand)]
@@ -71,7 +77,7 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    /// Show chip version
+    /// Show all connected FEL devices and chip versions, ignoring device selection.
     Version,
     /// Convert ELF to raw binary data.
     #[command(name = "elf2bin")]
@@ -255,7 +261,7 @@ pub enum FlashCommand {
 pub enum CliError {
     DeviceList(nusb::Error),
     NoDevice,
-    MultipleDevices,
+    Selection(String),
     OpenDevice(nusb::Error),
     ClaimInterface(nusb::Error),
     Fel(crate::fel::error::FelError),
@@ -268,10 +274,7 @@ impl fmt::Display for CliError {
         match self {
             CliError::DeviceList(_) => write!(f, "failed to list USB devices"),
             CliError::NoDevice => write!(f, "Cannot find any Allwinner FEL device connected."),
-            CliError::MultipleDevices => write!(
-                f,
-                "rfel does not support connecting to multiple Allwinner FEL devices by now."
-            ),
+            CliError::Selection(message) => f.write_str(message),
             CliError::OpenDevice(_) => write!(f, "failed to open USB device"),
             CliError::ClaimInterface(_) => write!(f, "failed to claim USB interface 0"),
             CliError::Fel(err) => write!(f, "FEL error: {err}"),
@@ -296,7 +299,11 @@ impl Error for CliError {
 }
 
 pub fn run(cli: Cli) -> Result<(), CliError> {
-    let Cli { verbose, command } = cli;
+    let Cli {
+        verbose,
+        command,
+        device: selector,
+    } = cli;
 
     env_logger::Builder::new()
         .filter_level(LevelFilter::Off)
@@ -307,7 +314,7 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
         return execute_host_command(command);
     }
 
-    let devices: Vec<_> = nusb::list_devices()
+    let mut devices: Vec<_> = nusb::list_devices()
         .wait()
         .map_err(CliError::DeviceList)?
         .filter(|dev| dev.vendor_id() == VENDOR_ALLWINNER && dev.product_id() == PRODUCT_FEL)
@@ -319,12 +326,13 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
         return Err(CliError::NoDevice);
     }
 
-    if devices.len() > 1 {
-        error!("TODO: rfel does not support connecting to multiple Allwinner FEL devices by now.");
-        return Err(CliError::MultipleDevices);
+    devices.sort_by_key(device::selector);
+    if matches!(command, Commands::Version) {
+        return device::show_versions(&devices);
     }
 
-    let device_info = devices.into_iter().next().unwrap();
+    let selection = device::select(&devices, selector)?;
+    let device_info = &devices[selection.index];
     let device = device_info.open().wait().map_err(CliError::OpenDevice)?;
     let mut interface = device
         .claim_interface(0)
@@ -335,6 +343,8 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
         Some(chip) => chip,
         None => return Err(CliError::UnsupportedChip),
     };
+
+    selection.save(device_info)?;
 
     execute_device_command(command, &fel, chip.as_ref())
 }
