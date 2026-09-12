@@ -1,18 +1,97 @@
 //! V821 APP and always-on Clock Control Unit registers.
 
+use crate::ccu::PeriFactorN;
 use volatile_register::{RO, RW};
 
 /// V821 application-domain CCU registers used for peripheral bus control.
 #[repr(C)]
 pub struct AppRegisterBlock {
-    _reserved_000: [u8; 0x7c],
+    _reserved_000: [u8; 0x1c],
+    /// 0x01c - SPI0 module clock register.
+    pub spi_clock: RW<SpiClock>,
+    _reserved_020: [u8; 0x5c],
     /// 0x07c - USB reference clock register.
     pub usb_clock: RW<UsbClock>,
     /// 0x080 - application bus clock gating register 0.
     pub bus_clock_gating0: RW<BusClockGating0>,
-    _reserved_084: [u8; 0x0c],
+    /// 0x084 - application bus clock gating register 1.
+    pub bus_clock_gating1: RW<BusClockGating1>,
+    _reserved_088: [u8; 0x08],
     /// 0x090 - application bus reset register 0.
     pub bus_reset0: RW<BusReset0>,
+    /// 0x094 - application bus reset register 1.
+    pub bus_reset1: RW<BusReset1>,
+}
+
+/// Clock sources for V821 SPI0, from the vendor `ccu-sun300iw1-app` table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum SpiClockSource {
+    /// High-speed oscillator.
+    Hosc = 0,
+    /// 307.2 MHz peripheral PLL output.
+    Peri307M = 1,
+    /// 236 MHz peripheral PLL output.
+    Peri236M = 2,
+    /// 48 MHz peripheral PLL output.
+    Peri48M = 4,
+}
+
+/// V821 SPI0 module clock register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct SpiClock(u32);
+
+impl SpiClock {
+    /// Unmask (enable) the SPI module clock.
+    #[inline]
+    pub const fn unmask_clock(self) -> Self {
+        Self(self.0 | (1 << 31))
+    }
+
+    /// Select the SPI module clock source.
+    #[inline]
+    pub const fn set_clock_source(self, source: SpiClockSource) -> Self {
+        Self((self.0 & !(0x7 << 24)) | ((source as u32) << 24))
+    }
+
+    /// Set the power-of-two clock divisor N in bits 17:16.
+    #[inline]
+    pub const fn set_factor_n(self, factor: PeriFactorN) -> Self {
+        Self((self.0 & !(0x3 << 16)) | ((factor as u32) << 16))
+    }
+
+    /// Set the encoded clock divisor M (the divisor is `factor + 1`).
+    #[inline]
+    pub const fn set_factor_m(self, factor: u8) -> Self {
+        Self((self.0 & !0xf) | (factor as u32 & 0xf))
+    }
+}
+
+/// Application bus clock gating register 1.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct BusClockGating1(u32);
+
+impl BusClockGating1 {
+    /// Enable the SPI0 bus clock gate.
+    #[inline]
+    pub const fn pass_spi0(self) -> Self {
+        Self(self.0 | (1 << 4))
+    }
+}
+
+/// Application bus reset register 1.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct BusReset1(u32);
+
+impl BusReset1 {
+    /// Deassert the active-low SPI0 reset signal.
+    #[inline]
+    pub const fn deassert_spi0(self) -> Self {
+        Self(self.0 | (1 << 4))
+    }
 }
 
 /// USB reference clock register.
@@ -317,14 +396,52 @@ mod tests {
 
     #[test]
     fn register_layout() {
+        assert_eq!(offset_of!(AppRegisterBlock, spi_clock), 0x1c);
         assert_eq!(offset_of!(AppRegisterBlock, usb_clock), 0x7c);
         assert_eq!(offset_of!(AppRegisterBlock, bus_clock_gating0), 0x80);
+        assert_eq!(offset_of!(AppRegisterBlock, bus_clock_gating1), 0x84);
         assert_eq!(offset_of!(AppRegisterBlock, bus_reset0), 0x90);
-        assert_eq!(size_of::<AppRegisterBlock>(), 0x94);
+        assert_eq!(offset_of!(AppRegisterBlock, bus_reset1), 0x94);
+        assert_eq!(size_of::<AppRegisterBlock>(), 0x98);
         assert_eq!(offset_of!(AonRegisterBlock, dcxo_status), 0x404);
         assert_eq!(offset_of!(AonRegisterBlock, apb_special_clock), 0x580);
         assert_eq!(offset_of!(AonRegisterBlock, e907_clock), 0x584);
         assert_eq!(size_of::<AonRegisterBlock>(), 0x588);
+    }
+
+    #[test]
+    fn spi_clock_gate_and_reset_fields() {
+        assert_eq!(SpiClock(0x1234_5678).unmask_clock().0, 0x9234_5678);
+        for (source, bits) in [
+            (SpiClockSource::Hosc, 0),
+            (SpiClockSource::Peri307M, 1),
+            (SpiClockSource::Peri236M, 2),
+            (SpiClockSource::Peri48M, 4),
+        ] {
+            assert_eq!(
+                SpiClock(u32::MAX).set_clock_source(source).0,
+                0xf8ff_ffff | (bits << 24)
+            );
+        }
+        for (factor, bits) in [
+            (PeriFactorN::N1, 0),
+            (PeriFactorN::N2, 1),
+            (PeriFactorN::N4, 2),
+            (PeriFactorN::N8, 3),
+        ] {
+            assert_eq!(
+                SpiClock(u32::MAX).set_factor_n(factor).0,
+                0xfffc_ffff | (bits << 16)
+            );
+        }
+        for factor in [0, 1, 2, 15, 255] {
+            assert_eq!(
+                SpiClock(u32::MAX).set_factor_m(factor).0,
+                0xffff_fff0 | (factor as u32 & 0xf)
+            );
+        }
+        assert_eq!(BusClockGating1(0xa5a5_5a0a).pass_spi0().0, 0xa5a5_5a1a);
+        assert_eq!(BusReset1(0x5a5a_a505).deassert_spi0().0, 0x5a5a_a515);
     }
 
     #[test]

@@ -1,11 +1,15 @@
 use super::{
     Pads,
-    register::{GlobalControl, RegisterBlock, TransferControl},
+    register::{BurstControl, GlobalControl, RegisterBlock, TransferControl},
 };
 use crate::gpio::FlexPad;
 use embedded_hal::spi::Mode;
 
 /// Managed SPI structure with peripheral and pins.
+///
+/// Transfers use bursts of at most 63 bytes and return with the bus idle and
+/// both FIFOs empty. Reads and missing transmit bytes send `0xff` on MOSI.
+/// Polling waits indefinitely for the hardware to make progress.
 pub struct Spi<'a, SPI> {
     spi: SPI,
     #[allow(unused)]
@@ -18,6 +22,9 @@ pub struct Spi<'a, SPI> {
 
 // Ref: rustsbi-d1 project
 impl<'a, SPI: AsRef<RegisterBlock>> Spi<'a, SPI> {
+    // Like U-Boot's sun4i_spi_xfer, leave one entry free in the 64-byte FIFO.
+    const MAX_BURST: usize = 63;
+
     /// Create an SPI instance.
     pub fn new<const I: usize>(
         spi: SPI,
@@ -67,99 +74,46 @@ impl<'a, SPI: AsRef<RegisterBlock>> embedded_hal::spi::ErrorType for Spi<'a, SPI
 
 impl<'a, SPI: AsRef<RegisterBlock>> embedded_hal::spi::SpiBus for Spi<'a, SPI> {
     fn transfer(&mut self, read: &mut [u8], write: &[u8]) -> Result<(), Self::Error> {
-        assert!(read.len() + write.len() <= u32::MAX as usize);
-        let spi = self.spi.as_ref();
-        unsafe { spi.mbc.write((read.len() + write.len()) as u32) };
-        unsafe { spi.mtc.write(write.len() as u32) };
-        let bcc = spi
-            .bcc
-            .read()
-            .set_master_dummy_burst_counter(0)
-            .set_master_single_mode_transmit_counter(write.len() as u32);
-        unsafe { spi.bcc.write(bcc) };
-        unsafe { spi.tcr.write(spi.tcr.read().start_burst_exchange()) };
-        for &word in write {
-            while spi.fsr.read().transmit_fifo_counter() > 63 {
-                core::hint::spin_loop();
-            }
-            spi.txd.write_u8(word)
+        let mut read = read;
+        let mut write = write;
+        if read.is_empty() && write.is_empty() {
+            return Ok(());
         }
-        for word in read {
-            while spi.fsr.read().receive_fifo_counter() == 0 {
-                core::hint::spin_loop();
-            }
-            *word = spi.rxd.read_u8()
+        let spi = self.spi.as_ref();
+        prepare_transfer(spi);
+        while !read.is_empty() || !write.is_empty() {
+            let count = read.len().max(write.len()).min(Self::MAX_BURST);
+            let (read_chunk, read_rest) = read.split_at_mut(read.len().min(count));
+            let (write_chunk, write_rest) = write.split_at(write.len().min(count));
+            start_chunk(spi, write_chunk, count);
+            finish_chunk(spi, read_chunk, count);
+            read = read_rest;
+            write = write_rest;
         }
         Ok(())
     }
 
     fn transfer_in_place(&mut self, words: &mut [u8]) -> Result<(), Self::Error> {
-        assert!(words.len() * 2 <= u32::MAX as usize);
-        let spi = self.spi.as_ref();
-        unsafe { spi.mbc.write((words.len() * 2) as u32) };
-        unsafe { spi.mtc.write(words.len() as u32) };
-        let bcc = spi
-            .bcc
-            .read()
-            .set_master_dummy_burst_counter(0)
-            .set_master_single_mode_transmit_counter(words.len() as u32);
-        unsafe { spi.bcc.write(bcc) };
-        unsafe { spi.tcr.write(spi.tcr.read().start_burst_exchange()) };
-        for &word in words.iter() {
-            while spi.fsr.read().transmit_fifo_counter() > 63 {
-                core::hint::spin_loop();
-            }
-            spi.txd.write_u8(word)
+        if words.is_empty() {
+            return Ok(());
         }
-        for word in words {
-            while spi.fsr.read().receive_fifo_counter() == 0 {
-                core::hint::spin_loop();
-            }
-            *word = spi.rxd.read_u8()
+        let spi = self.spi.as_ref();
+        prepare_transfer(spi);
+        for chunk in words.chunks_mut(Self::MAX_BURST) {
+            let count = chunk.len();
+            // Stage the entire original chunk in TX FIFO before overwriting it.
+            start_chunk(spi, chunk, count);
+            finish_chunk(spi, chunk, count);
         }
         Ok(())
     }
 
     fn read(&mut self, words: &mut [u8]) -> Result<(), Self::Error> {
-        assert!(words.len() <= u32::MAX as usize);
-        let spi = self.spi.as_ref();
-        unsafe { spi.mbc.write(words.len() as u32) };
-        unsafe { spi.mtc.write(0) };
-        let bcc = spi
-            .bcc
-            .read()
-            .set_master_dummy_burst_counter(0)
-            .set_master_single_mode_transmit_counter(0);
-        unsafe { spi.bcc.write(bcc) };
-        unsafe { spi.tcr.write(spi.tcr.read().start_burst_exchange()) };
-        for word in words {
-            while spi.fsr.read().receive_fifo_counter() == 0 {
-                core::hint::spin_loop();
-            }
-            *word = spi.rxd.read_u8()
-        }
-        Ok(())
+        self.transfer(words, &[])
     }
 
     fn write(&mut self, words: &[u8]) -> Result<(), Self::Error> {
-        assert!(words.len() <= u32::MAX as usize);
-        let spi = self.spi.as_ref();
-        unsafe { spi.mbc.write(words.len() as u32) };
-        unsafe { spi.mtc.write(words.len() as u32) };
-        let bcc = spi
-            .bcc
-            .read()
-            .set_master_dummy_burst_counter(0)
-            .set_master_single_mode_transmit_counter(words.len() as u32);
-        unsafe { spi.bcc.write(bcc) };
-        unsafe { spi.tcr.write(spi.tcr.read().start_burst_exchange()) };
-        for &word in words {
-            while spi.fsr.read().transmit_fifo_counter() > 63 {
-                core::hint::spin_loop();
-            }
-            spi.txd.write_u8(word)
-        }
-        Ok(())
+        self.transfer(&mut [], words)
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
@@ -168,5 +122,63 @@ impl<'a, SPI: AsRef<RegisterBlock>> embedded_hal::spi::SpiBus for Spi<'a, SPI> {
             core::hint::spin_loop();
         }
         Ok(())
+    }
+}
+
+/// Reset both FIFOs before a nonempty bus operation, while the bus is idle.
+fn prepare_transfer(spi: &RegisterBlock) {
+    while !spi.tcr.read().burst_finished() {
+        core::hint::spin_loop();
+    }
+    // SAFETY: this driver owns the idle controller and no previous operation
+    // has unread data. FCR reset requests clear themselves when complete.
+    unsafe { spi.fcr.modify(|v| v.reset_fifos()) };
+    while !spi.fcr.read().fifo_reset_finished() {
+        core::hint::spin_loop();
+    }
+}
+
+/// Start a nonempty burst fitting in both FIFOs, padding short writes.
+///
+/// Callers supply `write.len() <= count <= MAX_BURST` and finish each burst.
+fn start_chunk(spi: &RegisterBlock, write: &[u8], count: usize) {
+    // Counter and mode registers must not be changed while XCH is set.
+    while !spi.tcr.read().burst_finished() {
+        core::hint::spin_loop();
+    }
+    // SAFETY: this driver owns the idle controller. Every burst fits in the
+    // FIFOs; prepare_transfer resets them and finish_chunk drains every RX byte.
+    unsafe {
+        spi.mbc.write(count as u32);
+        spi.mtc.write(count as u32);
+        spi.bcc
+            .write(BurstControl::default().set_master_single_mode_transmit_counter(count as u32));
+    }
+    for &word in write {
+        spi.txd.write_u8(word);
+    }
+    for _ in write.len()..count {
+        spi.txd.write_u8(0xff);
+    }
+    // SAFETY: the counters and all TX bytes are ready, and XCH is clear.
+    unsafe { spi.tcr.modify(|v| v.start_burst_exchange()) };
+}
+
+/// Finish a burst and drain all RX bytes, including bytes not requested.
+///
+/// Callers supply `read.len() <= count`, matching the preceding start_chunk.
+fn finish_chunk(spi: &RegisterBlock, read: &mut [u8], count: usize) {
+    while !spi.tcr.read().burst_finished() {
+        core::hint::spin_loop();
+    }
+    // new() leaves DHB clear, so every transmitted byte enters RX FIFO.
+    // Follow U-Boot's XCH completion check (commit 56e497eba1bd): the RX FIFO
+    // count is not a reliable completion signal. The burst fits in the FIFO,
+    // so XCH clearing lets us read exactly count bytes without another poll.
+    for word in read.iter_mut() {
+        *word = spi.rxd.read_u8();
+    }
+    for _ in read.len()..count {
+        let _ = spi.rxd.read_u8();
     }
 }

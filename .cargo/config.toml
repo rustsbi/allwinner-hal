@@ -3,3 +3,6 @@ rfel = "run --package rfel --release --"
 
 [target.'cfg(target_os = "none")']
 runner = "cargo rfel run --elf"
+
+[target.'cfg(all(target_os = "none", any(target_arch = "riscv32", target_arch = "riscv64")))']
+rustflags = ["-C", "relocation-model=pic"]

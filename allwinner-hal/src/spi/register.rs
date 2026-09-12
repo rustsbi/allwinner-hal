@@ -11,7 +11,8 @@ pub struct RegisterBlock {
     _reserved1: u32,
     pub ier: RW<u32>,
     pub isr: RW<u32>,
-    pub fcr: RW<u32>,
+    /// FIFO control register.
+    pub fcr: RW<FifoControl>,
     /// FIFO status register.
     pub fsr: RO<FifoStatus>,
     pub wcr: RW<u32>,
@@ -143,6 +144,30 @@ impl TransferControl {
     }
 }
 
+/// FIFO control register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct FifoControl(u32);
+
+impl FifoControl {
+    const TF_RST: u32 = 1 << 31;
+    const RF_RST: u32 = 1 << 15;
+
+    /// Request both transmit and receive FIFO resets, preserving configuration.
+    ///
+    /// Hardware clears each request bit when that FIFO's reset completes.
+    #[inline]
+    pub const fn reset_fifos(self) -> Self {
+        Self(self.0 | Self::TF_RST | Self::RF_RST)
+    }
+
+    /// Check whether both FIFO reset requests have completed.
+    #[inline]
+    pub const fn fifo_reset_finished(self) -> bool {
+        self.0 & (Self::TF_RST | Self::RF_RST) == 0
+    }
+}
+
 /// Status of FIFO for current peripheral.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(transparent)]
@@ -188,7 +213,7 @@ impl FifoStatus {
 }
 
 /// Burst control counter for current peripheral.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[repr(transparent)]
 pub struct BurstControl(u32);
 
@@ -283,7 +308,8 @@ impl RXD {
 #[cfg(test)]
 mod tests {
     use super::{
-        BurstControl, FifoStatus, GlobalControl, RXD, RegisterBlock, TXD, TransferControl,
+        BurstControl, FifoControl, FifoStatus, GlobalControl, RXD, RegisterBlock, TXD,
+        TransferControl,
     };
     use core::cell::UnsafeCell;
     use core::mem::offset_of;
@@ -291,6 +317,8 @@ mod tests {
     #[test]
     fn offset_spi0() {
         assert_eq!(offset_of!(RegisterBlock, ier), 0x10);
+        assert_eq!(offset_of!(RegisterBlock, fcr), 0x18);
+        assert_eq!(core::mem::size_of::<FifoControl>(), 4);
         assert_eq!(offset_of!(RegisterBlock, samp_dl), 0x28);
         assert_eq!(offset_of!(RegisterBlock, mbc), 0x30);
         assert_eq!(offset_of!(RegisterBlock, ndma_mode_ctl), 0x88);
@@ -334,6 +362,19 @@ mod tests {
             phase: embedded_hal::spi::Phase::CaptureOnSecondTransition, // CPHA=1
         });
         assert_eq!(reg.0, 0b11);
+    }
+
+    #[test]
+    fn test_fifo_control_reset() {
+        let configuration = 0x2540_1340;
+        assert_eq!(
+            FifoControl(configuration).reset_fifos().0,
+            configuration | 0x8000_8000
+        );
+        for pending in [0x8000_8000, 0x8000_0000, 0x0000_8000] {
+            assert!(!FifoControl(configuration | pending).fifo_reset_finished());
+        }
+        assert!(FifoControl(configuration).fifo_reset_finished());
     }
 
     #[test]

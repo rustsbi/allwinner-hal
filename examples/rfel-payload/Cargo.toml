@@ -8,14 +8,9 @@ repository.workspace = true
 autobins = false
 
 [dependencies]
+allwinner-hal = { path = "../../allwinner-hal" }
 panic-never = "0.1.0"
 rfel-payload-macros = { path = "macros" }
-
-[features]
-default = []
-d1 = []
-f101 = []
-v821 = []
 
 [[bin]]
 name = "read32"
@@ -32,14 +27,30 @@ bench = false
 [[bin]]
 name = "fence_i_f101"
 path = "src/bin/fence_i_f101.rs"
-required-features = ["f101"]
 test = false
 bench = false
 
 [[bin]]
 name = "copy_v821"
 path = "src/bin/copy_v821.rs"
-required-features = ["v821"]
+test = false
+bench = false
+
+[[bin]]
+name = "spi_d1"
+path = "src/bin/spi_d1.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "spi_f101"
+path = "src/bin/spi_f101.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "spi_v821"
+path = "src/bin/spi_v821.rs"
 test = false
 bench = false
 

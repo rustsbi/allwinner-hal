@@ -1,7 +1,10 @@
-//! FEL register-access, instruction-synchronization and memory-copy payloads.
+//! FEL register-access, instruction-synchronization, memory-copy and SPI payloads.
 #![cfg_attr(target_os = "none", no_std)]
 
 pub use rfel_payload_macros::entry;
+
+pub mod env;
+pub mod spi;
 
 #[cfg(target_os = "none")]
 use panic_never as _;

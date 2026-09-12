@@ -250,9 +250,25 @@ impl DramClock {
 pub struct SpiClock(u32);
 
 impl SpiClock {
+    const CLK_GATING: u32 = 1 << 31;
     const CLK_SRC_SEL: u32 = 0x7 << 24;
     const FACTOR_N: u32 = 0x3 << 8;
     const FACTOR_M: u32 = 0xf << 0;
+    /// Construct a register value from its raw bits.
+    #[inline]
+    pub const fn from_bits(bits: u32) -> Self {
+        Self(bits)
+    }
+    /// Return the raw register bits, including reserved fields.
+    #[inline]
+    pub const fn bits(self) -> u32 {
+        self.0
+    }
+    /// Unmask (enable) the SPI module clock.
+    #[inline]
+    pub const fn unmask_clock(self) -> Self {
+        Self(self.0 | Self::CLK_GATING)
+    }
     /// Get SPI clock source.
     #[inline]
     pub const fn clock_source(self) -> SpiClockSource {
@@ -702,6 +718,16 @@ mod tests {
 
     #[test]
     fn struct_spi_clock_functions() {
+        let bits = 0x1234_5678;
+        assert_eq!(super::SpiClock::from_bits(bits).bits(), bits);
+        assert_eq!(
+            super::SpiClock::from_bits(bits).unmask_clock().bits(),
+            0x9234_5678
+        );
+        assert_eq!(
+            super::SpiClock::from_bits(u32::MAX).unmask_clock().bits(),
+            u32::MAX
+        );
         let mut val = super::SpiClock(0x0);
 
         for i in 0..5 as u8 {

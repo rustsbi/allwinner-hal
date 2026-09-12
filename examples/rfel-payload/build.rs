@@ -11,8 +11,8 @@ fn main() {
         return;
     }
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
-    // Every helper executes at the FEL-reported scratchpad and addresses its
-    // parameters relative to the PC or the linker-defined end of the image.
+    // All payloads are position independent and locate appended parameters
+    // relative to the PC. Their load address is chosen by the FEL host.
     let script = r#"
 OUTPUT_ARCH(riscv)
 ENTRY(_start)

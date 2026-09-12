@@ -1,3 +1,3 @@
 # rfel-payload
 
-Rebuildable FEL register-access, instruction-synchronization and memory-copy payloads.
+Rebuildable FEL register-access, instruction-synchronization, memory-copy and SPI payloads.
