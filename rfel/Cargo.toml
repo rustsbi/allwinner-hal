@@ -2,7 +2,11 @@
 name = "rfel"
 description = "Allwinner FEL tool for memory access and SPI flash programming"
 version = "0.0.0"
-authors = ["Zhouqi Jiang <luojia@rustsbi.com>"]
+authors = [
+    "Zhouqi Jiang <luojia@rustsbi.com>",
+    "Jiefeng Li <jiefeng@rustsbi.com>",
+    "Woshiluo Luo <woshiluo.luo@outlook.com>",
+]
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
