@@ -93,11 +93,7 @@ impl Clocks {
     }
 
     /// Enable UART0 with the 24 MHz oscillator and no APB division.
-    ///
-    /// The UART token must be idle while its APB clock is changed. The mutable
-    /// CCU borrow serializes the clock-register read-modify-write operations.
-    /// APB_UART is shared by the UARTs; no other UART may be active here.
-    pub fn enable_uart(&self, _uart: &mut UART0, ccu: &mut CCU) -> UartClock {
+    pub fn enable_uart(&self, ccu: &mut CCU) -> UartClock {
         // SAFETY: the caller exclusively borrows the UART and CCU tokens.
         // These fields select HOSC, N=1, M=1, then release UART0 and its gate.
         unsafe {

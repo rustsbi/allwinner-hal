@@ -13,7 +13,7 @@ pub struct Serial<'a> {
 }
 
 impl<'a> Serial<'a> {
-    /// Create a serial instance.
+    /// Create a serial instance, enabling and clearing its RX/TX FIFOs.
     #[inline]
     pub fn new<const I: usize>(
         uart: impl Instance<'a>,
@@ -62,6 +62,23 @@ impl<'a> Serial<'a> {
                 .set_one_stop_bit(one_stop_bit)
                 .set_parity(parity),
         );
+        // TFNF polling below requires FIFO mode. Do not depend on a previous
+        // boot stage having enabled it; discard stale RX/TX data on setup.
+        const FIFO_ENABLE: u32 = 1;
+        const RECEIVE_RESET: u32 = 1 << 1;
+        const TRANSMIT_RESET: u32 = 1 << 2;
+        // uart16550 0.0.1 exposes FIFO reset/trigger settings, but has no
+        // setter for FCR.FIFOE. Use the existing register's address for this
+        // write-only access; reading this address would instead read IIR.
+        // SAFETY: IIR_FCR<u32> is repr(transparent) over UnsafeCell<u32>.
+        // Initialization owns the UART; this aligned volatile write enables
+        // and resets its FIFOs with DMA disabled and the lowest RX trigger.
+        unsafe {
+            core::ptr::from_ref(uart.iir_fcr())
+                .cast::<u32>()
+                .cast_mut()
+                .write_volatile(FIFO_ENABLE | RECEIVE_RESET | TRANSMIT_RESET);
+        }
         // 5. return the instance
         let pads = pads.into_uart_pads();
         Serial { uart, pads }
