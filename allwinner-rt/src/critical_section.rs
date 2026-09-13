@@ -1,19 +1,19 @@
-//! Single-hart critical sections for the V821/V861 E907 MCU.
+//! Single-hart critical sections for F101 C907 and V821/V861 E907 runtimes.
 
-struct E907CriticalSection;
+struct SingleHartCriticalSection;
 
-::critical_section::set_impl!(E907CriticalSection);
+::critical_section::set_impl!(SingleHartCriticalSection);
 
-// SAFETY: the MCU runtime starts only the E907 hart. Clearing `mstatus.MIE`
+// SAFETY: these runtimes execute on a single RV32 machine-mode hart. Clearing `mstatus.MIE`
 // therefore excludes every interrupt execution context that can access the
 // protected state. `csrrci` returns the previous MIE state, so nested critical
 // sections restore interrupts only when the outermost acquisition found them
 // enabled. The inline assembly deliberately carries a compiler memory clobber.
-unsafe impl ::critical_section::Impl for E907CriticalSection {
+unsafe impl ::critical_section::Impl for SingleHartCriticalSection {
     #[inline]
     unsafe fn acquire() -> ::critical_section::RawRestoreState {
         let previous: usize;
-        // SAFETY: this module is compiled only for the E907 32-bit RISC-V MCU
+        // SAFETY: this module is compiled only for the selected 32-bit RISC-V
         // target in machine mode, where `mstatus` and its MIE bit are accessible.
         unsafe {
             core::arch::asm!(

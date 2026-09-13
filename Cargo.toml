@@ -5,6 +5,7 @@ members = [
     "allwinner-rt",
     "allwinner-rt/macros",
     "examples/d1-allwinner-nezha",
+    "examples/f101-yuzuki-neko",
     "examples/v821-avaota-f1",
     "examples/v861-avaota-f2",
     "examples/rfel-payload",

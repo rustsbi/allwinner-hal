@@ -14,10 +14,10 @@ use usbd_serial::{SerialPort, USB_CLASS_CDC};
 use v861_avaota_f2::console::{Command, Console, InputEvent};
 
 #[entry]
-fn main(peripherals: Peripherals, clocks: Clocks) {
-    let mut usb0 = peripherals.usb0;
-    let mut usb_phy0 = peripherals.usb_phy0;
-    let mut ccu = peripherals.ccu;
+fn main(p: Peripherals, clocks: Clocks) {
+    let mut usb0 = p.usb0;
+    let mut usb_phy0 = p.usb_phy0;
+    let mut ccu = p.ccu;
     let mut delay = McycleDelay::new(clocks.mcycle_ticks_second(&ccu).unwrap());
     let oscillator = clocks.enable_usb(&mut usb0, &mut usb_phy0, &mut ccu, &mut delay);
 

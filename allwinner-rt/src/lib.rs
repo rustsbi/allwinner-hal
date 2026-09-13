@@ -26,7 +26,7 @@ mod macros;
 
 mod boot0;
 #[cfg(all(
-    any(feature = "v821-mcu", feature = "v861-mcu"),
+    any(feature = "f101", feature = "v821-mcu", feature = "v861-mcu"),
     target_arch = "riscv32"
 ))]
 mod critical_section;
@@ -78,7 +78,14 @@ unsafe extern "Rust" {
 }
 
 cfg_if::cfg_if! {
-    if #[cfg(feature = "d1")] {
+    if #[cfg(all(feature = "f101", target_arch = "riscv32"))] {
+        pub use {
+            self::arch::thead_c907::{thead_c907_start as start, thead_c907_halt as halt},
+            self::soc::f101::{__rom_init_params, Peripherals, Clocks},
+        };
+    } else if #[cfg(all(feature = "f101", not(target_os = "none")))] {
+        pub use self::soc::f101::{__rom_init_params, Peripherals, Clocks};
+    } else if #[cfg(feature = "d1")] {
         pub use {
             self::arch::thead_c906::{thead_c906_start as start, thead_c906_halt as halt},
             self::soc::d1::{__rom_init_params, Peripherals, Clocks},

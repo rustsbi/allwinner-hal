@@ -1,6 +1,6 @@
 //! Version 2 USB PHY ownership and initialization.
 //!
-//! The initialization sequence exposed here is validated on V821 and V861.
+//! The initialization sequence exposed here is validated on F101, V821 and V861.
 
 use embedded_hal::delay::DelayNs;
 
@@ -36,7 +36,7 @@ pub struct UsbPhy<'a> {
 }
 
 impl<'a> UsbPhy<'a> {
-    /// Consume a version 2 PHY token and run the V821/V861 initialization
+    /// Consume a version 2 PHY token and run the F101/V821/V861 initialization
     /// sequence.
     pub fn new(
         instance: impl Instance<'a>,

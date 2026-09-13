@@ -6,19 +6,19 @@ use allwinner_hal::{
     uart::{BlockingSerial, Config},
 };
 use allwinner_rt::{Clocks, Peripherals, entry};
-use v821_avaota_f1::console::{Command, Console, InputEvent};
+use f101_yuzuki_neko::console::{Command, Console, InputEvent};
 
 #[entry]
-fn main(p: Peripherals, clocks: Clocks) {
-    let uart_clock = clocks.enable_uart(&p.ccu, &p.aon_ccu);
+fn main(mut p: Peripherals, clocks: Clocks) {
+    let uart_clock = clocks.enable_uart(&mut p.uart1, &mut p.ccu);
     let mut uart = p
-        .uart0
-        .serial((p.gpio.pl4, p.gpio.pl5), Config::default(), uart_clock);
+        .uart1
+        .serial((p.gpio.pb0, p.gpio.pb1), Config::default(), uart_clock);
     let mut console = Console::<32>::new();
 
     write(
         &mut uart,
-        b"Welcome to Allwinner-HAL v821-avaota-f1 UART0!\r\n> ",
+        b"Welcome to Allwinner-HAL f101-yuzuki-neko UART1!\r\n> ",
     );
 
     loop {

@@ -6,7 +6,7 @@
 use log::debug;
 use std::time::{Duration, Instant};
 
-use crate::{Fel, write_all};
+use crate::{Fel, read_all, write_all};
 
 use super::util::{exec_stub, read32_via_payload, write32_via_payload};
 use super::{Chip, ChipError, ChipSpi, DdrProfile, SpiContext, ddr, payload};
@@ -65,6 +65,19 @@ fn ddr_parameters(profile: Option<DdrProfile>) -> Result<&'static [u32; 24], Chi
 impl Chip for F101 {
     fn name(&self) -> String {
         "F101".to_string()
+    }
+
+    fn read_memory(&self, fel: &Fel<'_>, address: u32, out: &mut [u8]) -> Result<(), ChipError> {
+        // Execute aligned word reads on the C907, as the register helpers do.
+        // Their common scratchpad entry also synchronizes instruction fetch
+        // after an SRAM image has been replaced. Bulk and unaligned reads
+        // retain the BootROM transfer path.
+        if out.len() == 4 && address & 3 == 0 {
+            out.copy_from_slice(&read32(fel, address)?.to_le_bytes());
+        } else {
+            read_all(fel, address, out)?;
+        }
+        Ok(())
     }
 
     fn reset(&self, fel: &Fel<'_>) -> Result<(), ChipError> {

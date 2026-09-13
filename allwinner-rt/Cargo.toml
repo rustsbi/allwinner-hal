@@ -46,7 +46,7 @@ a733-mcu = ["thead-e902"]
 # D1-like chips: D1-H, D1s, F133. Only one cluster per chip.
 d1 = ["thead-c906"]
 # F101 chip. There is only one RISC-V CPU cluster.
-f101 = ["thead-c907"]
+f101 = ["thead-c907", "dep:critical-section"]
 # H313, H616 and H618 chips. There is only one Arm CPU cluster.
 h616 = ["arm-cortex-a53"]
 # T113-i chip. There are Arm CPU and RISC-V clusters.

@@ -38,6 +38,13 @@ macro_rules! soc {
 macro_rules! impl_gpio_pins {
     (
         $constructor:ident;
+        $( $px:ident: ($P:expr, $N:expr); )+
+    ) => {
+        impl_gpio_pins! { pub, $constructor; $( $px: ($P, $N); )+ }
+    };
+    (
+        $visibility:vis,
+        $constructor:ident;
         $(
         $px: ident: ($P: expr, $N: expr);
         )+
@@ -98,7 +105,7 @@ pub struct Pads {
 impl Pads {
     #[doc(hidden)]
     #[inline]
-    pub fn __new() -> Self {
+    $visibility fn __new() -> Self {
         Self {
             $(
             $px: Pad::__new(),

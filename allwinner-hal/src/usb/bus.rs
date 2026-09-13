@@ -792,6 +792,23 @@ impl<'a> UsbBus<'a> {
         }
     }
 
+    /// Detach the device before a non-returning firmware or BootROM handoff.
+    ///
+    /// Stop using the USB stack after this call. Leave enough time for the
+    /// host to observe the disconnect before the next firmware attaches.
+    pub fn disconnect(&self) {
+        self.with_inner(|inner| {
+            let registers = inner.usb.registers();
+            // SAFETY: the bus owns the controller; the critical section
+            // serializes this connection change with all endpoint accesses.
+            unsafe {
+                registers
+                    .power
+                    .write(registers.power.read().set_soft_connected(false));
+            }
+        });
+    }
+
     fn with_inner<R>(&self, f: impl FnOnce(&mut Inner<'a>) -> R) -> R {
         critical_section::with(|critical_section| {
             let mut inner = self.inner.borrow(critical_section).borrow_mut();

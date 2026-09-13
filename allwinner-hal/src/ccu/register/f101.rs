@@ -29,16 +29,39 @@ pub struct RegisterBlock {
     pub dma_bgr: RW<SingleBusGatingReset>,
     _reserved_0710: [u8; 0x1fc],
     /// 0x090c - `UART_BGR_REG`.
-    pub uart_bgr: RW<BusGatingReset<1>>,
+    pub uart_bgr: RW<BusGatingReset<6>>,
     _reserved_0910: [u8; 0x030],
     /// 0x0940 - SPI0 module clock register.
     pub spi_clk: RW<SpiClock>,
     _reserved_0944: [u8; 0x028],
     /// 0x096c - SPI0 bus clock gating and reset register.
     pub spi_bgr: RW<SingleBusGatingReset>,
-    _reserved_0970: [u8; 0x390],
+    _reserved_0970: [u8; 0x100],
+    /// 0x0a70 - USB0 PHY clock gate and reset.
+    pub usb0_clk: RW<UsbClock>,
+    _reserved_0a74: [u8; 0x18],
+    /// 0x0a8c - USB bus gating and reset (OTG gate 8, reset 24).
+    pub usb_bgr: RW<BusGatingReset>,
+    _reserved_0a90: [u8; 0x270],
     /// 0x0d00 - `RISCV_CLK_REG`.
     pub riscv_clk: RW<u32>,
+}
+
+/// F101 USB0 PHY clock and reset control.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct UsbClock(u32);
+
+impl UsbClock {
+    /// Gate the PHY clock and hold the PHY in reset.
+    pub const fn disable(self) -> Self {
+        Self(self.0 & !((1 << 31) | (1 << 30)))
+    }
+
+    /// Pass the PHY clock and release reset, preserving other clock fields.
+    pub const fn enable(self) -> Self {
+        Self(self.0 | (1 << 31) | (1 << 30))
+    }
 }
 
 /// F101 SPI0 module clock register, as used by the xfel F101 SPI payload.
@@ -74,7 +97,7 @@ impl SpiClock {
 
 #[cfg(test)]
 mod tests {
-    use super::{RegisterBlock, SpiClock};
+    use super::{RegisterBlock, SpiClock, UsbClock};
     use crate::ccu::PeriFactorN;
     use core::mem::{align_of, offset_of, size_of};
 
@@ -89,9 +112,17 @@ mod tests {
         assert_eq!(offset_of!(RegisterBlock, uart_bgr), 0x90c);
         assert_eq!(offset_of!(RegisterBlock, spi_clk), 0x940);
         assert_eq!(offset_of!(RegisterBlock, spi_bgr), 0x96c);
+        assert_eq!(offset_of!(RegisterBlock, usb0_clk), 0xa70);
+        assert_eq!(offset_of!(RegisterBlock, usb_bgr), 0xa8c);
         assert_eq!(offset_of!(RegisterBlock, riscv_clk), 0xd00);
         assert_eq!(size_of::<RegisterBlock>(), 0xd04);
         assert_eq!(align_of::<RegisterBlock>(), 4);
+    }
+
+    #[test]
+    fn usb_clock_preserves_unrelated_fields() {
+        assert_eq!(UsbClock(0x1234_5678).enable().0, 0xd234_5678);
+        assert_eq!(UsbClock(u32::MAX).disable().0, 0x3fff_ffff);
     }
 
     #[test]

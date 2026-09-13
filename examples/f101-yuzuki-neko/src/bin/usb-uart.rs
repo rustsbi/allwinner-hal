@@ -4,6 +4,7 @@
 use allwinner_hal::usb::{Usb, UsbBus as AllwinnerUsbBus, phy::v2::UsbPhy};
 use allwinner_rt::{Clocks, Peripherals, entry};
 use embedded_hal::delay::DelayNs;
+use f101_yuzuki_neko::console::{Command, Console, InputEvent};
 use riscv::delay::McycleDelay;
 use usb_device::{
     UsbError,
@@ -11,16 +12,15 @@ use usb_device::{
     device::{StringDescriptors, UsbDevice, UsbDeviceBuilder, UsbDeviceState, UsbVidPid},
 };
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
-use v821_avaota_f1::console::{Command, Console, InputEvent};
 
 #[entry]
 fn main(p: Peripherals, clocks: Clocks) {
     let mut usb0 = p.usb0;
     let mut usb_phy0 = p.usb_phy0;
     let mut ccu = p.ccu;
-    let aon_ccu = p.aon_ccu;
-    let mut delay = McycleDelay::new(clocks.mcycle_ticks_second(&aon_ccu).unwrap());
-    let oscillator = clocks.enable_usb(&mut usb0, &mut usb_phy0, &mut ccu, &aon_ccu, &mut delay);
+    let mut sysctl = p.sysctl;
+    let mut delay = McycleDelay::new(clocks.mcycle_ticks_second(&ccu).unwrap());
+    let oscillator = clocks.enable_usb(&mut usb0, &mut usb_phy0, &mut ccu, &mut sysctl, &mut delay);
 
     let usb = Usb::new(usb0, &mut delay);
     let mut _usb_phy = UsbPhy::new(usb_phy0, oscillator, &mut delay);
@@ -32,9 +32,9 @@ fn main(p: Peripherals, clocks: Clocks) {
     let mut serial = SerialPort::new(&usb_bus);
     let strings = [StringDescriptors::default()
         .manufacturer("RustSBI")
-        .product("V821 USB UART")
-        .serial_number("V821-AVAOTA-F1")];
-    let mut usb_device = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x1f3a, 0x8210))
+        .product("F101 USB UART")
+        .serial_number("F101-YUZUKI-NEKO")];
+    let mut usb_device = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x1f3a, 0xf101))
         .strings(&strings)
         .unwrap()
         .device_class(USB_CLASS_CDC)
@@ -48,15 +48,20 @@ fn main(p: Peripherals, clocks: Clocks) {
 
     loop {
         let active = usb_device.poll(&mut [&mut serial]);
-        if usb_device.state() != UsbDeviceState::Configured {
+        if usb_device.state() != UsbDeviceState::Configured || !serial.dtr() {
             greeting_visible = false;
+            console = Console::new();
             continue;
         }
         if !greeting_visible {
+            // Host serial drivers can purge receive buffers while opening the
+            // port, just after asserting DTR. Let that operation finish first.
+            delay.delay_ms(50);
+            usb_device.poll(&mut [&mut serial]);
             if !write_all(
                 &mut usb_device,
                 &mut serial,
-                b"Welcome to Allwinner-HAL v821-avaota-f1 example!\r\n> ",
+                b"Welcome to Allwinner-HAL f101-yuzuki-neko example!\r\n> ",
             ) {
                 continue;
             }
@@ -102,8 +107,15 @@ fn main(p: Peripherals, clocks: Clocks) {
                         Command::Exit => {
                             let _ = write_all(&mut usb_device, &mut serial, b"Bye!\r\n");
                             flush(&mut usb_device, &mut serial);
-                            delay.delay_ms(10);
-                            return;
+                            // Keep servicing IN completion and the host driver
+                            // before detaching the serial port.
+                            for _ in 0..100 {
+                                usb_device.poll(&mut [&mut serial]);
+                                delay.delay_ms(1);
+                            }
+                            usb_device.bus().disconnect();
+                            delay.delay_ms(250);
+                            allwinner_rt::soc::f101::enter_fel();
                         }
                         Command::Unknown => b"unknown command; try help\r\n",
                     };
@@ -124,7 +136,7 @@ fn write_all<B: UsbBus>(
     mut bytes: &[u8],
 ) -> bool {
     while !bytes.is_empty() {
-        if usb_device.state() != UsbDeviceState::Configured {
+        if usb_device.state() != UsbDeviceState::Configured || !serial.dtr() {
             return false;
         }
         match serial.write(bytes) {
@@ -138,7 +150,7 @@ fn write_all<B: UsbBus>(
 }
 
 fn flush<B: UsbBus>(usb_device: &mut UsbDevice<'_, B>, serial: &mut SerialPort<'_, B>) {
-    while usb_device.state() == UsbDeviceState::Configured {
+    while usb_device.state() == UsbDeviceState::Configured && serial.dtr() {
         match serial.flush() {
             Ok(()) => return,
             Err(UsbError::WouldBlock) => {

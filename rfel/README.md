@@ -12,6 +12,11 @@ Supported chips:
 On V821, the `0x0000c000..0x00010000` range is unmapped and is not part of the
 BootROM image; do not include it in a ROM dump.
 
+On F101, aligned four-byte reads (including `read32`) execute the RV32 read
+helper in the FEL scratchpad at `0x20000`. This also executes `fence.i`, so a
+`read32` after loading a new SRAM image synchronizes its instruction fetch
+before `exec`. Bulk and unaligned reads use the ROM's memory-transfer path.
+
 The V861/V881 SPI payload is imported unchanged from xfel under the **MIT license**;
 see [payload provenance and hashes](assets/payloads/README.md) and the
 [xfel copyright and license notice](assets/payloads/LICENSE-XFEL).

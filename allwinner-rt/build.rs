@@ -30,13 +30,20 @@ fn load_fpu_features() {
 fn load_linker_script() {
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     let ld = &out.join("allwinner-rt.ld");
-    let script = if env::var_os("CARGO_FEATURE_V821_MCU").is_some() {
-        LINKER_ALLWINNER_E907
+    let script = if env::var_os("CARGO_FEATURE_F101").is_some() {
+        // Keep the FEL scratchpad at 0x20000 and the live FEL stack, ROM data
+        // and USB FIFO banks at/above 0x2c000 outside every CPU allocation.
+        LINKER_ALLWINNER_RV32
+            .replace("@ORIGIN@", "0x00022000")
+            .replace("@LENGTH@", "0xa000")
+            .replace("@IMAGE_LIMIT@", "0x8000")
+    } else if env::var_os("CARGO_FEATURE_V821_MCU").is_some() {
+        LINKER_ALLWINNER_RV32
             .replace("@ORIGIN@", "0x02000000")
             .replace("@LENGTH@", "0x19c00")
             .replace("@IMAGE_LIMIT@", "0x18000")
     } else if env::var_os("CARGO_FEATURE_V861_MCU").is_some() {
-        LINKER_ALLWINNER_E907
+        LINKER_ALLWINNER_RV32
             .replace("@ORIGIN@", "0x00100000")
             .replace("@LENGTH@", "0x12000")
             .replace("@IMAGE_LIMIT@", "0x10000")
@@ -92,7 +99,7 @@ SECTIONS {
     }
 }";
 
-const LINKER_ALLWINNER_E907: &str = r#"
+const LINKER_ALLWINNER_RV32: &str = r#"
 OUTPUT_ARCH(riscv)
 ENTRY(head_jump)
 MEMORY {
@@ -137,10 +144,10 @@ SECTIONS {
         . = ALIGN(4);
         ebss = .;
     } > SRAM
-    ASSERT(ADDR(.head) == ORIGIN(SRAM), "E907 eGON header is not at SRAM base")
-    ASSERT(SIZEOF(.head) == 0x30, "E907 common eGON header must be 0x30 bytes")
+    ASSERT(ADDR(.head) == ORIGIN(SRAM), "RV32 eGON header is not at SRAM base")
+    ASSERT(SIZEOF(.head) == 0x30, "RV32 common eGON header must be 0x30 bytes")
     /* Account for rfel padding images to 16 KiB. */
-    ASSERT(__image_end - ORIGIN(SRAM) <= @IMAGE_LIMIT@, "E907 payload exceeds BootROM image limit")
+    ASSERT(__image_end - ORIGIN(SRAM) <= @IMAGE_LIMIT@, "RV32 payload exceeds BootROM image limit")
     /DISCARD/ : {
         *(.eh_frame)
         *(.comment)

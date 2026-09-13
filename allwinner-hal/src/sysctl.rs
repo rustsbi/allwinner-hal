@@ -2,6 +2,9 @@
 
 use volatile_register::{RO, RW};
 
+/// F101 system-control registers.
+pub mod f101;
+
 /// System power, LDO and calibration controller registers.
 #[repr(C)]
 pub struct RegisterBlock {

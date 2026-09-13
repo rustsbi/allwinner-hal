@@ -1,5 +1,5 @@
 [package]
-name = "v861-avaota-f2"
+name = "f101-yuzuki-neko"
 version = "0.0.0"
 publish = false
 autobins = false
@@ -9,23 +9,23 @@ repository.workspace = true
 
 [dependencies]
 allwinner-hal = { path = "../../allwinner-hal" }
-allwinner-rt = { path = "../../allwinner-rt", default-features = false, features = ["v861-mcu", "panic-halt"] }
+allwinner-rt = { path = "../../allwinner-rt", default-features = false, features = ["f101", "panic-halt"] }
 embedded-hal = "1.0.0"
 riscv = { version = "0.16.1", default-features = false }
 usb-device = "0.3.2"
 usbd-serial = "0.2.2"
 
 [lib]
-name = "v861_avaota_f2"
+name = "f101_yuzuki_neko"
 test = true
 bench = false
 
 [[bin]]
-name = "usb-uart"
+name = "uart-demo"
 test = false
 bench = false
 
 [[bin]]
-name = "uart-demo"
+name = "usb-uart"
 test = false
 bench = false
