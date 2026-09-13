@@ -68,7 +68,7 @@ v853-cpu = ["arm-cortex-a7"]
 v853-mcu = ["thead-e907"]
 # V861 chip. There are both CPU and MCU clusters.
 v861-cpu = ["thead-c907"]
-v861-mcu = ["thead-e907"]
+v861-mcu = ["thead-e907", "dep:critical-section"]
 
 # Microarchitecture specific features.
 andes-a27l2 = []

@@ -1,0 +1,26 @@
+[package]
+name = "v861-avaota-f2"
+version = "0.0.0"
+publish = false
+autobins = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[target.'cfg(target_os = "none")'.dependencies]
+allwinner-hal = { path = "../../allwinner-hal" }
+allwinner-rt = { path = "../../allwinner-rt", default-features = false, features = ["v861-mcu", "panic-halt"] }
+embedded-hal = "1.0.0"
+riscv = { version = "0.16.1", default-features = false }
+usb-device = "0.3.2"
+usbd-serial = "0.2.2"
+
+[lib]
+name = "v861_avaota_f2"
+test = true
+bench = false
+
+[[bin]]
+name = "usb-uart"
+test = false
+bench = false

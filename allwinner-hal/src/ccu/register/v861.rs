@@ -248,7 +248,7 @@ pub struct RegisterBlock {
     pub usb0_clk: RW<u32>,
     _reserved_0a74: [u8; 0x018],
     /// 0x0a8c - `USB_BGR_REG, reset map, usbehci0_clk, ...`.
-    pub usb_bgr: RW<SingleBusGatingReset>,
+    pub usb_bgr: RW<BusGatingReset<9>>,
     _reserved_0a90: [u8; 0x02c],
     /// 0x0abc - `DPSS_TOP_BGR_REG, dpss_top_clk, reset map`.
     pub dpss_top_bgr: RW<SingleBusGatingReset>,

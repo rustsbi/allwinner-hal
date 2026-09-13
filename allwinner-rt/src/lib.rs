@@ -15,17 +15,20 @@
 #![no_std]
 
 #[cfg(all(
-    feature = "v821-mcu",
+    any(feature = "v821-mcu", feature = "v861-mcu"),
     target_os = "none",
     not(any(target_arch = "riscv32", doc))
 ))]
-compile_error!("the V821 MCU runtime requires a 32-bit RISC-V target");
+compile_error!("the E907 MCU runtime requires a 32-bit RISC-V target");
 
 #[macro_use]
 mod macros;
 
 mod boot0;
-#[cfg(all(feature = "v821-mcu", target_arch = "riscv32"))]
+#[cfg(all(
+    any(feature = "v821-mcu", feature = "v861-mcu"),
+    target_arch = "riscv32"
+))]
 mod critical_section;
 mod panic;
 pub use boot0::EgonHead;
@@ -84,6 +87,11 @@ cfg_if::cfg_if! {
         pub use {
             self::arch::thead_e907::{thead_e907_start as start, thead_e907_halt as halt},
             self::soc::v821::{__rom_init_params, Peripherals, Clocks},
+        };
+    } else if #[cfg(feature = "v861-mcu")] {
+        pub use {
+            self::arch::thead_e907::{thead_e907_start as start, thead_e907_halt as halt},
+            self::soc::v861::{__rom_init_params, Peripherals, Clocks},
         };
     } else if #[cfg(feature = "v821-cpu")] {
         pub use {
