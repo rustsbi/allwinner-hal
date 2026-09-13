@@ -7,11 +7,22 @@ Supported chips:
 - D1 / D1s / D1-H / F133
 - V821
 - F101-S2 / F101-S3
+- V861 / V881 (FEL ID `0x00191800`, E907)
 
-The following `0x0000c000..0x00010000` range is unmapped and is not part of the
+On V821, the `0x0000c000..0x00010000` range is unmapped and is not part of the
 BootROM image; do not include it in a ROM dump.
 
-All bundled payloads are built from the Rust sources in `examples/rfel-payload`; the [xfel license notice](assets/payloads/LICENSE-XFEL) is retained for code consulted during development.
+The V861/V881 SPI payload is imported unchanged from xfel under the **MIT license**;
+see [payload provenance and hashes](assets/payloads/README.md) and the
+[xfel copyright and license notice](assets/payloads/LICENSE-XFEL).
+V861/V881 register access reuses `read32_rv32.bin` and `write32_rv32.bin`. These
+and all other bundled payloads are built from the Rust sources in `examples/rfel-payload`.
+
+V861/V881 supports FEL memory transfers, register reads/writes, SID, watchdog
+reset, and single-lane SPI NOR through its dedicated SPIF controller. NOR access
+uses SRAM only; DDR initialization and C907 startup are not required. The imported
+payload supports three-byte flash addresses and transfers up to 64 KiB. SPI NAND,
+four-byte addressing, quad I/O, DDR initialization and JTAG setup are not supported.
 
 ## Auto flash selection
 

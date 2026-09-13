@@ -3,7 +3,7 @@
 pub const READ32_RV64: &[u8] = include_bytes!("../../assets/payloads/read32_rv64.bin");
 pub const WRITE32_RV64: &[u8] = include_bytes!("../../assets/payloads/write32_rv64.bin");
 
-// F101 and V821 use the same RV32 register helpers and cache prefix.
+// F101, V821 and the V861/V881 FEL E907 share the Rust RV32 register helpers.
 pub const READ32_RV32: &[u8] = include_bytes!("../../assets/payloads/read32_rv32.bin");
 pub const WRITE32_RV32: &[u8] = include_bytes!("../../assets/payloads/write32_rv32.bin");
 
@@ -33,6 +33,9 @@ pub const SPI_INIT_D1: &[u8] = include_bytes!("../../assets/payloads/spi_d1.bin"
 pub const DDR_INIT_V821: &[u8] = include_bytes!("../../assets/payloads/ddr_v821.bin");
 pub const SPI_INIT_V821: &[u8] = include_bytes!("../../assets/payloads/spi_v821.bin");
 
+// V861/V881 SPI payload imported verbatim from xfel; see assets/payloads/README.md.
+pub const SPI_INIT_V861: &[u8] = include_bytes!("../../assets/payloads/spi_v861.bin");
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -54,6 +57,7 @@ mod tests {
             SPI_INIT_D1,
             SPI_INIT_F101,
             SPI_INIT_V821,
+            SPI_INIT_V861,
         ] {
             assert!(!payload.is_empty());
         }

@@ -11,6 +11,7 @@ pub mod f101;
 pub mod payload;
 pub mod util;
 pub mod v821;
+pub mod v861;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DdrProfile {
@@ -122,6 +123,7 @@ pub fn detect_from_fel(fel: &Fel<'_>) -> crate::fel::error::FelResult<Option<Box
         Some(crate::Chip::D1) => Some(Box::new(d1::D1)),
         Some(crate::Chip::V821) => Some(Box::new(v821::V821)),
         Some(crate::Chip::F101) => Some(Box::new(f101::F101)),
+        Some(crate::Chip::V861) => Some(Box::new(v861::V861)),
         _ => None,
     })
 }

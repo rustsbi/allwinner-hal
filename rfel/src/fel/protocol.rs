@@ -114,6 +114,7 @@ impl Version {
             0x0018_5900 => Some(Chip::D1),
             0x0018_8200 => Some(Chip::V821),
             0x0019_3700 => Some(Chip::F101),
+            0x0019_1800 => Some(Chip::V861),
             _ => None,
         }
     }
@@ -160,6 +161,8 @@ pub enum Chip {
     V821 = 0x0018_8200,
     /// F101-S2 or F101-S3 chip.
     F101 = 0x0019_3700,
+    /// V861 / V881 (the FEL E907 reports the same ID).
+    V861 = 0x0019_1800,
 }
 
 #[cfg(test)]

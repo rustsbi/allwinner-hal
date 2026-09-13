@@ -265,7 +265,7 @@ pub enum CliError {
     OpenDevice(nusb::Error),
     ClaimInterface(nusb::Error),
     Fel(crate::fel::error::FelError),
-    UnsupportedChip,
+    UnsupportedChip(crate::fel::Version),
     UnimplementedCommand(String),
 }
 
@@ -278,7 +278,11 @@ impl fmt::Display for CliError {
             CliError::OpenDevice(_) => write!(f, "failed to open USB device"),
             CliError::ClaimInterface(_) => write!(f, "failed to claim USB interface 0"),
             CliError::Fel(err) => write!(f, "FEL error: {err}"),
-            CliError::UnsupportedChip => write!(f, "error: unsupported chip"),
+            CliError::UnsupportedChip(version) => write!(
+                f,
+                "error: unsupported chip ID=0x{:08x}; FEL version: {version:x?}",
+                version.id()
+            ),
             CliError::UnimplementedCommand(cmd) => {
                 write!(f, "command '{cmd}' is not implemented yet")
             }
@@ -341,7 +345,11 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
     let fel = Fel::open_interface(&mut interface).map_err(CliError::Fel)?;
     let chip = match chips::detect_from_fel(&fel).map_err(CliError::Fel)? {
         Some(chip) => chip,
-        None => return Err(CliError::UnsupportedChip),
+        None => {
+            return Err(CliError::UnsupportedChip(
+                fel.get_version().map_err(CliError::Fel)?,
+            ));
+        }
     };
 
     selection.save(device_info)?;
@@ -481,7 +489,17 @@ fn execute_device_command(
                     return Ok(());
                 }
             };
-            if let Err(err) = ops::op_write32(fel, address, value) {
+            let result = if matches!(
+                fel.get_version().map_err(CliError::Fel)?.chip(),
+                Some(crate::Chip::V861)
+            ) {
+                crate::chips::v861::V861
+                    .write32(fel, address, value)
+                    .map_err(|err| err.to_string())
+            } else {
+                ops::op_write32(fel, address, value).map_err(|err| err.to_string())
+            };
+            if let Err(err) = result {
                 println!("error: write32: {}", err);
             }
             Ok(())
@@ -1140,3 +1158,23 @@ fn format_command(command: &str, args: &[String]) -> String {
 
 const VENDOR_ALLWINNER: u16 = 0x1f3a;
 const PRODUCT_FEL: u16 = 0xefe8;
+
+#[cfg(test)]
+mod tests {
+    use super::CliError;
+
+    #[test]
+    fn unsupported_chip_reports_raw_id_and_fel_details() {
+        let mut bytes = [0; 32];
+        bytes[..8].copy_from_slice(b"AWUSBFEX");
+        bytes[8..12].copy_from_slice(&0x0012_ab00u32.to_le_bytes());
+        bytes[18] = 0x44;
+        bytes[19] = 8;
+        bytes[20..24].copy_from_slice(&0x0011_fc00u32.to_le_bytes());
+        let message = CliError::UnsupportedChip(bytes.into()).to_string();
+        assert_eq!(
+            message,
+            "error: unsupported chip ID=0x0012ab00; FEL version: {\"magic\": \"AWUSBFEX\", \"id\": 12ab00, \"dflag\": 44, \"dlength\": 8, \"scratchpad\": 11fc00}"
+        );
+    }
+}
