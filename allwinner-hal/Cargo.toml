@@ -8,6 +8,7 @@ authors = [
 ]
 documentation = "https://docs.rs/allwinner-hal"
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 keywords = ["hal", "allwinner"]

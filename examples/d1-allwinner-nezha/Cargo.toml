@@ -3,6 +3,7 @@ name = "d1-allwinner-nezha"
 version = "0.0.0"
 publish = false
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 

@@ -15,5 +15,6 @@ members = [
 
 [workspace.package]
 edition = "2024"
+rust-version = "1.100"
 license = "MulanPSL-2.0 OR MIT"
 repository = "https://github.com/rustsbi/allwinner-hal"

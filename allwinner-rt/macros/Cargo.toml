@@ -3,6 +3,7 @@ name = "allwinner-rt-macros"
 description = "Procedural macro for Allwinner ROM runtimes"
 version = "0.0.0"
 edition = "2021"
+rust-version.workspace = true
 authors = [
     "Luo Jia <luojia@hust.edu.cn>",
     "Gao Chengbo <electricpower_gao@163.com>",

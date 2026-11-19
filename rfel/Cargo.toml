@@ -8,6 +8,7 @@ authors = [
     "Woshiluo Luo <woshiluo.luo@outlook.com>",
 ]
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 keywords = ["allwinner", "fel", "usb", "firmware", "flash"]
