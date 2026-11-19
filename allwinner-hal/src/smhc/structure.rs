@@ -623,7 +623,7 @@ impl<'a, S: AsRef<RegisterBlock>, P> SdCard<'a, S, P> {
 }
 
 impl<'a, S: AsRef<RegisterBlock>, P> BlockDevice for SdCard<'a, S, P> {
-    type Error = core::convert::Infallible;
+    type Error = !;
 
     #[inline]
     fn read(&self, blocks: &mut [Block], start_block_idx: BlockIdx) -> Result<(), Self::Error> {

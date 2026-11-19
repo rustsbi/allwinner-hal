@@ -25,7 +25,7 @@ impl<'a> Input<'a> {
 }
 
 impl<'a> embedded_hal::digital::ErrorType for Input<'a> {
-    type Error = core::convert::Infallible;
+    type Error = !;
 }
 
 impl<'a> embedded_hal::digital::InputPin for Input<'a> {

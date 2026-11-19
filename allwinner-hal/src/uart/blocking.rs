@@ -115,10 +115,7 @@ pub struct ReceiveHalf<'a> {
 }
 
 #[inline]
-fn uart_write_blocking(
-    uart: &RegisterBlock,
-    buffer: &[u8],
-) -> Result<usize, core::convert::Infallible> {
+fn uart_write_blocking(uart: &RegisterBlock, buffer: &[u8]) -> Result<usize, !> {
     for c in buffer {
         while !uart.usr.read().transmit_fifo_not_full() {
             core::hint::spin_loop()
@@ -129,7 +126,7 @@ fn uart_write_blocking(
 }
 
 #[inline]
-fn uart_flush_blocking(uart: &RegisterBlock) -> Result<(), core::convert::Infallible> {
+fn uart_flush_blocking(uart: &RegisterBlock) -> Result<(), !> {
     while !uart.lsr().read().is_transmitter_empty() {
         core::hint::spin_loop()
     }
@@ -137,10 +134,7 @@ fn uart_flush_blocking(uart: &RegisterBlock) -> Result<(), core::convert::Infall
 }
 
 #[inline]
-fn uart_read_blocking(
-    uart: &RegisterBlock,
-    buffer: &mut [u8],
-) -> Result<usize, core::convert::Infallible> {
+fn uart_read_blocking(uart: &RegisterBlock, buffer: &mut [u8]) -> Result<usize, !> {
     let len = buffer.len();
     for c in buffer {
         while !uart.lsr().read().is_data_ready() {
@@ -152,15 +146,15 @@ fn uart_read_blocking(
 }
 
 impl<'a> embedded_io::ErrorType for Serial<'a> {
-    type Error = core::convert::Infallible;
+    type Error = !;
 }
 
 impl<'a> embedded_io::ErrorType for TransmitHalf<'a> {
-    type Error = core::convert::Infallible;
+    type Error = !;
 }
 
 impl<'a> embedded_io::ErrorType for ReceiveHalf<'a> {
-    type Error = core::convert::Infallible;
+    type Error = !;
 }
 
 impl<'a> embedded_io::Write for Serial<'a> {
